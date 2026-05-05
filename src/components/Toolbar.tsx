@@ -1,5 +1,5 @@
 // Top toolbar: brand + device picker + theme toggle + export + settings.
-// Ported from design/source/toolbar.jsx.
+// Ported from design/v1/source/toolbar.jsx.
 
 import { useState } from 'react';
 import * as Icons from './Icons';

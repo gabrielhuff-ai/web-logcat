@@ -16,8 +16,8 @@ src/
 ├── components/
 │   ├── App.tsx             # owns state, the stream effect, keyboard map
 │   ├── EmptyState.tsx      # pre-connection screen
-│   ├── Toolbar.tsx         # stub — see design/source/toolbar.jsx
-│   ├── FilterBar.tsx       # stub — see design/source/filter-bar.jsx
+│   ├── Toolbar.tsx         # stub — see design/v1/source/toolbar.jsx
+│   ├── FilterBar.tsx       # stub — see design/v1/source/filter-bar.jsx
 │   ├── LevelRow.tsx        # functional, light styling
 │   ├── LogList.tsx         # functional, naive (no virtualisation)
 │   ├── LogRow.tsx          # functional, no highlight rendering yet
@@ -34,7 +34,7 @@ src/
 
 The split `tokens.css` + `app.css` (design originals) versus
 `components.css` (additions) lets the design CSS get refreshed from
-`design/source/` without merge conflicts.
+`design/v1/source/` without merge conflicts.
 
 ## State
 

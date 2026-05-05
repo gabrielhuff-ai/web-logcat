@@ -4,7 +4,7 @@ Ordered roughly by user-visible value.
 
 ## Phase 1 — UI parity with simulated stream
 
-All components below were ported from `design/source/` and wired into
+All components below were ported from `design/v1/source/` and wired into
 `App.tsx`. Each was verified by `npm run typecheck`, `npm run lint`,
 `npm run build` against the simulator on localhost.
 

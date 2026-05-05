@@ -1,5 +1,5 @@
 // Root of WebLogcat. Owns top-level state, the stream subscription, and
-// keyboard shortcuts. State shape mirrors design/source/app.jsx.
+// keyboard shortcuts. State shape mirrors design/v1/source/app.jsx.
 
 import {
   useCallback,

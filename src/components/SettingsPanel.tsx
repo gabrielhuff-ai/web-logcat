@@ -1,5 +1,5 @@
 // Slide-in settings drawer (440px, scrim behind).
-// Ported from design/source/settings.jsx.
+// Ported from design/v1/source/settings.jsx.
 
 import * as Icons from './Icons';
 import type { Accent, Density, Theme, Tweaks } from '../types';

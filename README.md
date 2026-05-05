@@ -97,7 +97,8 @@ at them.
 | [docs/TASKS.md](docs/TASKS.md) | Historic backlog (mostly checked off; reference for what's intentionally not built) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch strategy, dev / lint / test commands, deploy gates |
 | [CLAUDE.md](CLAUDE.md) | Implicit prompt for AI agents continuing the work |
-| [design/HANDOFF.md](design/HANDOFF.md) | The original Claude Design brief; visual intent + token system |
+| [design/v2/HANDOFF.md](design/v2/HANDOFF.md) | Current Claude Design brief — multi-widget dashboard (Logcat, Shell, Dumpsys, Files, Mirror) |
+| [design/v1/HANDOFF.md](design/v1/HANDOFF.md) | Original v1 brief — single-purpose logcat viewer (already implemented) |
 
 Stack at a glance: Vite + React + TypeScript, CSS custom properties
 with `oklch()`, [`@yume-chan/adb`](https://github.com/yume-chan/ya-webadb)

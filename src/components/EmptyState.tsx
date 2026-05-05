@@ -1,5 +1,5 @@
 // Pre-connection screen with animated USB-cable + phone illustration.
-// Ported from design/source/empty-state.jsx.
+// Ported from design/v1/source/empty-state.jsx.
 //
 // The button text follows the *real* connect lifecycle (phases reported
 // by lib/adb.ts via the setStep callback) rather than the design's fixed
