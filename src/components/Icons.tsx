@@ -1,5 +1,5 @@
 // Inline material-style icon set (24px viewBox, currentColor strokes).
-// Ported from design/source/icons.jsx.
+// Ported from design/v1/source/icons.jsx.
 
 import type { CSSProperties, SVGProps } from 'react';
 

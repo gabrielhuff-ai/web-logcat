@@ -5,24 +5,37 @@ This file is the implicit prompt every agent inherits when working on
 
 ## What this project is
 
-A browser-based Android logcat viewer. Spec lives in
-[`design/HANDOFF.md`](design/HANDOFF.md) (the original Claude Design
-hand-off). The visual fidelity bar is **high** — the design is
-production-intent, not a sketch.
+A browser-based Android device inspector. Originally a logcat viewer
+(v1), now evolving into a multi-widget dashboard (v2) with Logcat,
+Shell, Dumpsys, Files, and Screen Mirror tiles. The visual fidelity
+bar is **high** — the design is production-intent, not a sketch.
+
+The design hand-off is versioned:
+
+- [`design/v1/HANDOFF.md`](design/v1/HANDOFF.md) + `design/v1/source/`
+  — the original single-purpose logcat viewer. Already implemented in
+  `src/`; treat as historical reference for what's already shipped.
+- [`design/v2/HANDOFF.md`](design/v2/HANDOFF.md) + `design/v2/source/`
+  — the current target. Wraps the v1 logcat as one widget inside a
+  draggable / resizable tile grid and adds four more widgets. **All
+  new work targets v2.**
 
 ## Where things live
 
-- **Spec / design intent:** `design/HANDOFF.md`
-- **Reference React + CSS prototype:** `design/source/*.jsx` and
-  `design/source/*.css`. These are *not* imported anywhere; they exist
-  so the implementation can be checked against the hand-off.
+- **Current spec / design intent:** `design/v2/HANDOFF.md`
+- **Reference React + CSS prototype (v2):** `design/v2/source/*.jsx`
+  and `design/v2/source/*.css`. These are *not* imported anywhere;
+  they exist so the implementation can be checked against the hand-off.
+- **Historical v1 prototype:** `design/v1/source/`. Existing
+  `src/components/*.tsx` ported from these files.
 - **Production code:** `src/`. See `docs/ARCHITECTURE.md` for the map.
 - **Pending work:** `docs/TASKS.md`. Pick the top unchecked task; do not
   invent new top-level work without checking with the user.
 
 ## How to port a component
 
-1. Open the matching file under `design/source/`.
+1. Open the matching file under `design/v2/source/` (or
+   `design/v1/source/` when touching already-ported logcat internals).
 2. Translate to TypeScript + React 18 idioms (functional components,
    `useState`/`useEffect`, no `React.createElement` boilerplate).
 3. Use the types in `src/types.ts`. Don't widen them; if you need a new
@@ -49,7 +62,7 @@ production-intent, not a sketch.
 - **WebUSB requires HTTPS.** The deploy target is HTTPS; local dev is
   localhost (also allowed by the API). Tests of the real transport must
   happen against the deployed staging URL.
-- **High visual fidelity.** Match `design/HANDOFF.md` pixel-perfectly.
+- **High visual fidelity.** Match `design/v2/HANDOFF.md` pixel-perfectly.
   Use `oklch()` for new colors — never hardcode hex.
 
 ## What "done" looks like for a task

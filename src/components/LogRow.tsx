@@ -1,5 +1,5 @@
 // Single log row + per-field highlight rendering + crash-head toggle.
-// Ported from design/source/log-row.jsx.
+// Ported from design/v1/source/log-row.jsx.
 
 import { Fragment, memo, useMemo, type ReactNode } from 'react';
 import * as Icons from './Icons';

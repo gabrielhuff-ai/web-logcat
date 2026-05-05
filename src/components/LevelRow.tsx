@@ -1,6 +1,6 @@
 // Level filter pills + live rate + counts + pinned summary (40px tall).
-// Ported from design/source/settings.jsx (LevelFilter) and the `lvl-bar`
-// section of design/source/app.jsx.
+// Ported from design/v1/source/settings.jsx (LevelFilter) and the `lvl-bar`
+// section of design/v1/source/app.jsx.
 
 import * as Icons from './Icons';
 import type { LevelEnabled, LogLevel } from '../types';
