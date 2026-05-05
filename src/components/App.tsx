@@ -596,10 +596,6 @@ export function App() {
         onClear={onClear}
         autoScroll={autoScroll}
         setAutoScroll={setAutoScrollSafe}
-        showTimestamps={tweaks.showTimestamps}
-        setShowTimestamps={(v) => setTweaks({ showTimestamps: v })}
-        showPid={tweaks.showPid}
-        setShowPid={(v) => setTweaks({ showPid: v })}
         wrapLines={tweaks.wrapLines}
         setWrapLines={(v) => setTweaks({ wrapLines: v })}
         registerFocusHandler={(fn) => {
@@ -616,6 +612,16 @@ export function App() {
         pinnedCount={pinned.size}
         onClearPinned={() => setPinned(new Set())}
         paused={paused}
+        showTimestamps={tweaks.showTimestamps}
+        setShowTimestamps={(v) => setTweaks({ showTimestamps: v })}
+        showPid={tweaks.showPid}
+        setShowPid={(v) => setTweaks({ showPid: v })}
+        showProcess={tweaks.showProcess}
+        setShowProcess={(v) => setTweaks({ showProcess: v })}
+        showTag={tweaks.showTag}
+        setShowTag={(v) => setTweaks({ showTag: v })}
+        showLevel={tweaks.showLevel}
+        setShowLevel={(v) => setTweaks({ showLevel: v })}
       />
 
       <div className="log-area">

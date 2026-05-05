@@ -46,6 +46,9 @@ export interface Tweaks {
   density: Density;
   showTimestamps: boolean;
   showPid: boolean;
+  showProcess: boolean;
+  showTag: boolean;
+  showLevel: boolean;
   wrapLines: boolean;
   showHeatmap: boolean;
   /** Multiplier applied to the simulated stream rate (1 = default). */

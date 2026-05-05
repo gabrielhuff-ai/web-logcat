@@ -72,6 +72,9 @@ export interface LogRowProps {
   search: string;
   showTimestamps: boolean;
   showPid: boolean;
+  showProcess: boolean;
+  showTag: boolean;
+  showLevel: boolean;
   wrapLines: boolean;
   density: 'compact' | 'cozy' | 'comfortable';
   pinned: boolean;
@@ -88,6 +91,9 @@ export const LogRow = memo(function LogRow({
   search,
   showTimestamps,
   showPid,
+  showProcess,
+  showTag,
+  showLevel,
   wrapLines,
   density,
   pinned,
@@ -156,13 +162,17 @@ export const LogRow = memo(function LogRow({
           {entry.pid}-{entry.tid}
         </span>
       )}
-      <span className="cell pkg" title={entry.pkg}>
-        <HighlightedText text={entry.pkg} ranges={pkgRanges} />
-      </span>
-      <span className="cell tag" title={entry.tag}>
-        <HighlightedText text={entry.tag} ranges={tagRanges} />
-      </span>
-      <span className={`cell level lvl-${entry.level}`}>{entry.level}</span>
+      {showProcess && (
+        <span className="cell pkg" title={entry.pkg}>
+          <HighlightedText text={entry.pkg} ranges={pkgRanges} />
+        </span>
+      )}
+      {showTag && (
+        <span className="cell tag" title={entry.tag}>
+          <HighlightedText text={entry.tag} ranges={tagRanges} />
+        </span>
+      )}
+      {showLevel && <span className={`cell level lvl-${entry.level}`}>{entry.level}</span>}
       <span className={`cell msg ${wrapLines ? 'wrap' : ''}`}>
         <HighlightedText text={entry.message} ranges={msgRanges} />
         {isCrashHead && (

@@ -24,10 +24,6 @@ export interface FilterBarProps {
   onClear: () => void;
   autoScroll: boolean;
   setAutoScroll: (v: boolean) => void;
-  showTimestamps: boolean;
-  setShowTimestamps: (v: boolean) => void;
-  showPid: boolean;
-  setShowPid: (v: boolean) => void;
   wrapLines: boolean;
   setWrapLines: (v: boolean) => void;
   /** Called when the user presses `/` outside an input — focuses the chip input. */
@@ -68,10 +64,6 @@ export function FilterBar({
   onClear,
   autoScroll,
   setAutoScroll,
-  showTimestamps,
-  setShowTimestamps,
-  showPid,
-  setShowPid,
   wrapLines,
   setWrapLines,
   registerFocusHandler,
@@ -255,20 +247,6 @@ export function FilterBar({
       <div className="divider" />
 
       <div className="fb-display">
-        <button
-          className={`tb-mini tt ${showTimestamps ? 'active' : ''}`}
-          data-tt="Timestamps"
-          onClick={() => setShowTimestamps(!showTimestamps)}
-        >
-          <Icons.Time size={13} /> ts
-        </button>
-        <button
-          className={`tb-mini tt ${showPid ? 'active' : ''}`}
-          data-tt="PID / TID"
-          onClick={() => setShowPid(!showPid)}
-        >
-          <Icons.Hash size={13} /> pid
-        </button>
         <button
           className={`tb-mini tt ${wrapLines ? 'active' : ''}`}
           data-tt="Wrap long lines"

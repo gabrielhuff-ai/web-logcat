@@ -22,6 +22,16 @@ export interface LevelRowProps {
   pinnedCount: number;
   onClearPinned: () => void;
   paused: boolean;
+  showTimestamps: boolean;
+  setShowTimestamps: (v: boolean) => void;
+  showPid: boolean;
+  setShowPid: (v: boolean) => void;
+  showProcess: boolean;
+  setShowProcess: (v: boolean) => void;
+  showTag: boolean;
+  setShowTag: (v: boolean) => void;
+  showLevel: boolean;
+  setShowLevel: (v: boolean) => void;
 }
 
 export function LevelRow({
@@ -33,6 +43,16 @@ export function LevelRow({
   pinnedCount,
   onClearPinned,
   paused,
+  showTimestamps,
+  setShowTimestamps,
+  showPid,
+  setShowPid,
+  showProcess,
+  setShowProcess,
+  showTag,
+  setShowTag,
+  showLevel,
+  setShowLevel,
 }: LevelRowProps) {
   const solo = (l: LogLevel) => {
     const next: LevelEnabled = { V: false, D: false, I: false, W: false, E: false };
@@ -54,6 +74,44 @@ export function LevelRow({
             <span className="lvl-name">{label}</span>
           </button>
         ))}
+      </div>
+      <div className="divider" />
+      <div className="lvl-toggles">
+        <button
+          className={`tb-mini tt ${showTimestamps ? 'active' : ''}`}
+          data-tt="Timestamps"
+          onClick={() => setShowTimestamps(!showTimestamps)}
+        >
+          <Icons.Time size={13} /> ts
+        </button>
+        <button
+          className={`tb-mini tt ${showPid ? 'active' : ''}`}
+          data-tt="PID / TID"
+          onClick={() => setShowPid(!showPid)}
+        >
+          <Icons.Hash size={13} /> pid
+        </button>
+        <button
+          className={`tb-mini tt ${showProcess ? 'active' : ''}`}
+          data-tt="Process"
+          onClick={() => setShowProcess(!showProcess)}
+        >
+          <Icons.Device size={13} /> proc
+        </button>
+        <button
+          className={`tb-mini tt ${showTag ? 'active' : ''}`}
+          data-tt="Tag"
+          onClick={() => setShowTag(!showTag)}
+        >
+          <Icons.Stack size={13} /> tag
+        </button>
+        <button
+          className={`tb-mini tt ${showLevel ? 'active' : ''}`}
+          data-tt="Verbosity column"
+          onClick={() => setShowLevel(!showLevel)}
+        >
+          <Icons.Highlight size={13} /> lvl
+        </button>
       </div>
       <div className="lvl-spacer" />
       <span className="lvl-stats">
