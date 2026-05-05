@@ -284,68 +284,67 @@ underlying `Adb` handle. Shell needs the handle for
 Highest-risk, highest-reward. Tasks split fine-grained because each is
 its own PR-sized milestone with a verifiable demo.
 
-- [ ] **Vendor scrcpy server + add deps** — pin
-  `scrcpy-server-v2.7.jar` (Apache-2.0; widest device support
-  while staying current — scrcpy v2.7 still supports Android 5.0+
-  / API 21, which covers virtually all in-use devices) under
-  `public/scrcpy/scrcpy-server-v2.7.jar`. Add
-  `@yume-chan/scrcpy` + `@yume-chan/scrcpy-decoder-webcodecs`
-  to `package.json` and to CLAUDE.md's "Acceptable additions"
-  list. If yume-chan's current release targets a different scrcpy
-  version, follow yume-chan's compatibility matrix instead — note
-  the chosen pair in `src/lib/scrcpy.ts`.
-- [ ] **Static `MirrorWidget` skeleton** —
+- [x] **Vendor scrcpy server + add deps** — pinned
+  `scrcpy-server-v2.7.jar` under `public/scrcpy/` (Apache-2.0
+  attribution at `public/scrcpy/LICENSE`). Added
+  `@yume-chan/scrcpy@^2.3.0`, `@yume-chan/adb-scrcpy@^2.3.2`,
+  `@yume-chan/scrcpy-decoder-webcodecs@^2.5.3`, and
+  `mp4-muxer@^5.2.2` to `package.json` and to CLAUDE.md's
+  "Acceptable additions" list. The chosen pair (jar 2.7 + ya-
+  webadb 2.3.x) is documented at the top of `src/lib/scrcpy.ts`.
+- [x] **Static `MirrorWidget` skeleton** —
   `src/components/widgets/MirrorWidget.tsx` ports
   `design/v2/source/widget-mirror.jsx` pixel-perfectly: SVG
   bezel, `mr-toolbar widget-bar` with the three button groups
   and `mr-sep` dividers, tap-ripple effect on the screen
-  surface. Uses the simulated `MirrorAppFrame` SVG from the
-  design source for now — no real video yet.
-- [ ] **scrcpy session lib** — `src/lib/scrcpy.ts`. Push the
-  jar to `/data/local/tmp/scrcpy-server.jar`, start
-  `app_process`, open `localabstract:scrcpy`, return
-  `{ video, control, dispose }` where `video` is a
-  `ReadableStream<Uint8Array>` of NAL units and `control` is a
-  typed sender for `injectTouch`, `injectKeyCode`,
-  `setScreenPowerMode`, etc.
-- [ ] **WebCodecs decode → canvas** — replace the simulated
-  SVG frame with a `<canvas>` driven by
-  `@yume-chan/scrcpy-decoder-webcodecs` and
-  `requestVideoFrameCallback`. Canvas lives outside React's
-  render tree; only the toolbar + REC pill rerender. Bezel
-  styling stays.
-- [ ] **Touch injection** — wire the existing tap handler in
-  `MirrorWidget` to `control.injectTouch()`. Scale viewport
-  pixels → device source pixels, handle rotation events on
-  the control channel without remounting the canvas.
-- [ ] **Hardware buttons** — Back / Home / Menu / Vol± / Power
-  → scrcpy keycodes (`KEYCODE_BACK`, `KEYCODE_HOME`,
-  `KEYCODE_APP_SWITCH`, `KEYCODE_VOLUME_UP/DOWN`,
-  `KEYCODE_POWER`). Power additionally toggles
-  `setScreenPowerMode` so the device screen stays off when
-  appropriate.
-- [ ] **Recording** — add `mp4-muxer` dep. Tee video NAL units
-  into the muxer alongside the decoder; on Stop, save the
-  resulting Blob via download. REC pill + timer come from
-  the existing widget UI; pulse + `.rec` class already in
-  the design CSS.
-- [ ] **Screenshot** — snapshot the current `VideoFrame`
-  to a 2D canvas → PNG via `canvas.toBlob()`.
-- [ ] **Hard-cap concurrent Mirror tiles at 1** — registry
-  entry gets `maxInstances: 1`; `TileGrid.addTile` and
-  `WidgetPalette` consult it. Mirror's palette card is disabled
-  with tooltip "Only one mirror at a time" while a Mirror tile
-  exists. Product decision — keeps the scrcpy server count and
-  USB bandwidth predictable.
+  surface. The canned `MirrorAppFrame` SVG lives at
+  `src/components/widgets/mirror/MirrorAppFrame.tsx` and is
+  rendered on the simulator path; in real mode a `<canvas>`
+  takes its place.
+- [x] **scrcpy session lib** — `src/lib/scrcpy.ts`. Pushes the
+  jar via `AdbScrcpyClient.pushServer`, starts the server
+  through `AdbScrcpyClient.start`, and exposes
+  `{ metadata, video, packets, control, dispose }`. `video`
+  is the raw NAL Uint8Array stream (for muxing); `packets` is
+  the typed-packet stream ready for the WebCodecs decoder.
+- [x] **WebCodecs decode → canvas** — `MirrorWidget` lazy-loads
+  `@yume-chan/scrcpy-decoder-webcodecs` and pipes
+  `session.packets` into a `WebCodecsVideoDecoder` with a
+  `BitmapVideoFrameRenderer` over the inline `<canvas>`. Canvas
+  lives outside React's render tree (refs only). Falls back to
+  an inline notice ("Mirror requires Chromium 94+ with
+  WebCodecs") when `'VideoDecoder' in window` is false.
+- [x] **Touch injection** — `injectTouch` wired with
+  `videoWidth`/`videoHeight` from the decoder's `sizeChanged`
+  event; coordinate scaling uses `getBoundingClientRect()` on
+  the `mr-screen` element. Rotation lands as a `sizeChanged`
+  event and the canvas reflows without remounting.
+- [x] **Hardware buttons** — Back / Home / Menu / Vol± / Power
+  wired to scrcpy keycodes (`AndroidKeyCode` 4 / 3 / 187 / 24 /
+  25 / 26). Power additionally calls `setScreenPowerMode(0)` to
+  keep the device-side display dark while the mirror is live.
+- [x] **Recording** — `mp4-muxer` dep added; the Recorder tees
+  the raw NAL stream into `Muxer.addVideoChunkRaw` (key/delta
+  classified by AnnexB NAL-type sniff) and on Stop downloads
+  `weblogcat-mirror-<serial>-<timestamp>.mp4`.
+- [x] **Screenshot** — current canvas blitted into a 2D canvas
+  → `toBlob('image/png')` → download as
+  `weblogcat-mirror-<serial>-<timestamp>.png`.
+- [x] **Hard-cap concurrent Mirror tiles at 1** — registry
+  entry already had `maxInstances: 1` from Phase 5; verified
+  `WidgetPalette.blockingReason` greys the card with "Only one
+  mirror at a time" while a Mirror tile exists, and
+  `TileGrid.addTile` defends the cap a second time. Smoke test
+  in `tests/smoke.spec.ts` exercises both.
 - [ ] **Latency / jank pass** — Pixel 8 Pro, USB-2 and USB-3,
   measure end-to-end latency with a stopwatch + tap-flash
   test app. Target ≤150ms USB-2, ≤80ms USB-3. Document the
   measured number in this entry.
-- [ ] **Enable Mirror in `WidgetPalette`** — flip its `enabled`
-  flag to `true` in `src/lib/widgets.ts`. Update the default
-  layout to the full HANDOFF §Tile Grid arrangement (Mirror 3w
-  × 10h on the left | Logcat 9w × 6h top-right | Shell 5w × 4h
-  + Dumpsys 4w × 4h bottom-right).
+- [x] **Enable Mirror in `WidgetPalette`** — flipped
+  `enabled: true` on `mirror` in `src/lib/widgets.ts`. Updated
+  `src/lib/layout.ts → DEFAULT_LAYOUT` to the full HANDOFF
+  arrangement (Mirror 3w × 10h on the left | Logcat 9w × 6h
+  top-right | Shell 5w × 4h + Dumpsys 4w × 4h bottom-right).
 
 ## Phase 10 — Polish
 
