@@ -14,6 +14,7 @@
 
 import type { ComponentType } from 'react';
 import * as Icons from '../components/Icons';
+import { FilesWidget } from '../components/widgets/FilesWidget';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
 import { ShellWidget } from '../components/widgets/ShellWidget';
 import { StubWidget } from '../components/widgets/StubWidget';
@@ -70,9 +71,9 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Files',
     icon: Icons.Folder,
     desc: 'Browse, push & pull device files',
-    comp: StubWidget,
+    comp: FilesWidget,
     defaultSize: { w: 8, h: 6 },
-    enabled: false,
+    enabled: true,
   },
   mirror: {
     name: 'Screen Mirror',

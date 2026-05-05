@@ -713,3 +713,269 @@
   font-size: inherit;
   caret-color: var(--accent);
 }
+
+/* ===== v2: Files widget =====
+ * Adapted from `design/v2/source/widget-files.jsx`'s inline <style>
+ * block, with the Phase 8 additions: a 220px tree pane on the left,
+ * back/forward nav buttons in the toolbar, and a drop-target overlay
+ * when the user drags a file onto the widget. */
+.fx-widget {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  font-size: var(--t-sm);
+  position: relative;
+}
+.fx-widget.fx-dropping::after {
+  content: 'Drop to push';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(from var(--accent) l c h / 0.16);
+  border: 2px dashed oklch(from var(--accent) l c h / 0.6);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+  letter-spacing: 0.04em;
+}
+
+.fx-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--glass-line);
+  flex-shrink: 0;
+}
+.fx-toolbar .icon-btn { width: 26px; height: 26px; }
+.fx-toolbar .icon-btn svg { width: 14px; height: 14px; }
+.fx-nav { display: flex; gap: 2px; flex-shrink: 0; }
+.fx-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+.fx-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+}
+.fx-crumb-wrap { display: inline-flex; align-items: center; min-width: 0; }
+.fx-crumb {
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.fx-crumb:hover { background: var(--bg-hover); color: var(--fg-0); }
+.fx-crumb.current { color: var(--fg-0); }
+.fx-sep { color: var(--fg-3); padding: 0 1px; user-select: none; }
+
+.fx-xfer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: oklch(from var(--accent) l c h / 0.1);
+  border-bottom: 1px solid oklch(from var(--accent) l c h / 0.25);
+  font-size: var(--t-xs);
+}
+.fx-xfer.done {
+  background: oklch(from oklch(0.74 0.16 150) l c h / 0.12);
+  border-bottom-color: oklch(from oklch(0.74 0.16 150) l c h / 0.3);
+}
+.fx-xfer-icon { color: var(--accent); display: inline-flex; }
+.fx-xfer.done .fx-xfer-icon { color: oklch(0.74 0.16 150); }
+.fx-xfer-name {
+  color: var(--fg-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.fx-xfer-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: oklch(from var(--accent) l c h / 0.18);
+  overflow: hidden;
+}
+.fx-xfer.done .fx-xfer-bar { background: oklch(from oklch(0.74 0.16 150) l c h / 0.2); }
+.fx-xfer-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.fx-xfer.done .fx-xfer-bar > div { background: oklch(0.74 0.16 150); }
+.fx-xfer-pct {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
+}
+
+.fx-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fx-tree {
+  width: 220px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-right: 1px solid var(--glass-line);
+  padding: 4px 0;
+  font-size: var(--t-sm);
+  background: oklch(from var(--bg-1) l c h / 0.4);
+}
+.fx-tnode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 0;
+  cursor: pointer;
+  color: var(--fg-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.fx-tnode:hover { background: oklch(from var(--bg-1) l c h / 0.5); }
+.fx-tnode.sel {
+  background: oklch(from var(--accent) l c h / 0.18);
+  color: var(--fg-0);
+}
+.fx-tcaret {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.fx-tcaret svg { transition: transform 100ms var(--ease-out); }
+.fx-tname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.fx-list-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fx-listhead {
+  display: flex;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--glass-line);
+  background: oklch(from var(--bg-1) l c h / 0.6);
+  flex-shrink: 0;
+}
+.fx-h {
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.fx-h:hover { color: var(--fg-1); }
+.fx-h.on { color: var(--fg-0); }
+.fx-h.on::after { content: ' \2191'; } /* arrow up */
+.fx-h.on.desc::after { content: ' \2193'; } /* arrow down */
+
+.fx-list {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.fx-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px;
+  align-items: center;
+  cursor: default;
+  color: var(--fg-1);
+  line-height: 1.5;
+}
+.fx-row:hover { background: oklch(from var(--bg-1) l c h / 0.5); }
+.fx-row.sel {
+  background: oklch(from var(--accent) l c h / 0.18);
+  color: var(--fg-0);
+}
+.fx-row.dir .fx-name { color: var(--fg-0); font-weight: 500; }
+.fx-row.link .fx-name { color: oklch(0.78 0.13 220); font-style: italic; }
+.fx-row[draggable='true'] { cursor: grab; }
+.fx-row[draggable='true']:active { cursor: grabbing; }
+
+.fx-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fx-cell.name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fx-cell.num { color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.fx-cell.mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
+.fx-link { color: var(--fg-3); font-style: italic; margin-left: 4px; }
+
+.fx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--fg-3);
+}
+.fx-error { color: oklch(0.74 0.18 25); }
+
+.fx-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--glass-line);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  background: oklch(from var(--bg-1) l c h / 0.4);
+  flex-shrink: 0;
+}
+.fx-foot-path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
