@@ -66,3 +66,29 @@ export interface DeviceInfo {
   /** True for the simulated device used in dev. */
   fake?: boolean;
 }
+
+// ---- v2: dashboard / tiles / widgets ----------------------------------------
+
+/** Discriminator for the widget kinds shipped (or planned) by the dashboard. */
+export type WidgetKind = 'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror';
+
+/**
+ * One placed widget instance on the dashboard grid.
+ *   - `id`         is a stable, string-typed key the layout array is keyed by.
+ *   - `x, y, w, h` are integer cells on the 12-column / 56px-row grid; see
+ *                  `src/lib/layout.ts` for the snap math.
+ *   - `barsHidden` toggles the "hide widget chrome" mode (the eye button
+ *                  in the tile header). Optional — absent ⇒ false.
+ */
+export interface Tile {
+  id: string;
+  kind: WidgetKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  barsHidden?: boolean;
+}
+
+/** Shape persisted under `weblogcat-dashboard-v1` in localStorage. */
+export type LayoutState = Tile[];

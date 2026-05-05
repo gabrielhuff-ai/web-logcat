@@ -2,6 +2,12 @@
 // flow (`Connect a device`) requires hardware and Chromium's USB
 // permissions — out of scope for CI; covered by manual testing on the
 // deployed staging URL.
+//
+// v2 update: the connected app is now `<Dashboard/>` (topbar +
+// `<TileGrid/>` of widgets) instead of the v1 single-purpose toolbar.
+// Selectors below target the v2 chrome (`.dash-top`,
+// `.dash-brand-name`, `.dash-device`) plus per-widget bits inside the
+// default Logcat tile.
 
 import { test, expect } from '@playwright/test';
 
@@ -17,32 +23,21 @@ test.describe('empty state', () => {
 });
 
 test.describe('simulator', () => {
-  test('clicking "fake data" swaps in the main view and starts streaming', async ({
+  test('clicking "fake data" swaps in the dashboard and starts streaming', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    // Toolbar appears with the brand mark.
-    await expect(page.locator('.tb-name')).toHaveText('weblogcat');
+    // Dashboard topbar appears with the brand wordmark.
+    await expect(page.locator('.dash-brand-name')).toHaveText('WebLogcat');
 
-    // Device picker shows the simulated device.
-    await expect(page.locator('.dp-name')).toContainText('Demo Device');
+    // Device pill shows the simulated device.
+    await expect(page.locator('.dash-device-name')).toContainText('Demo Device');
 
-    // Logs land in the list.
+    // The default Logcat tile is rendered and logs land in the list.
+    await expect(page.locator('.tile')).toHaveCount(1);
     await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
-  });
-
-  test('clicking the brand returns to the empty state', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tb-name')).toHaveText('weblogcat');
-
-    await page.locator('.tb-brand').click();
-
-    await expect(
-      page.getByRole('heading', { name: /no device connected/i }),
-    ).toBeVisible();
   });
 });
 
@@ -91,5 +86,50 @@ test.describe('keyboard shortcuts', () => {
     await expect(
       page.getByRole('dialog', { name: /keyboard shortcuts/i }),
     ).not.toBeVisible();
+  });
+});
+
+test.describe('dashboard', () => {
+  test('+ Add widget opens the palette with disabled non-Logcat cards', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(1);
+
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
+
+    // Logcat is enabled in Phase 5; the others are disabled stubs.
+    const cards = page.locator('.palette-card');
+    await expect(cards).toHaveCount(5);
+    await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
+    await expect(cards.filter({ hasText: 'Shell' })).toBeDisabled();
+    await expect(cards.filter({ hasText: 'Dumpsys' })).toBeDisabled();
+    await expect(cards.filter({ hasText: 'Files' })).toBeDisabled();
+    await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
+  });
+
+  test('adding a Logcat widget yields a second tile with independent filters', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(1);
+
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
+    await expect(page.locator('.tile')).toHaveCount(2);
+
+    // Add a filter to the first tile only; the second tile's chip bar
+    // should stay empty.
+    const firstTile = page.locator('.tile').first();
+    await firstTile.locator('.fb-input').focus();
+    await firstTile.locator('.fb-input').fill('tag:Activity');
+    await firstTile.locator('.fb-input').press('Enter');
+    await expect(firstTile.locator('.chip')).toHaveCount(1);
+
+    const secondTile = page.locator('.tile').nth(1);
+    await expect(secondTile.locator('.chip')).toHaveCount(0);
   });
 });
