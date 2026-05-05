@@ -11,9 +11,9 @@ describe('widgets registry', () => {
     expect(WIDGET_KINDS).toEqual(expected);
   });
 
-  it('has Logcat enabled and the rest disabled in Phase 5', () => {
+  it('has Logcat + Shell enabled and the rest disabled in Phase 6', () => {
     expect(WIDGETS.logcat.enabled).toBe(true);
-    expect(WIDGETS.shell.enabled).toBe(false);
+    expect(WIDGETS.shell.enabled).toBe(true);
     expect(WIDGETS.dumpsys.enabled).toBe(false);
     expect(WIDGETS.files.enabled).toBe(false);
     expect(WIDGETS.mirror.enabled).toBe(false);

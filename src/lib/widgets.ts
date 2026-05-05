@@ -15,6 +15,7 @@
 import type { ComponentType } from 'react';
 import * as Icons from '../components/Icons';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
+import { ShellWidget } from '../components/widgets/ShellWidget';
 import { StubWidget } from '../components/widgets/StubWidget';
 import type { WidgetKind } from '../types';
 
@@ -53,9 +54,9 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Shell',
     icon: Icons.Terminal,
     desc: 'Interactive ADB shell',
-    comp: StubWidget,
-    defaultSize: { w: 6, h: 6 },
-    enabled: false,
+    comp: ShellWidget,
+    defaultSize: { w: 5, h: 4 },
+    enabled: true,
   },
   dumpsys: {
     name: 'Dumpsys',

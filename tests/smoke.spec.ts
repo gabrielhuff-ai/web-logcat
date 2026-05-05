@@ -35,8 +35,9 @@ test.describe('simulator', () => {
     // Device pill shows the simulated device.
     await expect(page.locator('.dash-device-name')).toContainText('Demo Device');
 
-    // The default Logcat tile is rendered and logs land in the list.
-    await expect(page.locator('.tile')).toHaveCount(1);
+    // The default layout in Phase 6 ships a Logcat tile + a Shell
+    // tile; logs land in the Logcat list.
+    await expect(page.locator('.tile')).toHaveCount(2);
     await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
   });
 });
@@ -90,46 +91,70 @@ test.describe('keyboard shortcuts', () => {
 });
 
 test.describe('dashboard', () => {
-  test('+ Add widget opens the palette with disabled non-Logcat cards', async ({
+  test('+ Add widget opens the palette with disabled non-shipped cards', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(1);
+    await expect(page.locator('.tile')).toHaveCount(2);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
-    // Logcat is enabled in Phase 5; the others are disabled stubs.
+    // Phase 6 ships Logcat + Shell; the others are disabled stubs.
     const cards = page.locator('.palette-card');
     await expect(cards).toHaveCount(5);
     await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Shell' })).toBeDisabled();
+    await expect(cards.filter({ hasText: 'Shell' })).not.toBeDisabled();
     await expect(cards.filter({ hasText: 'Dumpsys' })).toBeDisabled();
     await expect(cards.filter({ hasText: 'Files' })).toBeDisabled();
     await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
   });
 
-  test('adding a Logcat widget yields a second tile with independent filters', async ({
+  test('adding a Logcat widget yields an extra tile with independent filters', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(1);
+    await expect(page.locator('.tile')).toHaveCount(2);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
-    await expect(page.locator('.tile')).toHaveCount(2);
+    await expect(page.locator('.tile')).toHaveCount(3);
 
-    // Add a filter to the first tile only; the second tile's chip bar
-    // should stay empty.
-    const firstTile = page.locator('.tile').first();
+    // Add a filter to the first Logcat tile only; the second Logcat
+    // tile's chip bar should stay empty. Indices 0 and 2 are the two
+    // Logcat tiles (1 is the default Shell tile).
+    const firstTile = page.locator('.tile').nth(0);
     await firstTile.locator('.fb-input').focus();
     await firstTile.locator('.fb-input').fill('tag:Activity');
     await firstTile.locator('.fb-input').press('Enter');
     await expect(firstTile.locator('.chip')).toHaveCount(1);
 
-    const secondTile = page.locator('.tile').nth(1);
-    await expect(secondTile.locator('.chip')).toHaveCount(0);
+    const newTile = page.locator('.tile').nth(2);
+    await expect(newTile.locator('.chip')).toHaveCount(0);
+  });
+
+  test('adding a Shell widget runs the simulator commands', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    // Default layout already includes a Shell tile.
+    const shellTile = page.locator('.sh-widget').first();
+    await expect(shellTile).toBeVisible();
+
+    const input = shellTile.locator('input[aria-label="Shell input"]');
+    await input.focus();
+    await input.fill('pwd');
+    await input.press('Enter');
+    await expect(shellTile).toContainText('/sdcard');
+
+    await input.fill('help');
+    await input.press('Enter');
+    await expect(shellTile).toContainText(/Built-in commands/);
+
+    // Ctrl+L clears the scrollback — the only remaining lines come
+    // from the still-mounted live prompt.
+    await input.press('Control+l');
+    await expect(shellTile.locator('.sh-line')).toHaveCount(1);
   });
 });
