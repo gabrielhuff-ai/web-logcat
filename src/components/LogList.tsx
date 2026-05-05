@@ -1,25 +1,44 @@
 // Scrollable log area with sticky pinned block.
 //
-// Virtualisation: rendering all 5000 rows is fine up to ~1000 visible
-// rows but stutters past that. We use @tanstack/react-virtual when the
-// visible list exceeds VIRTUAL_THRESHOLD entries; below that, we render
-// every row directly (cheaper, simpler, avoids row-height jitter when
-// crash rows wrap).
+// Virtualisation:
+//   - Past VIRTUAL_THRESHOLD entries we hand off to @tanstack/react-virtual
+//     for windowed rendering.
+//   - We do *not* use the absolute-positioning idiom (rows positioned with
+//     `position: absolute; transform: translateY(start)`). Absolutely-
+//     positioned children don't contribute to the parent's intrinsic width,
+//     which prevents the scroll container from detecting horizontal
+//     overflow when wrap-mode is off and the message cell expands past
+//     the viewport. Instead, we render the visible window as normal block-
+//     flow children with `paddingTop`/`paddingBottom` spacers above and
+//     below, so each row is a real flow child whose width contributes to
+//     the parent's `max-content` size.
+//
+// Scroll anchoring on head trim:
+//   - The parent (`App.tsx`) writes the pixel delta of "rows that vanished
+//     from the visible list because of FIFO trim while scroll-locked" into
+//     `compensationRef`. After every render where `entries.length` changed
+//     we run a layout effect that subtracts that delta from `scrollTop`
+//     before paint, so the rows the user is reading stay anchored at their
+//     on-screen position. The math uses the density-derived row-height
+//     estimate; in wrap mode actual heights drift slightly, which is a
+//     known limitation (documented in docs/TASKS.md).
 
-import { useEffect, useMemo, useRef, type UIEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type MutableRefObject,
+  type UIEvent,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as Icons from './Icons';
 import { entryMatches } from '../lib/filters';
+import { rowHeightFor } from '../lib/format';
 import { LogRow } from './LogRow';
 import type { Filter, LogEntry, Tweaks } from '../types';
 
 const VIRTUAL_THRESHOLD = 800;
-
-function rowHeightFor(density: Tweaks['density']): number {
-  if (density === 'compact') return 22;
-  if (density === 'comfortable') return 32;
-  return 26;
-}
 
 export interface LogListProps {
   entries: LogEntry[];
@@ -36,6 +55,9 @@ export interface LogListProps {
   setAutoScroll: (v: boolean) => void;
   deviceModel: string;
   hasFilters: boolean;
+  /** Pixels to subtract from scrollTop on next layout (set by App when
+   *  the FIFO trim evicts visible entries while scroll-locked). */
+  compensationRef?: MutableRefObject<number>;
   /** Imperative API: parent calls this to scroll to a given timestamp. */
   registerScrollToTs?: (fn: (ts: number) => void) => void;
 }
@@ -55,6 +77,7 @@ export function LogList({
   setAutoScroll,
   deviceModel,
   hasFilters,
+  compensationRef,
   registerScrollToTs,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,6 +103,21 @@ export function LogList({
       el.scrollTop = el.scrollHeight;
     }
   }, [entries.length, autoScroll, virtualize, virtualizer]);
+
+  // Trim-anchor: consume pending compensation from App. Runs *before paint*
+  // (useLayoutEffect) so the user never sees the intermediate "scrolled
+  // forward" state where scrollHeight has shrunk but scrollTop hasn't.
+  // Skipped if autoScroll has flipped on in the meantime (the auto-tail
+  // effect above will pin to the bottom regardless).
+  useLayoutEffect(() => {
+    if (!compensationRef) return;
+    const px = compensationRef.current;
+    compensationRef.current = 0;
+    if (px <= 0 || autoScroll) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, el.scrollTop - px);
+  }, [entries.length, autoScroll, compensationRef]);
 
   // Imperative jump-to-timestamp from the heatmap.
   useEffect(() => {
@@ -113,102 +151,62 @@ export function LogList({
     return out;
   }, [entries, filters]);
 
+  const renderRow = (l: LogEntry, keyPrefix = '') => (
+    <LogRow
+      key={`${keyPrefix}${l.id}`}
+      entry={l}
+      filters={filters}
+      search={search}
+      showTimestamps={tweaks.showTimestamps}
+      showPid={tweaks.showPid}
+      wrapLines={tweaks.wrapLines}
+      density={tweaks.density}
+      pinned={pinned.has(l.id)}
+      onTogglePin={onTogglePin}
+      isMatch={matchSet.has(l.id)}
+      isCrashHead={crashHeads.has(l.id)}
+      expanded={expanded.has(l.id)}
+      onToggleExpand={onToggleExpand}
+    />
+  );
+
+  let body: React.ReactNode;
+  if (entries.length === 0) {
+    body = (
+      <div className="empty-logs">
+        <Icons.Filter size={20} />
+        <div>No matching log lines</div>
+        <div className="empty-logs-hint">
+          {hasFilters
+            ? "Try removing some filters or toggle off 'Only matches'"
+            : `Waiting for logs from ${deviceModel}`}
+        </div>
+      </div>
+    );
+  } else if (virtualize) {
+    const items = virtualizer.getVirtualItems();
+    const totalSize = virtualizer.getTotalSize();
+    const top = items[0]?.start ?? 0;
+    const last = items[items.length - 1];
+    const bottom = last ? Math.max(0, totalSize - last.end) : 0;
+    body = (
+      <div style={{ paddingTop: top, paddingBottom: bottom }}>
+        {items.map((vi) => renderRow(entries[vi.index]))}
+      </div>
+    );
+  } else {
+    body = entries.map((l) => renderRow(l));
+  }
+
   return (
     <div className="log-scroll" ref={scrollRef} onScroll={onScroll}>
       {pinnedEntries.length > 0 && (
         <div className="pinned-block">
           <div className="pinned-head">PINNED</div>
-          {pinnedEntries.map((l) => (
-            <LogRow
-              key={`pin-${l.id}`}
-              entry={l}
-              filters={filters}
-              search={search}
-              showTimestamps={tweaks.showTimestamps}
-              showPid={tweaks.showPid}
-              wrapLines={tweaks.wrapLines}
-              density={tweaks.density}
-              pinned
-              onTogglePin={onTogglePin}
-              isMatch={matchSet.has(l.id)}
-              isCrashHead={crashHeads.has(l.id)}
-              expanded={expanded.has(l.id)}
-              onToggleExpand={onToggleExpand}
-            />
-          ))}
+          {pinnedEntries.map((l) => renderRow(l, 'pin-'))}
         </div>
       )}
-
-      {entries.length === 0 ? (
-        <div className="empty-logs">
-          <Icons.Filter size={20} />
-          <div>No matching log lines</div>
-          <div className="empty-logs-hint">
-            {hasFilters
-              ? "Try removing some filters or toggle off 'Only matches'"
-              : `Waiting for logs from ${deviceModel}`}
-          </div>
-        </div>
-      ) : virtualize ? (
-        <div
-          style={{
-            height: virtualizer.getTotalSize(),
-            position: 'relative',
-            width: '100%',
-          }}
-        >
-          {virtualizer.getVirtualItems().map((vi) => {
-            const l = entries[vi.index];
-            return (
-              <div
-                key={l.id}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${vi.start}px)`,
-                }}
-              >
-                <LogRow
-                  entry={l}
-                  filters={filters}
-                  search={search}
-                  showTimestamps={tweaks.showTimestamps}
-                  showPid={tweaks.showPid}
-                  wrapLines={tweaks.wrapLines}
-                  density={tweaks.density}
-                  pinned={pinned.has(l.id)}
-                  onTogglePin={onTogglePin}
-                  isMatch={matchSet.has(l.id)}
-                  isCrashHead={crashHeads.has(l.id)}
-                  expanded={expanded.has(l.id)}
-                  onToggleExpand={onToggleExpand}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        entries.map((l) => (
-          <LogRow
-            key={l.id}
-            entry={l}
-            filters={filters}
-            search={search}
-            showTimestamps={tweaks.showTimestamps}
-            showPid={tweaks.showPid}
-            wrapLines={tweaks.wrapLines}
-            density={tweaks.density}
-            pinned={pinned.has(l.id)}
-            onTogglePin={onTogglePin}
-            isMatch={matchSet.has(l.id)}
-            isCrashHead={crashHeads.has(l.id)}
-            expanded={expanded.has(l.id)}
-            onToggleExpand={onToggleExpand}
-          />
-        ))
-      )}
+      {body}
     </div>
   );
 }

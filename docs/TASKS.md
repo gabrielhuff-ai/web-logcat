@@ -46,6 +46,21 @@ All components below were ported from `design/source/` and wired into
 
 ## Phase 3 — Polish
 
+- [x] **Scroll anchoring on head trim.** When the FIFO trim evicts entries
+  while scroll-locked, `scrollTop` is decremented by
+  `(visible-entries-trimmed × rowHeight)` in a layout effect, so rows
+  the user is reading stay anchored on screen. Combined with the 50k
+  hard cap, this means rows only disappear from the user's view once
+  they themselves scroll past them or the buffer truly fills.
+- [x] **Horizontal scroll when wrap mode is off.** Replaces the
+  per-cell ellipsis with a row that grows to `max-content` width.
+  Required swapping the virtualiser's absolute-positioning idiom for a
+  padding-based one (absolute children don't contribute to parent
+  intrinsic width), so the scroll container can detect overflow.
+- [ ] **Refine anchor math under wrap mode.** Estimated row height is
+  exact for single-line rows (always the case when wrap is off) but
+  drifts for wrapped + crash rows. Either disable anchoring with wrap on
+  or use `virtualizer.measure()` for the trimmed slice.
 - [ ] Persist `filters` across reloads (localStorage, scoped per device serial)
 - [ ] `?` keyboard shortcut to open a help dialog with the shortcut list
 - [ ] Decide whether to keep "fake data" affordance in production (or hide

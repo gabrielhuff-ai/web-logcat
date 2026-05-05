@@ -34,7 +34,7 @@ import type {
   LogEntry,
   LogLevel,
 } from '../types';
-import { formatTs } from '../lib/format';
+import { formatTs, rowHeightFor } from '../lib/format';
 
 // Soft cap: while auto-tailing the user is "looking at the present", so
 // FIFO-trim aggressively to keep memory bounded.
@@ -102,6 +102,31 @@ export function App() {
 
   const realStreamRef = useRef<LogStream | null>(null);
 
+  // ---- Scroll anchoring on head trim --------------------------------------
+  // While scroll-locked, when the FIFO trim evicts entries from the head of
+  // the buffer, the rows above the user's viewport disappear, which would
+  // make their viewport "scroll forward" through the content. We compensate
+  // by subtracting (rowsRemovedFromVisibleList × rowHeight) from scrollTop
+  // in a layout effect, so the rows the user is actually reading stay
+  // anchored at their on-screen position until the user themselves scrolls
+  // off them or the buffer hard-cap finally evicts them.
+  //
+  // `visibleIdsRef` mirrors the current `filtered` list's id set, so we can
+  // count "of the entries we're about to evict, how many were on screen?"
+  // without re-running the filter predicate (which depends on logs ordering
+  // for crash-group expansion).
+  const visibleIdsRef = useRef<Set<number>>(new Set());
+
+  // `compensationRef` is shared with LogList: App writes pending pixel
+  // deltas, LogList consumes them in a useLayoutEffect that runs after the
+  // DOM has been resized but before paint.
+  const compensationRef = useRef(0);
+
+  const rowHeightRef = useRef(rowHeightFor(tweaks.density));
+  useEffect(() => {
+    rowHeightRef.current = rowHeightFor(tweaks.density);
+  }, [tweaks.density]);
+
   // ---- Ingest batching ----------------------------------------------------
   // Real devices can emit hundreds of lines per second. Calling setLogs
   // per line burns frames re-copying the array. Instead, accumulate into
@@ -114,15 +139,33 @@ export function App() {
     const batch = incomingRef.current;
     if (batch.length === 0) return;
     incomingRef.current = [];
+
+    // Capture how many of the about-to-be-evicted entries were visible to
+    // the user, so we can anchor scrollTop after the trim.
+    let trimmedVisible = 0;
+
     setLogs((prev) => {
       const next = prev.concat(batch);
       // Auto-tailing: trim to MAX_LOGS so the live view stays bounded.
       // Scroll-locked: keep up to MAX_LOGS_HARD so rows above the viewport
       // don't get evicted while the user is reading them.
       const cap = autoScrollRef.current ? MAX_LOGS : MAX_LOGS_HARD;
-      if (next.length > cap) next.splice(0, next.length - cap);
+      if (next.length > cap) {
+        const removeCount = next.length - cap;
+        if (!autoScrollRef.current) {
+          const visible = visibleIdsRef.current;
+          for (let i = 0; i < removeCount; i++) {
+            if (visible.has(next[i].id)) trimmedVisible++;
+          }
+        }
+        next.splice(0, removeCount);
+      }
       return next;
     });
+
+    if (trimmedVisible > 0) {
+      compensationRef.current += trimmedVisible * rowHeightRef.current;
+    }
   }, []);
 
   const queueEntries = useCallback(
@@ -287,6 +330,16 @@ export function App() {
       return true;
     });
   }, [logs, levelEnabled, search, onlyMatches, filters, expanded, crashHeads]);
+
+  // Mirror the visible list's id set into a ref so the trim-anchor math
+  // in flushIncoming (above) can answer "of the entries we're trimming,
+  // how many were on screen?" synchronously, without re-running the full
+  // filter predicate (which depends on logs ordering for crash groups).
+  useEffect(() => {
+    const set = new Set<number>();
+    for (const e of filtered) set.add(e.id);
+    visibleIdsRef.current = set;
+  }, [filtered]);
 
   const pinnedEntries = useMemo(
     () => logs.filter((l) => pinned.has(l.id)),
@@ -488,6 +541,7 @@ export function App() {
           setAutoScroll={setAutoScrollSafe}
           deviceModel={device.model}
           hasFilters={filters.length > 0}
+          compensationRef={compensationRef}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
           }}

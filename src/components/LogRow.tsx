@@ -136,7 +136,12 @@ export const LogRow = memo(function LogRow({
     .join(' ');
 
   return (
-    <div className={cls} data-level={entry.level} data-density={density}>
+    <div
+      className={cls}
+      data-level={entry.level}
+      data-density={density}
+      data-wrap={wrapLines ? 'true' : 'false'}
+    >
       <div className="row-rail" />
       <button
         className="row-pin"

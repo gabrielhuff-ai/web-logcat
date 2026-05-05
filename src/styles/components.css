@@ -2,6 +2,30 @@
  * blocks in design/source/. Keeps tokens.css and app.css clean as the
  * "design originals". */
 
+/* ===== Log row: horizontal-scroll mode (wrap off) =====
+ * When line-wrapping is disabled, expand the message cell to its
+ * intrinsic content width and let the row grow past the viewport so
+ * the scroll container scrolls horizontally — instead of ellipsizing
+ * the message inside a fixed-width cell.
+ *
+ * - .row[data-wrap="false"]: shrink-wrap to content (max-content) with a
+ *   floor at viewport width so short messages still get a full-width
+ *   hover background and rail.
+ * - .cell.msg:not(.wrap): size to content (no flex-grow into a 0 basis),
+ *   no overflow clipping, no text-overflow ellipsis. The :not(.wrap)
+ *   selector has higher specificity than `.cell.msg` so this overrides
+ *   the design defaults in app.css cleanly. */
+.row[data-wrap='false'] {
+  width: max-content;
+  min-width: 100%;
+}
+.cell.msg:not(.wrap) {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+
 /* ===== Empty state ===== */
 .empty {
   position: absolute;
