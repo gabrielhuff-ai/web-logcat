@@ -20,6 +20,7 @@ src/
 │   ├── dashboardChrome.ts        # tweaks + showToast for widgets
 │   ├── widgets.ts                # widget registry (kind → def)
 │   ├── layout.ts                 # tile-grid snap math + persistence
+│   ├── shellSim.ts               # in-memory ADB-shell built-ins (sim path)
 │   ├── format.ts                 # formatTs, rowHeightFor
 │   └── knownNames.ts             # static tag/process pools for autocomplete
 │
@@ -42,6 +43,7 @@ src/
 │   ├── Icons.tsx                 # inline SVG icon set
 │   └── widgets/
 │       ├── LogcatWidget.tsx      # the v1 logcat experience as a widget
+│       ├── ShellWidget.tsx       # interactive ADB shell (one channel per instance)
 │       └── StubWidget.tsx        # placeholder for not-yet-shipped kinds
 │
 └── styles/

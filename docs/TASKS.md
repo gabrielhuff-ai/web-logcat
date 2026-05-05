@@ -178,37 +178,38 @@ because `connectDevice` returns `{ device, stream }`, not the
 underlying `Adb` handle. Shell needs the handle for
 `subprocess.shell.spawn()`.
 
-- [ ] **Thread the `Adb` handle through `connectDevice`** — refactor
+- [x] **Thread the `Adb` handle through `connectDevice`** — refactor
   `src/lib/adb.ts` so `connectDevice` returns
   `{ device, stream, adb }`. Update `App.tsx` (or wherever the
   result is consumed) to push the handle into `AdbProvider` so
   `useAdb().adb` is non-null while connected. Surface
   disconnect-on-cable-pull cleanly (clear the handle alongside the
   stream). No behavior change for Logcat.
-- [ ] **`ShellWidget`** —
+- [x] **`ShellWidget`** —
   `src/components/widgets/ShellWidget.tsx` ports
   `design/v2/source/widget-shell.jsx`. **No toolbar**, no split
   panes (HANDOFF §Shell Widget — multiple shells = multiple
   widget instances). Scrollback area + live prompt; ↑/↓ history;
   Ctrl+L clears. Line-based render — no `xterm.js`.
-- [ ] **Real shell channel** — `adb.subprocess.shell.spawn()` per
-  widget instance via `useAdb()`. Pipe stdin from the input;
-  append stdout / stderr to scrollback; ANSI-strip in the
-  renderer.
-- [ ] **Simulator fallback** — when `usingFake` is true, run the
+- [x] **Real shell channel** —
+  `adb.subprocess.shellProtocol?.spawn([])` per widget instance
+  via `useAdb()`. Pipe stdin from the input; append stdout /
+  stderr to scrollback; ANSI-strip in the renderer (small inline
+  helper in `lib/shellSim.ts`). On widget unmount or device
+  disconnect the channel is killed. Devices that don't speak
+  shell-v2 surface an inline notice.
+- [x] **Simulator fallback** — when `usingFake` is true, run the
   built-in command list from `widget-shell.jsx` (`cd / ls / pwd /
   echo / cat / ps / getprop / whoami / id / uname / date / uptime
-  / clear / exit / help`). Lives in `src/lib/shellSim.ts`. Keeps
-  the no-phone path demo-able.
-- [ ] **Enable Shell in `WidgetPalette`** — flip its `enabled` flag
-  to `true` in `src/lib/widgets.ts`.
-- [ ] **Update default layout** — extend `PHASE_5_DEFAULT_LAYOUT`
-  in `src/lib/layout.ts` to include a Shell tile (or rename to
-  `DEFAULT_LAYOUT_PHASE_6` and re-export). Per HANDOFF §Tile Grid
-  the eventual full default is Mirror | Logcat above | Shell +
-  Dumpsys below; for now place Logcat (full-width on top) +
-  Shell (5w × 4h) below it. Each subsequent phase extends this
-  default to add its widget.
+  / clear / exit / help`). Lives in `src/lib/shellSim.ts` with
+  pure-logic Vitest coverage (`shellSim.test.ts`).
+- [x] **Enable Shell in `WidgetPalette`** — flipped `enabled: true`
+  in `src/lib/widgets.ts`; default size dropped to 5w × 4h to
+  match the eventual HANDOFF arrangement.
+- [x] **Update default layout** — `PHASE_5_DEFAULT_LAYOUT` is now
+  an alias for `PHASE_6_DEFAULT_LAYOUT`, which places Logcat (12w
+  × 6h on top) + Shell (5w × 4h directly below). Each subsequent
+  phase extends this further.
 
 ## Phase 7 — Dumpsys widget
 
