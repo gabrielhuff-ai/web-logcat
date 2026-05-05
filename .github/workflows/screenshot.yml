@@ -1,0 +1,65 @@
+name: Capture screenshot
+
+# Refreshes the README screenshot whenever main changes (and on demand
+# from the Actions tab). Pushes from this workflow use GITHUB_TOKEN, so
+# they don't trigger any other workflows — including this one — which
+# avoids self-loops without needing a `[skip ci]` convention.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/screenshot.png'
+      - 'README.md'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screenshot
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run build
+
+      - name: Render screenshot
+        run: |
+          # Serve the production-shape build at the root so the script's
+          # default URL (http://localhost:4173/) hits it directly.
+          npm run preview -- --port 4173 --strictPort &
+          PREVIEW_PID=$!
+          # Wait for the server to be ready (max 30s) before shooting.
+          until curl -sf http://localhost:4173/ > /dev/null; do
+            sleep 0.5
+          done
+          node scripts/capture-screenshot.mjs
+          kill "$PREVIEW_PID" 2>/dev/null || true
+
+      - name: Commit if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshot.png
+          if git diff --staged --quiet; then
+            echo "screenshot unchanged; nothing to commit"
+          else
+            git commit -m "ci: refresh README screenshot"
+            git push
+          fi
