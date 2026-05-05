@@ -24,7 +24,7 @@ import {
   generateBatch,
   seedHistory,
 } from '../lib/logGenerator';
-import { connectDevice } from '../lib/adb';
+import { connectDevice, type LogStream } from '../lib/adb';
 import { useTweaks } from '../lib/tweaks';
 import type {
   DeviceInfo,
@@ -75,6 +75,8 @@ export function App() {
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  const realStreamRef = useRef<LogStream | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -133,12 +135,14 @@ export function App() {
         },
         onError: (err) => showToast(err.message),
         onDisconnect: () => {
+          realStreamRef.current = null;
           setDevice(null);
           setDevices([]);
           setLogs([]);
           showToast('Device disconnected');
         },
       });
+      realStreamRef.current = result.stream;
       setDevice(result.device);
       setDevices([result.device]);
       setUsingFake(false);
@@ -155,6 +159,8 @@ export function App() {
   }, [showToast]);
 
   const onDisconnect = useCallback(() => {
+    void realStreamRef.current?.stop();
+    realStreamRef.current = null;
     setDevice(null);
     setDevices([]);
     setLogs([]);

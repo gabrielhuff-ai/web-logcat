@@ -1,93 +1,71 @@
 # Pending tasks
 
-Ordered roughly by user-visible value. The first batch is the natural
-"continue where Opus left off" path for Sonnet.
+Ordered roughly by user-visible value.
 
-## Phase 1 — Bring the UI to design parity (simulated stream)
+## Phase 1 — UI parity with simulated stream
 
-Each item has a one-to-one source under `design/source/`. Port the design,
-wire it into `App.tsx`, manually verify against the simulator. Keep PRs
-small (one or two components per PR is ideal).
+All components below were ported from `design/source/` and wired into
+`App.tsx`. Each was verified by `npm run typecheck`, `npm run lint`,
+`npm run build` against the simulator on localhost.
 
-- [ ] **Toolbar** — `design/source/toolbar.jsx`
-  - Brand block with animated three-square logo
-  - Device picker dropdown (status dot, model, serial, Android version,
-    "Pair new device…", "Disconnect all")
-  - Theme toggle (sun/moon, swaps `tweaks.theme`)
-  - Export button — already wired in `App.tsx`, just style it
-  - Settings button
-- [ ] **FilterBar** — `design/source/filter-bar.jsx`
-  - Pause/Resume, Clear, Auto-scroll toggle (transport group)
-  - **Chip input with autocomplete.** Critical UX detail: on focus with
-    empty draft, the dropdown shows ALL 5 filter types as starters
-    (`process:`, `tag:`, `pid:`, `level:`, `message:`) under a header
-    "FILTER BY — pick a type or just type to highlight". This is the
-    only discoverability for the syntax — don't skip it.
-  - Tab autocompletes; Enter commits; Backspace on empty removes last chip
-  - Display toggles (`ts`, `pid`, `wrap`) on the right
-- [ ] **LevelRow** — already functional; finish the pill visuals so they
-  match the per-level oklch colours, and confirm double-click solo
-- [ ] **LogRow / highlight rendering** — `design/source/log-row.jsx`
-  - Render `highlightRanges` results into `<mark class="hl hl-cN"/>`
-  - Crash row tinting + "Show stack trace" collapse on the first crash
-    line of each group; subsequent lines in the group fold
-  - Apply highlights to message, tag, and pkg cells per the spec table
-- [ ] **EmptyState illustration** — `design/source/empty-state.jsx`
-  - Animated USB-cable SVG (stroked path with dashed animation)
-  - Grid background mask + radial fade
-  - Multi-step "connecting" state for the Connect button
-- [ ] **SettingsPanel** — `design/source/settings.jsx`
-  - Theme segmented (Light / Dark)
-  - Color scheme grid (Indigo / Teal / Amber / Rose) → `tweaks.accent`
-  - Density segmented (compact / cozy / comfortable)
-  - Heatmap gutter + Timeline scrubber toggles
-- [ ] **SearchOverlay** — finish: live count, highlight matches with
-  `.hl-search` class, ↑/↓/Enter to step through matches
-- [ ] **Heatmap** — `design/source/heatmap.jsx`
-  - 60-cell vertical gutter
-  - Cell color = dominant level in 1s bucket; opacity = volume
-  - Click → jump to ts in the log list
-- [ ] **"Resume tail" pill** — bottom-right; show when `autoScroll` is
-  off; clicking re-engages auto-scroll
-- [ ] **Toast component** — bottom-centre; reuse for "Cleared", "Copied",
-  "Filter added", etc.
+- [x] **Toolbar** — brand, animated logo, device picker, theme toggle, export, settings
+- [x] **FilterBar** — chip input + autocomplete with all 5 filter types as discoverable starters; Tab/Enter/Backspace/Esc semantics; per-color oklch chip palette
+- [x] **LevelRow** — pill design (letter badge + name) with single-click toggle and double-click solo
+- [x] **LogRow** — per-field highlight rendering (message/tag/pkg) and crash-head Show/Collapse stack-trace toggle
+- [x] **EmptyState** — animated USB-cable + phone illustration with staged connect animation
+- [x] **SettingsPanel** — theme segmented, 4-color accent grid, density segmented, heatmap + scrubber toggles
+- [x] **SearchOverlay** — live match count, highlights via `hl-search`, esc dismisses
+- [x] **Heatmap** + **Scrubber** — 60-cell gutter and timeline scrubber. Click heatmap → jumps to ts in log list
+- [x] **Resume tail pill** — `.scroll-to-bottom` shown when `autoScroll` is off
+- [x] **Toast** — bottom-centre, used for connect/disconnect/clear/export/theme messages
+- [x] **List virtualisation** — `@tanstack/react-virtual` engages past 800 visible rows; pinned-block stays sticky outside the virtualised range
 
-## Phase 2 — Performance
+## Phase 2 — Real ADB transport
 
-- [ ] **Virtualise the log list.** Add `@tanstack/react-virtual`. Pinned
-  rows stay outside the virtualised range (sticky block at the top of
-  the scroll region).
-- [ ] **Memoise filter matching.** Once `filters.length > 5` the per-row
-  `entryMatches` call dominates render. Cache by `(entry.id, filtersKey)`.
+- [x] Add `@yume-chan/adb` + `@yume-chan/adb-daemon-webusb` + `@yume-chan/adb-credential-web` + `@yume-chan/stream-extra`
+- [x] Implement `connectDevice` in `src/lib/adb.ts`:
+  - Use `AdbDaemonWebUsbDeviceManager.BROWSER.requestDevice()`
+  - `AdbDaemonTransport.authenticate({ serial, connection, credentialStore })`
+  - Spawn `logcat -v threadtime` via `adb.subprocess.noneProtocol.spawn`
+  - Pipe through `TextDecoderStream → SplitStringStream('\n')`
+  - Parse with `parseLogcatLine`; resolve PID → package via `cat /proc/<pid>/cmdline` cache
+- [x] Wire `connectDevice` into `App.tsx`'s `connectReal`; keep stream handle on a ref for clean stop
+- [x] Surface device disconnect (cable pull) → toast + revert to empty state
+- [ ] **Test against real hardware.** The transport compiles and follows
+  the upstream API, but it has not been exercised against a real Pixel/
+  Galaxy. First run on the deployed staging URL is the integration test.
+  Likely follow-ups based on what real hardware reveals:
+  - Banner/model parsing edge cases (`adb.banner.model` may be undefined
+    on some OEMs; `safeGetProp('ro.product.model')` is the fallback)
+  - PID → pkg via `cmdline` may need a more robust parser for app processes
+    that are forked from zygote (`zygote64` placeholder until the rename)
+  - Year-rollover for the threadtime timestamp (cosmetic)
+- [ ] **Multi-device support.** The toolbar shape already accepts a list,
+  but `App.tsx` only tracks one stream at a time. Worth adding when there's
+  a real "switch device" use case.
 
-## Phase 3 — Real ADB transport
+## Phase 3 — Polish
 
-The simulator hides the hard part. See `src/lib/adb.ts` for the stub.
+- [ ] Persist `filters` across reloads (localStorage, scoped per device serial)
+- [ ] `?` keyboard shortcut to open a help dialog with the shortcut list
+- [ ] Decide whether to keep "fake data" affordance in production (or hide
+  it behind `?dev=1`)
+- [ ] Wire the **Scrubber** to actually scrub the log viewport, not just
+  visualise it. Right now it renders the buckets and a fixed window
+  rectangle but `onScrub` is a no-op
+- [ ] Tighten the highlight palette: tag-typed filters currently also
+  highlight pkg cells via the `tag||message` rule — verify this matches
+  the design's intent or restrict it
+- [ ] Inspect bundle: `index-*.js` is ~85 KB gzipped; the bulk is the
+  yume-chan ADB client + WebCrypto. Consider lazy-loading `lib/adb.ts`
+  via dynamic import so the empty state and simulated path stay tiny
 
-- [ ] Add `@yume-chan/adb` and `@yume-chan/adb-daemon-webusb` (MIT,
-  maintained, pure JS — handles AUTH + framing).
-- [ ] Implement `connectDevice` in `src/lib/adb.ts`:
-  1. `navigator.usb.requestDevice({ filters: [{ classCode: 0xFF, subclassCode: 0x42, protocolCode: 0x01 }] })`
-  2. Hand the USB device to `AdbDaemonWebUsbDeviceManager` and complete
-     the auth handshake (RSA — yume-chan does this for you).
-  3. Open `shell:logcat -v threadtime` and wire it through
-     `parseLogcatLine`.
-  4. Resolve PID → package name. `dumpsys package` is heavy; cache pid→pkg
-     once at startup and refresh when a process restarts (hint: the
-     `Start proc <pid>:<pkg>` ActivityManager log line).
-- [ ] Wire `App.tsx`'s `connectReal` to the new `connectDevice` and remove
-  the temporary `alert()` placeholder.
-- [ ] Surface device state changes (cable pulled, screen locked → adb
-  disconnects): toast + revert to empty state.
-- [ ] Multi-device support: device picker in the toolbar already accepts
-  a list shape. The transport must keep one stream per selected device.
+## Phase 4 — Tests + tooling
 
-## Phase 4 — Polish
+These are deliberately deferred until features stop churning.
 
-- [ ] Persist filters across reloads (localStorage, scoped per-device-serial)
-- [ ] Export filtered logs as `.txt` — verify the existing `App.tsx`
-  implementation matches the spec filename `logcat-{serial}-{timestamp}.txt`
-- [ ] Keyboard shortcut hint dialog (the `?` key)
-- [ ] Tighten ESLint to `--max-warnings 0` once stubs are filled
-- [ ] Decide whether to keep the "Use simulated data" affordance in
-  production or hide it behind a `?dev=1` flag
+- [ ] Unit tests for `lib/filters.ts` and `parseLogcatLine` (the highest-
+  ROI tests; pure functions, easy)
+- [ ] Add Playwright smoke test on the deployed staging URL
+- [ ] Tighten ESLint to include `react-hooks/exhaustive-deps` as `error`
+  once the few intentional skips are commented

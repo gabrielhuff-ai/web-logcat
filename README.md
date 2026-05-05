@@ -4,8 +4,9 @@ Browser-based Android `logcat` viewer. Plug a phone into your laptop, click
 **Connect**, and watch live logs stream in the browser — no `adb` install,
 no Android Studio.
 
-> Status: **scaffold**. The streaming UI runs against simulated data.
-> Real WebUSB + ADB transport is stubbed (see `src/lib/adb.ts`).
+> Status: **feature-complete UI**, real ADB transport implemented but
+> **untested against real hardware**. The simulated stream works end to
+> end. See `docs/TASKS.md` for the punch list.
 
 ## Quick start
 
@@ -23,6 +24,8 @@ Click **Use simulated data** on the empty state to see the viewer in action.
 - **CSS custom properties + `oklch()`** — themes & accent hues are computed
   per-property; no CSS-in-JS, no Tailwind. Tokens live in
   `src/styles/tokens.css` (preserved from the design bundle).
+- **`@tanstack/react-virtual`** — virtualises the log list past 800 rows.
+- **`@yume-chan/adb`** + WebUSB daemon transport — real ADB stream.
 - **GitHub Pages** — zero-cost hosting, HTTPS by default (WebUSB requires
   it). Two environments: production at `/web-logcat/`, staging at
   `/web-logcat/staging/`. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
