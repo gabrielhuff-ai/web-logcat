@@ -25,6 +25,7 @@ import {
   seedHistory,
 } from '../lib/logGenerator';
 import { connectDevice, type LogStream } from '../lib/adb';
+import type { ConnectStep } from './EmptyState';
 import { useTweaks } from '../lib/tweaks';
 import type {
   DeviceInfo,
@@ -35,7 +36,17 @@ import type {
 } from '../types';
 import { formatTs } from '../lib/format';
 
+// Soft cap: while auto-tailing the user is "looking at the present", so
+// FIFO-trim aggressively to keep memory bounded.
 const MAX_LOGS = 5000;
+// Hard cap: while scroll-locked we accumulate, so the user can scroll up
+// without rows being yanked out from under their viewport. Cuts in only
+// to prevent runaway memory if the user leaves the tab idle for hours.
+// At ~200 B/row, 50k rows ≈ 10 MB.
+const MAX_LOGS_HARD = 50_000;
+// Batch ingest into setLogs at most once every FLUSH_MS to avoid 200+
+// re-renders per second on real-device streams.
+const FLUSH_MS = 100;
 
 const FAKE_DEVICE: DeviceInfo = {
   serial: 'fake-device-001',
@@ -76,7 +87,62 @@ export function App() {
     pausedRef.current = paused;
   }, [paused]);
 
+  // Mirror autoScroll into a ref so the streaming closures can read its
+  // current value synchronously (without re-creating intervals on every
+  // toggle). The trim policy below depends on this.
+  //
+  // Use a wrapper setter to keep the ref in lock-step with the state
+  // *synchronously* — the useEffect mirror would lag by one frame, and
+  // a buffer flush in that window would trim with the stale value.
+  const autoScrollRef = useRef(autoScroll);
+  const setAutoScrollSafe = useCallback((v: boolean) => {
+    autoScrollRef.current = v;
+    setAutoScroll(v);
+  }, []);
+
   const realStreamRef = useRef<LogStream | null>(null);
+
+  // ---- Ingest batching ----------------------------------------------------
+  // Real devices can emit hundreds of lines per second. Calling setLogs
+  // per line burns frames re-copying the array. Instead, accumulate into
+  // a ref and flush at most every FLUSH_MS.
+  const incomingRef = useRef<LogEntry[]>([]);
+  const flushTimerRef = useRef<number | null>(null);
+
+  const flushIncoming = useCallback(() => {
+    flushTimerRef.current = null;
+    const batch = incomingRef.current;
+    if (batch.length === 0) return;
+    incomingRef.current = [];
+    setLogs((prev) => {
+      const next = prev.concat(batch);
+      // Auto-tailing: trim to MAX_LOGS so the live view stays bounded.
+      // Scroll-locked: keep up to MAX_LOGS_HARD so rows above the viewport
+      // don't get evicted while the user is reading them.
+      const cap = autoScrollRef.current ? MAX_LOGS : MAX_LOGS_HARD;
+      if (next.length > cap) next.splice(0, next.length - cap);
+      return next;
+    });
+  }, []);
+
+  const queueEntries = useCallback(
+    (entries: LogEntry[]) => {
+      if (pausedRef.current || entries.length === 0) return;
+      incomingRef.current.push(...entries);
+      if (flushTimerRef.current == null) {
+        flushTimerRef.current = window.setTimeout(flushIncoming, FLUSH_MS);
+      }
+    },
+    [flushIncoming],
+  );
+
+  const resetIngest = useCallback(() => {
+    if (flushTimerRef.current != null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    incomingRef.current = [];
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -87,16 +153,10 @@ export function App() {
   useEffect(() => {
     if (!device || !usingFake) return;
     const interval = window.setInterval(() => {
-      if (pausedRef.current) return;
-      const batch = generateBatch(Date.now(), tweaks.streamingSpeed);
-      setLogs((prev) => {
-        const next = prev.concat(batch);
-        if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);
-        return next;
-      });
+      queueEntries(generateBatch(Date.now(), tweaks.streamingSpeed));
     }, 600);
     return () => window.clearInterval(interval);
-  }, [device, usingFake, tweaks.streamingSpeed]);
+  }, [device, usingFake, tweaks.streamingSpeed, queueEntries]);
 
   // Live rate (logs/second) recomputed every 500ms.
   useEffect(() => {
@@ -115,44 +175,48 @@ export function App() {
 
   // ---- Connection handlers ------------------------------------------------
   const connectFake = useCallback(() => {
+    resetIngest();
     setLogs(seedHistory(60, 5));
     setDevice(FAKE_DEVICE);
     setDevices([FAKE_DEVICE]);
     setUsingFake(true);
     showToast('Using simulated log data');
-  }, [showToast]);
+  }, [resetIngest, showToast]);
 
-  const connectReal = useCallback(async () => {
-    try {
-      const result = await connectDevice({
-        onEntry: (e) => {
-          if (pausedRef.current) return;
-          setLogs((prev) => {
-            const next = prev.concat(e);
-            if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);
-            return next;
-          });
-        },
-        onError: (err) => showToast(err.message),
-        onDisconnect: () => {
-          realStreamRef.current = null;
-          setDevice(null);
-          setDevices([]);
-          setLogs([]);
-          showToast('Device disconnected');
-        },
-      });
-      realStreamRef.current = result.stream;
-      setDevice(result.device);
-      setDevices([result.device]);
-      setUsingFake(false);
-      showToast(`Connected to ${result.device.model}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to connect';
-      showToast(msg);
-      throw err;
-    }
-  }, [showToast]);
+  const connectReal = useCallback(
+    async (setStep?: (step: ConnectStep) => void) => {
+      try {
+        const result = await connectDevice({
+          onEntry: (e) => queueEntries([e]),
+          onError: (err) => showToast(err.message),
+          onPhase: (phase) => {
+            if (phase === 'requesting') setStep?.(1);
+            else if (phase === 'authenticating') setStep?.(2);
+            else if (phase === 'connected') setStep?.(3);
+          },
+          onDisconnect: () => {
+            resetIngest();
+            realStreamRef.current = null;
+            setDevice(null);
+            setDevices([]);
+            setLogs([]);
+            showToast('Device disconnected');
+          },
+        });
+        realStreamRef.current = result.stream;
+        setDevice(result.device);
+        setDevices([result.device]);
+        setUsingFake(false);
+        showToast(`Connected to ${result.device.model}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to connect';
+        showToast(msg);
+        // Re-throw so EmptyState can reset its button state.
+        throw err;
+      }
+    },
+    [queueEntries, resetIngest, showToast],
+  );
 
   const onPairNew = useCallback(() => {
     showToast('Pair new device — not implemented yet');
@@ -161,11 +225,12 @@ export function App() {
   const onDisconnect = useCallback(() => {
     void realStreamRef.current?.stop();
     realStreamRef.current = null;
+    resetIngest();
     setDevice(null);
     setDevices([]);
     setLogs([]);
     setUsingFake(false);
-  }, []);
+  }, [resetIngest]);
 
   const switchDevice = useCallback(
     (d: DeviceInfo) => {
@@ -279,11 +344,12 @@ export function App() {
   }, []);
 
   const onClear = useCallback(() => {
+    resetIngest();
     setLogs([]);
     setPinned(new Set());
     setExpanded(new Set());
     showToast('Logs cleared');
-  }, [showToast]);
+  }, [resetIngest, showToast]);
 
   const onExport = useCallback(() => {
     if (!device) return;
@@ -373,7 +439,7 @@ export function App() {
         setPaused={setPaused}
         onClear={onClear}
         autoScroll={autoScroll}
-        setAutoScroll={setAutoScroll}
+        setAutoScroll={setAutoScrollSafe}
         showTimestamps={tweaks.showTimestamps}
         setShowTimestamps={(v) => setTweaks({ showTimestamps: v })}
         showPid={tweaks.showPid}
@@ -419,7 +485,7 @@ export function App() {
           crashHeads={crashHeads}
           tweaks={tweaks}
           autoScroll={autoScroll}
-          setAutoScroll={setAutoScroll}
+          setAutoScroll={setAutoScrollSafe}
           deviceModel={device.model}
           hasFilters={filters.length > 0}
           registerScrollToTs={(fn) => {
@@ -441,7 +507,7 @@ export function App() {
       )}
 
       {!autoScroll && (
-        <button className="scroll-to-bottom" onClick={() => setAutoScroll(true)}>
+        <button className="scroll-to-bottom" onClick={() => setAutoScrollSafe(true)}>
           <Icons.Down size={13} /> Resume tail
         </button>
       )}

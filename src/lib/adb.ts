@@ -28,10 +28,25 @@ export interface LogStream {
   stop(): Promise<void>;
 }
 
+/**
+ * Phases of the connect flow. Callers can use these to drive UI feedback
+ * (e.g. swap the Connect button label) without polling.
+ *
+ *   - `requesting`     — the WebUSB chooser is open; the user is picking
+ *                        a device. The chooser may not appear instantly.
+ *   - `authenticating` — chooser dismissed; AUTH handshake in flight.
+ *                        The user will see an authorisation prompt on the
+ *                        device unless this browser+device pair has
+ *                        already been trusted.
+ *   - `connected`      — Adb session is open; logcat will start streaming.
+ */
+export type ConnectPhase = 'requesting' | 'authenticating' | 'connected';
+
 export interface ConnectOptions {
   onEntry: (entry: LogEntry) => void;
   onError?: (err: Error) => void;
   onDisconnect?: () => void;
+  onPhase?: (phase: ConnectPhase) => void;
 }
 
 /**
@@ -51,12 +66,14 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     throw new Error('WebUSB is not available in this browser. Use Chrome/Edge over HTTPS.');
   }
 
+  opts.onPhase?.('requesting');
   const usbDevice = await manager.requestDevice();
   if (!usbDevice) {
     // The user dismissed the chooser.
     throw new Error('No device selected');
   }
 
+  opts.onPhase?.('authenticating');
   const connection = await usbDevice.connect();
   const credentialStore = new AdbWebCredentialStore(APP_NAME);
 
@@ -67,6 +84,7 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
   });
 
   const adb = new Adb(transport);
+  opts.onPhase?.('connected');
 
   // Resolve metadata for the toolbar.
   const device: DeviceInfo = {

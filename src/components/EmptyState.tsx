@@ -1,25 +1,50 @@
 // Pre-connection screen with animated USB-cable + phone illustration.
 // Ported from design/source/empty-state.jsx.
+//
+// The button text follows the *real* connect lifecycle (phases reported
+// by lib/adb.ts via the setStep callback) rather than the design's fixed
+// setTimeout schedule — so users see the chooser appear immediately and
+// see "Authorize on device" only when AUTH is actually in flight. If the
+// user cancels the chooser, `onConnect` rejects and we reset the button
+// state instead of staying stuck on "Connected".
 
 import { useState } from 'react';
 import * as Icons from './Icons';
 
+export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
+
 export interface EmptyStateProps {
-  /** Called after the staged "connecting" animation completes. */
-  onConnect: () => void;
+  /**
+   * Initiates a real WebUSB+ADB connect. Resolves when the device is
+   * fully connected (at which point the parent will swap us out for the
+   * main view), rejects if the user cancels or the handshake fails.
+   *
+   * Receives a `setStep` callback that the connect implementation calls
+   * as it progresses through phases.
+   */
+  onConnect: (setStep: (step: ConnectStep) => void) => Promise<void>;
   onUseFakeData: () => void;
 }
 
 export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
-  const [step, setStep] = useState(0); // 0 idle, 1 dialog, 2 authorize, 3 done
+  const [step, setStep] = useState<ConnectStep>(0);
 
-  const startConnect = () => {
+  const startConnect = async () => {
     setConnecting(true);
+    // Pre-set step=1 so the button updates the moment the chooser is
+    // about to open, even before lib/adb.ts has a chance to fire its
+    // own onPhase('requesting').
     setStep(1);
-    window.setTimeout(() => setStep(2), 900);
-    window.setTimeout(() => setStep(3), 2400);
-    window.setTimeout(() => onConnect(), 3000);
+    try {
+      await onConnect(setStep);
+      // success → parent unmounts us; no need to reset state here
+    } catch {
+      // user cancelled / auth failed / WebUSB unavailable. App.tsx already
+      // surfaced the message via toast; we just need to be clickable again.
+      setConnecting(false);
+      setStep(0);
+    }
   };
 
   return (
@@ -43,7 +68,7 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
             {connecting ? (
               <>
                 <span className="dot-spinner" />
-                {step === 1 && 'Selecting device…'}
+                {step <= 1 && 'Selecting device…'}
                 {step === 2 && 'Authorize on device…'}
                 {step === 3 && 'Connected'}
               </>
