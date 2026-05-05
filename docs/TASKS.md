@@ -117,66 +117,58 @@ tasks below land in close succession (one short PR series, or a single
 PR if the agent prefers) because the connected experience is broken
 between the first and last item — there are no users to shield.
 
-- [ ] **v2 types in `src/types.ts`** — `WidgetKind` (union of
+- [x] **v2 types in `src/types.ts`** — `WidgetKind` (union of
   `'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror'`), `Tile`
   (`{ id, kind, x, y, w, h, barsHidden? }`), `LayoutState`. Don't
   widen existing types.
-- [ ] **ADB transport context** — new `src/lib/adbContext.tsx`
-  exporting `<AdbProvider>` + `useAdb()`. Wraps the existing
+- [x] **ADB transport context** — `src/lib/adbContext.ts` (the
+  context + `useAdb()` hook) plus `src/lib/AdbProvider.tsx` (the
+  provider). Split into two files so the hook+constant export
+  doesn't trip the fast-refresh lint. Wraps the existing
   `connectDevice` from `lib/adb.ts` so widgets share one `Adb`
-  handle instead of each re-authenticating. The HANDOFF §State
-  Management explicitly calls for this.
-- [ ] **v2 CSS originals into `src/styles/`** — copy
-  `design/v2/source/dashboard.css` verbatim into
-  `src/styles/dashboard.css` (treat as untouchable, like
-  `tokens.css`). Diff `design/v2/source/styles.css` against
-  `design/v1/source/styles.css`; HANDOFF says tokens unchanged but
-  verify. Update the file table in `docs/ARCHITECTURE.md`.
-- [ ] **`Dashboard` shell + topbar** —
-  `src/components/Dashboard.tsx` ports
-  `design/v2/source/dashboard.jsx → DashTopbar`. Brand, device
-  picker, theme toggle, +Add widget, Reset layout. The brand /
-  device / theme bits move out of the old `Toolbar.tsx` (which
-  gets deleted by the time Phase 5 lands).
-- [ ] **`TileGrid` + drag / resize / persist** —
-  `src/components/TileGrid.tsx` + `src/lib/layout.ts` (default
-  layout, snap math, localStorage IO under
-  `weblogcat-dashboard-v1`). 12-col grid, 56px row, 10px gap, per
-  HANDOFF §Tile Grid. Ports
-  `design/v2/source/dashboard.jsx → TileGrid`. Use plain pointer
-  events + rAF; no `react-grid-layout` dep.
-- [ ] **Tile chrome** — `src/components/Tile.tsx` (or inlined in
-  `TileGrid`): header (grip, icon, title, eye, maximize, remove),
-  maximize-fills-viewport positioning, `bars-hidden` class flip.
-  CSS rule per HANDOFF: `.tile.bars-hidden .widget-bar,
-  .tile.bars-hidden .lc-toolbar, …{ display: none !important }`.
-- [ ] **Widget registry** — `src/lib/widgets.ts`. Maps
-  `WidgetKind → { name, icon, desc, comp, defaultSize }`. Adding a
-  widget kind in later phases = one entry + one component file.
-- [ ] **`WidgetPalette` modal** —
-  `src/components/WidgetPalette.tsx` ports
-  `design/v2/source/dashboard.jsx → WidgetPalette`. Renders all 5
-  cards but disables Shell / Dumpsys / Files / Mirror (greyed +
-  "coming soon" tooltip) until their phase ships. Avoids
-  shipping dead palette entries while keeping the design intact.
-- [ ] **Extract `LogcatWidget`** — move filter bar + level row +
-  log area + heatmap + search overlay out of `App.tsx` into
-  `src/components/widgets/LogcatWidget.tsx`, taking `device` as a
-  prop. Add `widget-bar` class to the filter bar so the eye toggle
-  catches it. Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) only
-  fire when the widget is focused (HANDOFF §Interactions Cheat
-  Sheet). Per-instance filter state stays local; persistence under
-  `weblogcat:filters:<serial>:<tileId>` (extend the existing key).
-- [ ] **Shared logcat stream** — `src/lib/logStream.ts`. One
-  upstream `logcat -v threadtime` per `Adb` session, fanned out
-  to N `LogcatWidget` subscribers via a tiny pub/sub. Shared ring
-  buffer (`MAX_LOGS`); widgets keep only their filter view. Avoids
-  N tiles = N shell channels and N × 50k buffers.
-- [ ] **Phase 5 smoke** — empty state → connect → default layout
-  renders one Logcat tile; +Add → second Logcat tile with
-  independent filters; drag / resize / eye / maximize / remove /
-  Reset layout all work; layout survives reload;
-  `npm run typecheck && npm run build && npm test` pass.
+  handle.
+- [x] **v2 CSS originals into `src/styles/`** —
+  `src/styles/dashboard.css` is a verbatim copy of
+  `design/v2/source/dashboard.css`. Diff against v1:
+  `design/v2/source/styles.css` is identical to v1 except for two
+  new tokens (`--shadow-3` and `--glass-line`); those were merged
+  into `tokens.css` to keep the design originals tight. File
+  table in `docs/ARCHITECTURE.md` updated.
+- [x] **`Dashboard` shell + topbar** —
+  `src/components/Dashboard.tsx` (`DashTopbar` inlined). The brand
+  + device picker + theme toggle moved out of Toolbar.tsx, which
+  is now deleted.
+- [x] **`TileGrid` + drag / resize / persist** —
+  `src/components/TileGrid.tsx` + `src/lib/layout.ts`. 12-col,
+  56px rows, 10px gap, persisted under `weblogcat-dashboard-v1`.
+  Plain pointer events with rAF coalescing; no `react-grid-layout`.
+- [x] **Tile chrome** — `src/components/Tile.tsx`. Header (grip,
+  icon, title, eye, maximize, remove), maximize-fills-viewport
+  positioning, `bars-hidden` class flip. CSS rule lives in
+  `src/styles/dashboard.css` (verbatim from the design original).
+- [x] **Widget registry** — `src/lib/widgets.ts`. Maps
+  `WidgetKind → { name, icon, desc, comp, defaultSize, enabled,
+  maxInstances? }`. Logcat is the only `enabled: true` entry in
+  Phase 5; Mirror has `maxInstances: 1`.
+- [x] **`WidgetPalette` modal** — `src/components/WidgetPalette.tsx`.
+  Renders all 5 cards; disabled cards grey out with a "Coming soon"
+  tooltip. Mirror's card additionally greys with "Only one mirror
+  at a time" if a Mirror tile already exists.
+- [x] **Extract `LogcatWidget`** —
+  `src/components/widgets/LogcatWidget.tsx`. Filter bar + level row
+  + log area + heatmap + search overlay all per-instance.
+  Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) gated on focus
+  inside the widget root. Per-tile filters persisted under
+  `weblogcat:filters:<serial>:<tileId>`.
+- [x] **Shared logcat stream** — `src/lib/logStream.ts` +
+  `src/lib/logStreamContext.ts`. `LogStreamHub` keeps a single
+  ring buffer (cap `MAX_LOGS = 5000`) and fans out to N
+  `LogcatWidget` subscribers.
+- [x] **Phase 5 smoke** — `npm run typecheck`, `npm run lint`,
+  `npm run build`, `npm test` all green. Manual walk-through
+  (empty → connect → default layout → add second Logcat → drag /
+  resize / eye / maximize / remove / Reset layout → reload) done
+  against the simulator.
 
 ## Phase 6 — Shell widget
 
