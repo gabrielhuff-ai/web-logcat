@@ -25,7 +25,7 @@ import { WIDGETS } from '../lib/widgets';
 import {
   COLS,
   GAP,
-  PHASE_5_DEFAULT_LAYOUT,
+  PHASE_6_DEFAULT_LAYOUT,
   ROW_PX,
   colWidth,
   loadLayout,
@@ -87,7 +87,7 @@ export function TileGrid({
   useEffect(() => {
     if (resetSignal === lastResetRef.current) return;
     lastResetRef.current = resetSignal;
-    setLayout(PHASE_5_DEFAULT_LAYOUT);
+    setLayout(PHASE_6_DEFAULT_LAYOUT);
     setMaximized(null);
   }, [resetSignal]);
 

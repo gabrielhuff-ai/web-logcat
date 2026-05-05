@@ -4,7 +4,7 @@ import {
   GAP,
   MIN_H,
   MIN_W,
-  PHASE_5_DEFAULT_LAYOUT,
+  PHASE_6_DEFAULT_LAYOUT,
   ROW_PX,
   colWidth,
   placeBelow,
@@ -112,12 +112,26 @@ describe('layout: totalRows', () => {
   });
 });
 
-describe('layout: PHASE_5_DEFAULT_LAYOUT', () => {
-  it('contains a single Logcat tile that fills the grid width', () => {
-    expect(PHASE_5_DEFAULT_LAYOUT).toHaveLength(1);
-    const t = PHASE_5_DEFAULT_LAYOUT[0];
-    expect(t.kind).toBe('logcat');
-    expect(t.x).toBe(0);
-    expect(t.w).toBe(COLS);
+describe('layout: PHASE_6_DEFAULT_LAYOUT', () => {
+  it('places a full-width Logcat tile on top', () => {
+    const logcat = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'logcat');
+    expect(logcat).toBeDefined();
+    expect(logcat!.x).toBe(0);
+    expect(logcat!.y).toBe(0);
+    expect(logcat!.w).toBe(COLS);
+  });
+
+  it('places a Shell tile directly below the Logcat tile', () => {
+    const logcat = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'logcat')!;
+    const shell = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'shell');
+    expect(shell).toBeDefined();
+    expect(shell!.y).toBe(logcat.y + logcat.h);
+    expect(shell!.w).toBe(5);
+    expect(shell!.h).toBe(4);
+  });
+
+  it('contains no tiles for kinds whose widget has not shipped yet', () => {
+    const kinds = PHASE_6_DEFAULT_LAYOUT.map((t) => t.kind).sort();
+    expect(kinds).toEqual(['logcat', 'shell']);
   });
 });

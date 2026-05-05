@@ -33,28 +33,42 @@ export const DEFAULT_LAYOUT: LayoutState = [
 ];
 
 /**
- * Phase 5 only ships the Logcat widget; the other entries in
- * `DEFAULT_LAYOUT` would render a "coming soon" stub. Until those
- * widgets land in Phase 6–9 we use a single-tile default that still
- * fills the grid sensibly.
+ * Phase-by-phase default layout. Each subsequent phase widens this as
+ * its widget comes online; eventually it converges on `DEFAULT_LAYOUT`
+ * (the full HANDOFF §Tile Grid arrangement) once Phases 6–9 land.
+ *
+ * Phase 6 (this iteration): Logcat 12w × 6h on top, Shell 5w × 4h
+ * directly below it. Logcat stays full-width because there's no Mirror
+ * column yet; Shell anchors at column 0 to mirror its eventual
+ * position in the bottom-right cluster.
  */
-export const PHASE_5_DEFAULT_LAYOUT: LayoutState = [
-  { id: 'w1', kind: 'logcat', x: 0, y: 0, w: 12, h: 10 },
+export const PHASE_6_DEFAULT_LAYOUT: LayoutState = [
+  { id: 'w1', kind: 'logcat', x: 0, y: 0, w: 12, h: 6 },
+  { id: 'w2', kind: 'shell', x: 0, y: 6, w: 5, h: 4 },
 ];
 
-/** Read the persisted layout, falling back to the Phase 5 default. */
+/**
+ * Back-compat alias. Phase 5's bootstrap referred to the default by
+ * this name; tests / docs / older callsites still importing it
+ * continue to compile. Remove when nothing references it.
+ *
+ * @deprecated Use `PHASE_6_DEFAULT_LAYOUT` (or whichever phase is current).
+ */
+export const PHASE_5_DEFAULT_LAYOUT: LayoutState = PHASE_6_DEFAULT_LAYOUT;
+
+/** Read the persisted layout, falling back to the current phase default. */
 export function loadLayout(): LayoutState {
-  if (typeof localStorage === 'undefined') return PHASE_5_DEFAULT_LAYOUT;
+  if (typeof localStorage === 'undefined') return PHASE_6_DEFAULT_LAYOUT;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return PHASE_5_DEFAULT_LAYOUT;
+    if (!raw) return PHASE_6_DEFAULT_LAYOUT;
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return PHASE_5_DEFAULT_LAYOUT;
+    if (!Array.isArray(parsed)) return PHASE_6_DEFAULT_LAYOUT;
     const sane = parsed.filter(isValidTile);
-    if (sane.length === 0) return PHASE_5_DEFAULT_LAYOUT;
+    if (sane.length === 0) return PHASE_6_DEFAULT_LAYOUT;
     return sane;
   } catch {
-    return PHASE_5_DEFAULT_LAYOUT;
+    return PHASE_6_DEFAULT_LAYOUT;
   }
 }
 
