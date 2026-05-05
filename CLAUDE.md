@@ -57,6 +57,9 @@ The design hand-off is versioned:
   - `@yume-chan/adb` + `@yume-chan/adb-daemon-webusb` — for the real ADB
     transport (see `src/lib/adb.ts` and `docs/TASKS.md`).
   - `@tanstack/react-virtual` — for log list virtualisation past ~5k rows.
+  - `@yume-chan/scrcpy` + `@yume-chan/adb-scrcpy` +
+    `@yume-chan/scrcpy-decoder-webcodecs` + `mp4-muxer` — Phase 9 Mirror
+    widget (live H.264 decode + .mp4 recording).
 - **Zero-cost infra.** GitHub Pages + GitHub Actions only. Don't propose
   Vercel/Netlify/etc. without checking with the user.
 - **WebUSB requires HTTPS.** The deploy target is HTTPS; local dev is
