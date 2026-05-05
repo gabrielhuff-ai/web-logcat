@@ -172,6 +172,19 @@ between the first and last item — there are no users to shield.
 
 ## Phase 6 — Shell widget
 
+**Prerequisite from Phase 5 — must be the first commit.** Phase 5
+established `AdbContext` but its `adb` field is currently `null`
+because `connectDevice` returns `{ device, stream }`, not the
+underlying `Adb` handle. Shell needs the handle for
+`subprocess.shell.spawn()`.
+
+- [ ] **Thread the `Adb` handle through `connectDevice`** — refactor
+  `src/lib/adb.ts` so `connectDevice` returns
+  `{ device, stream, adb }`. Update `App.tsx` (or wherever the
+  result is consumed) to push the handle into `AdbProvider` so
+  `useAdb().adb` is non-null while connected. Surface
+  disconnect-on-cable-pull cleanly (clear the handle alongside the
+  stream). No behavior change for Logcat.
 - [ ] **`ShellWidget`** —
   `src/components/widgets/ShellWidget.tsx` ports
   `design/v2/source/widget-shell.jsx`. **No toolbar**, no split
@@ -187,8 +200,15 @@ between the first and last item — there are no users to shield.
   echo / cat / ps / getprop / whoami / id / uname / date / uptime
   / clear / exit / help`). Lives in `src/lib/shellSim.ts`. Keeps
   the no-phone path demo-able.
-- [ ] **Enable Shell in `WidgetPalette`** — flip its card from
-  greyed to active.
+- [ ] **Enable Shell in `WidgetPalette`** — flip its `enabled` flag
+  to `true` in `src/lib/widgets.ts`.
+- [ ] **Update default layout** — extend `PHASE_5_DEFAULT_LAYOUT`
+  in `src/lib/layout.ts` to include a Shell tile (or rename to
+  `DEFAULT_LAYOUT_PHASE_6` and re-export). Per HANDOFF §Tile Grid
+  the eventual full default is Mirror | Logcat above | Shell +
+  Dumpsys below; for now place Logcat (full-width on top) +
+  Shell (5w × 4h) below it. Each subsequent phase extends this
+  default to add its widget.
 
 ## Phase 7 — Dumpsys widget
 
@@ -215,7 +235,10 @@ between the first and last item — there are no users to shield.
   `CpuCard` (per-core bars, top by CPU%, load avgs),
   `GfxCard` (frame-time histogram, HWUI metrics),
   `WifiCard` (SSID + RSSI + link speed, scan results table).
-- [ ] **Enable Dumpsys in `WidgetPalette`**.
+- [ ] **Enable Dumpsys in `WidgetPalette`** — flip its `enabled`
+  flag to `true` in `src/lib/widgets.ts`.
+- [ ] **Update default layout** — extend the Phase 6 default to
+  add a Dumpsys tile (4w × 4h) next to Shell.
 
 ## Phase 8 — Files widget
 
@@ -235,7 +258,10 @@ between the first and last item — there are no users to shield.
   dropped `File` via `.stream()` into `sync.write`. Show
   progress for >1MB. New-folder via `mkdir` over a shell
   channel (sync protocol doesn't expose it directly).
-- [ ] **Enable Files in `WidgetPalette`**.
+- [ ] **Enable Files in `WidgetPalette`** — flip its `enabled`
+  flag to `true` in `src/lib/widgets.ts`. Files is not in the
+  HANDOFF default layout, so the default layout doesn't change
+  in this phase.
 
 ## Phase 9 — Screen Mirror widget
 
@@ -299,7 +325,11 @@ its own PR-sized milestone with a verifiable demo.
   measure end-to-end latency with a stopwatch + tap-flash
   test app. Target ≤150ms USB-2, ≤80ms USB-3. Document the
   measured number in this entry.
-- [ ] **Enable Mirror in `WidgetPalette`**.
+- [ ] **Enable Mirror in `WidgetPalette`** — flip its `enabled`
+  flag to `true` in `src/lib/widgets.ts`. Update the default
+  layout to the full HANDOFF §Tile Grid arrangement (Mirror 3w
+  × 10h on the left | Logcat 9w × 6h top-right | Shell 5w × 4h
+  + Dumpsys 4w × 4h bottom-right).
 
 ## Phase 10 — Polish
 
@@ -320,6 +350,12 @@ its own PR-sized milestone with a verifiable demo.
 - [ ] **README + screenshot refresh** — new dashboard
   screenshot under `docs/screenshot.png`; update the feature
   blurb from "logcat viewer" to "Android device inspector".
-- [ ] **Migration purge** — once Phase 5 lands, delete
-  `src/components/Toolbar.tsx` (its bits live in `Dashboard`'s
-  topbar now). No backwards-compat shims per `CLAUDE.md`.
+- [x] **Migration purge** — landed in Phase 5: `Toolbar.tsx`
+  deleted, its brand / device-picker / theme bits moved into
+  `DashTopbar`.
+- [ ] **Resolve `SettingsPanel` orphan** — Phase 5 deleted
+  `Toolbar.tsx`, which was the only mount point. Theme + accent
+  already moved to the dashboard topbar. Either remount the
+  panel from a topbar button (for density / heatmap / scrubber
+  toggles that didn't move) or delete `SettingsPanel.tsx` and
+  its CSS. Pick whichever matches the v2 hand-off best.
