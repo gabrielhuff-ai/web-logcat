@@ -101,3 +101,17 @@ export const Maximize = make(
 );
 export const Minimize = make('M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5', 1.8);
 export const Layout = make('M3 4h18v16H3zM3 10h18M9 10v10', 1.6);
+
+// ---- v2: mirror widget — hardware-button + record/screenshot icons --------
+// Lifted from `design/v2/source/icons.jsx`. The strokes are 1.6 to match the
+// rest of the v2 set; sizes are passed at the call site (the Mirror toolbar
+// uses 12–13px).
+export const Camera = make(
+  'M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  1.6,
+);
+export const Record = make(
+  'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  1.6,
+);
+export const Stop = make('M5 5h14v14H5z', 1.7);
