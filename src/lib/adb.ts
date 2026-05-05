@@ -207,6 +207,21 @@ let _id = 0;
  *   "MM-DD HH:MM:SS.mmm  PID  TID L TAG: message"
  *
  * Returns `null` for lines that don't match (e.g. logcat banners, blanks).
+ *
+ * NB: we deliberately ignore the timestamp portion of the line and use
+ * `Date.now()` (ingest time on the host) as the entry's `ts`. The reason:
+ *
+ *   - The threadtime format omits any timezone information.
+ *   - Devices set their own clock & TZ; if the device's wall clock differs
+ *     from the host browser's by more than a couple of seconds (very
+ *     common — phones drift, dev devices are often left on a previous TZ)
+ *     parsing the string as local-host time produces ts values offset from
+ *     reality, which breaks the rate display ("logs / sec") and the 60s
+ *     heatmap buckets — *every* incoming entry appears to fall inside the
+ *     last second, so the rate pegs to MAX_LOGS.
+ *   - Using ingest time means timestamps reflect "when this row reached
+ *     the viewer", which is what a developer streaming logs cares about
+ *     and is robust to device clock skew.
  */
 export function parseLogcatLine(
   line: string,
@@ -217,17 +232,11 @@ export function parseLogcatLine(
       line,
     );
   if (!m) return null;
-  const [, tsStr, pidStr, tidStr, levelStr, tag, message] = m;
-
-  // threadtime format omits the year — assume current year. Wrong by up
-  // to a day at year boundaries; not worth the device-clock round trip.
-  const yyyy = new Date().getFullYear();
-  const ts = Date.parse(`${yyyy}-${tsStr.replace(' ', 'T')}`);
-
+  const [, , pidStr, tidStr, levelStr, tag, message] = m;
   const pid = Number(pidStr);
   return {
     id: ++_id,
-    ts: Number.isFinite(ts) ? ts : Date.now(),
+    ts: Date.now(),
     pid,
     tid: Number(tidStr),
     pkg: pidToPkg(pid),

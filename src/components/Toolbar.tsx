@@ -32,14 +32,19 @@ export function Toolbar({
 
   return (
     <div className="toolbar">
-      <div className="tb-brand">
-        <div className="tb-logo">
+      <button
+        type="button"
+        className="tb-brand"
+        onClick={onDisconnect}
+        title="Disconnect and return to start"
+      >
+        <span className="tb-logo">
           <span className="tb-logo-square s1" />
           <span className="tb-logo-square s2" />
           <span className="tb-logo-square s3" />
-        </div>
+        </span>
         <span className="tb-name">weblogcat</span>
-      </div>
+      </button>
 
       <div className="divider" />
 

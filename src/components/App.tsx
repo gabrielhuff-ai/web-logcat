@@ -201,20 +201,44 @@ export function App() {
     return () => window.clearInterval(interval);
   }, [device, usingFake, tweaks.streamingSpeed, queueEntries]);
 
+  // Auto-toggle "only matches" when the user adds the first filter (and
+  // back off when they remove the last one). Rationale: if a user has
+  // gone to the trouble of typing a filter, what they almost always want
+  // is to see only the matching rows, not just have them highlighted in
+  // a sea of others. They can still toggle the icon manually any time;
+  // this effect only fires on the 0↔︎N+ boundary so it doesn't fight
+  // explicit user choices once filters exist.
+  const prevFilterCountRef = useRef(filters.length);
+  useEffect(() => {
+    const prev = prevFilterCountRef.current;
+    const curr = filters.length;
+    if (prev === 0 && curr > 0) setOnlyMatches(true);
+    else if (prev > 0 && curr === 0) setOnlyMatches(false);
+    prevFilterCountRef.current = curr;
+  }, [filters.length]);
+
   // Live rate (logs/second) recomputed every 500ms.
+  // Read `logs` through a ref so the interval doesn't get torn down and
+  // re-created on every ingest tick — at FLUSH_MS=100 the previous
+  // [device, logs] dependency rebuilt the interval ~10×/s for no reason.
+  const logsRef = useRef(logs);
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
   useEffect(() => {
     if (!device) return;
     const t = window.setInterval(() => {
       const cutoff = Date.now() - 1000;
+      const arr = logsRef.current;
       let n = 0;
-      for (let i = logs.length - 1; i >= 0; i--) {
-        if (logs[i].ts < cutoff) break;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i].ts < cutoff) break;
         n++;
       }
       setRate(n);
     }, 500);
     return () => window.clearInterval(t);
-  }, [device, logs]);
+  }, [device]);
 
   // ---- Connection handlers ------------------------------------------------
   const connectFake = useCallback(() => {
@@ -261,10 +285,6 @@ export function App() {
     [queueEntries, resetIngest, showToast],
   );
 
-  const onPairNew = useCallback(() => {
-    showToast('Pair new device — not implemented yet');
-  }, [showToast]);
-
   const onDisconnect = useCallback(() => {
     void realStreamRef.current?.stop();
     realStreamRef.current = null;
@@ -274,6 +294,19 @@ export function App() {
     setLogs([]);
     setUsingFake(false);
   }, [resetIngest]);
+
+  // Pair new device: tear down the current stream so the WebUSB chooser
+  // can claim a different device, then run the standard connect flow.
+  // If the user cancels the chooser they're left in the empty state and
+  // can hit "Connect a device" from there.
+  const onPairNew = useCallback(async () => {
+    onDisconnect();
+    try {
+      await connectReal();
+    } catch {
+      // already toasted by connectReal; nothing more to do here.
+    }
+  }, [onDisconnect, connectReal]);
 
   const switchDevice = useCallback(
     (d: DeviceInfo) => {
