@@ -138,10 +138,10 @@ export function App() {
         setDevice(result.device);
         setDevices([result.device]);
         setUsingFake(false);
-        // The LogStream returned by connectDevice doesn't currently
-        // surface the underlying Adb handle — that's a Phase 6 follow-up
-        // (Shell widget will need it). For Phase 5 only the hub matters.
-        setAdb(null);
+        // Phase 6: thread the live Adb handle into the context so widgets
+        // (Shell first) can call `adb.subprocess.shellProtocol?.spawn()`
+        // without each opening their own WebUSB connection.
+        setAdb(result.adb);
         showToast(`Connected to ${result.device.model}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to connect';

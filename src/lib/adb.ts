@@ -60,6 +60,7 @@ export interface ConnectOptions {
 export async function connectDevice(opts: ConnectOptions): Promise<{
   device: DeviceInfo;
   stream: LogStream;
+  adb: Adb;
 }> {
   const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
   if (!manager) {
@@ -143,7 +144,7 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     },
   };
 
-  return { device, stream };
+  return { device, stream, adb };
 }
 
 async function safeGetProp(adb: Adb, key: string): Promise<string> {
