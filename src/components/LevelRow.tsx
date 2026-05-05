@@ -55,6 +55,14 @@ export function LevelRow({
   setShowLevel,
 }: LevelRowProps) {
   const solo = (l: LogLevel) => {
+    // Re-soloing the already-solo level enables all levels — turns the
+    // double-click into a one-gesture toggle between solo and "all on"
+    // so users don't have to click the other four chips back on by hand.
+    const onCount = LEVELS.reduce((n, { l: x }) => n + (enabled[x] ? 1 : 0), 0);
+    if (onCount === 1 && enabled[l]) {
+      setEnabled({ V: true, D: true, I: true, W: true, E: true });
+      return;
+    }
     const next: LevelEnabled = { V: false, D: false, I: false, W: false, E: false };
     next[l] = true;
     setEnabled(next);
