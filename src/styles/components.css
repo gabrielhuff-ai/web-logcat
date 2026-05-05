@@ -319,6 +319,7 @@
 
 /* ===== Level filter pills (in lvl-bar) ===== */
 .lvl-filter { display: flex; gap: 4px; padding: 0 8px; }
+.lvl-toggles { display: inline-flex; gap: 4px; padding: 0 8px; }
 .lvl-pill {
   display: inline-flex;
   align-items: center;

@@ -166,6 +166,9 @@ export function LogList({
       search={search}
       showTimestamps={tweaks.showTimestamps}
       showPid={tweaks.showPid}
+      showProcess={tweaks.showProcess}
+      showTag={tweaks.showTag}
+      showLevel={tweaks.showLevel}
       wrapLines={tweaks.wrapLines}
       density={tweaks.density}
       pinned={pinned.has(l.id)}

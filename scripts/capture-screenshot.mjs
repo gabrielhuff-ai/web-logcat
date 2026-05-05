@@ -31,15 +31,36 @@ await page.getByRole('button', { name: /fake data/i }).click();
 await page.waitForSelector('.tb-name', { timeout: 5_000 });
 await page.waitForSelector('.row', { timeout: 5_000 });
 
-// Add a representative filter chip so the screenshot demonstrates the
-// chip palette + only-matches highlighting.
+// Add two free-text chips that match many entries across both message
+// and tag/process columns. With only-matches off (toggled below) this
+// gives a screenshot full of representative rows with two chip colours
+// highlighted across them, instead of an empty filtered view.
 const input = page.locator('.fb-input');
 await input.click();
-await input.fill('tag:ActivityManager');
-await page.keyboard.press('Enter');
+for (const chip of ['android', 'chrome']) {
+  await input.fill(chip);
+  await page.keyboard.press('Enter');
+}
+
+// Adding the first chip auto-enables only-matches; toggle it back off
+// so the screenshot shows a full lived-in stream with highlights, not
+// a sparse filtered view.
+await page.locator('.filter-bar > button.icon-btn').click();
+
+// Dismiss the autocomplete dropdown and unfocus the input.
+await page.keyboard.press('Escape');
 
 // Let the buffer fill so the heatmap and rate display look lived-in.
 await page.waitForTimeout(3000);
+
+// Scroll the log list up so the "Resume tail" pill is visible —
+// the LogList re-enables auto-scroll whenever the viewport is at the
+// bottom, so we can't toggle it from a toolbar; we have to actually
+// move the scroll position above the tail.
+await page.locator('.log-scroll').evaluate((el) => {
+  el.scrollTop = Math.max(0, el.scrollTop - 240);
+});
+await page.waitForTimeout(800);
 
 await page.screenshot({ path: OUT, fullPage: false });
 await browser.close();
