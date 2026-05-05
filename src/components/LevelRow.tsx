@@ -1,16 +1,21 @@
-// Level pills + live rate + counts + pinned summary (40px tall).
-//
-// TODO(sonnet): single click toggles a level; double-click solos it
-// (turns off all others). Disabled levels render with line-through.
+// Level filter pills + live rate + counts + pinned summary (40px tall).
+// Ported from design/source/settings.jsx (LevelFilter) and the `lvl-bar`
+// section of design/source/app.jsx.
 
+import * as Icons from './Icons';
 import type { LevelEnabled, LogLevel } from '../types';
 
-const LEVELS: LogLevel[] = ['V', 'D', 'I', 'W', 'E'];
+const LEVELS: ReadonlyArray<{ l: LogLevel; label: string }> = [
+  { l: 'V', label: 'Verbose' },
+  { l: 'D', label: 'Debug' },
+  { l: 'I', label: 'Info' },
+  { l: 'W', label: 'Warn' },
+  { l: 'E', label: 'Error' },
+];
 
 export interface LevelRowProps {
   enabled: LevelEnabled;
-  onToggle: (lvl: LogLevel) => void;
-  onSolo: (lvl: LogLevel) => void;
+  setEnabled: (next: LevelEnabled) => void;
   rate: number;
   filteredCount: number;
   totalCount: number;
@@ -21,8 +26,7 @@ export interface LevelRowProps {
 
 export function LevelRow({
   enabled,
-  onToggle,
-  onSolo,
+  setEnabled,
   rate,
   filteredCount,
   totalCount,
@@ -30,34 +34,39 @@ export function LevelRow({
   onClearPinned,
   paused,
 }: LevelRowProps) {
+  const solo = (l: LogLevel) => {
+    const next: LevelEnabled = { V: false, D: false, I: false, W: false, E: false };
+    next[l] = true;
+    setEnabled(next);
+  };
   return (
     <div className="lvl-bar">
-      <div style={{ display: 'inline-flex', gap: 4, padding: '0 12px' }}>
-        {LEVELS.map((l) => (
+      <div className="lvl-filter">
+        {LEVELS.map(({ l, label }) => (
           <button
             key={l}
-            className={`cell level lvl-${l}`}
-            style={{ opacity: enabled[l] ? 1 : 0.35, textDecoration: enabled[l] ? 'none' : 'line-through' }}
-            onClick={() => onToggle(l)}
-            onDoubleClick={() => onSolo(l)}
-            title={`${l} — click to toggle, double-click to solo`}
+            className={`lvl-pill lvl-${l} ${enabled[l] ? 'on' : 'off'}`}
+            onClick={() => setEnabled({ ...enabled, [l]: !enabled[l] })}
+            onDoubleClick={() => solo(l)}
+            title={`${label} — double-click to solo`}
           >
-            {l}
+            <span className="lvl-letter">{l}</span>
+            <span className="lvl-name">{label}</span>
           </button>
         ))}
       </div>
       <div className="lvl-spacer" />
-      <div className="lvl-stats">
-        <span className="rate-dot" data-pulse={!paused} />
-        <span>{rate.toFixed(0)}/s</span>
+      <span className="lvl-stats">
+        <span className="rate-dot" data-pulse={!paused && rate > 0} />
+        <span>{rate}/s</span>
         <span className="rate-sep">·</span>
         <span>
-          {filteredCount}/{totalCount}
+          {filteredCount.toLocaleString()} of {totalCount.toLocaleString()}
         </span>
-      </div>
+      </span>
       {pinnedCount > 0 && (
         <div className="pin-summary">
-          {pinnedCount} pinned
+          <Icons.PinFilled size={11} /> {pinnedCount} pinned
           <button className="pin-clear" onClick={onClearPinned}>
             clear
           </button>

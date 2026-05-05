@@ -1,48 +1,149 @@
-// Single log row: rail, pin gutter, ts/pid/pkg/tag/level/message cells, highlights.
-//
-// TODO(sonnet): port the highlight rendering from design/source/log-row.jsx
-// using `highlightRanges` from src/lib/filters.ts. Crash rows render with
-// red message color + light red row tint and a "Show stack trace" toggle on
-// the first crash line.
+// Single log row + per-field highlight rendering + crash-head toggle.
+// Ported from design/source/log-row.jsx.
 
-import { memo } from 'react';
+import { Fragment, memo, useMemo, type ReactNode } from 'react';
+import * as Icons from './Icons';
+import { formatTs } from '../lib/format';
 import type { Filter, LogEntry } from '../types';
+
+type RangeColor = number | 'search';
+
+interface FieldRange {
+  start: number;
+  end: number;
+  color: RangeColor;
+}
+
+function highlightField(text: string, value: string, color: RangeColor): FieldRange[] {
+  if (!value) return [];
+  const out: FieldRange[] = [];
+  const lower = text.toLowerCase();
+  const needle = value.toLowerCase();
+  let i = 0;
+  while (true) {
+    const idx = lower.indexOf(needle, i);
+    if (idx < 0) break;
+    out.push({ start: idx, end: idx + needle.length, color });
+    i = idx + needle.length;
+  }
+  return out;
+}
+
+interface HighlightedTextProps {
+  text: string;
+  ranges: FieldRange[];
+}
+
+function HighlightedText({ text, ranges }: HighlightedTextProps) {
+  if (!ranges.length) return <>{text}</>;
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: FieldRange[] = [];
+  for (const r of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && r.start < last.end) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({ ...r });
+    }
+  }
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const r of merged) {
+    if (r.start > cursor) {
+      parts.push(<Fragment key={cursor}>{text.slice(cursor, r.start)}</Fragment>);
+    }
+    const cls = `hl ${r.color === 'search' ? 'hl-search' : `hl-c${r.color}`}`;
+    parts.push(
+      <mark key={r.start} className={cls}>
+        {text.slice(r.start, r.end)}
+      </mark>,
+    );
+    cursor = r.end;
+  }
+  if (cursor < text.length) {
+    parts.push(<Fragment key={`${cursor}_end`}>{text.slice(cursor)}</Fragment>);
+  }
+  return <>{parts}</>;
+}
 
 export interface LogRowProps {
   entry: LogEntry;
-  density: 'compact' | 'cozy' | 'comfortable';
+  filters: Filter[];
+  search: string;
   showTimestamps: boolean;
   showPid: boolean;
   wrapLines: boolean;
+  density: 'compact' | 'cozy' | 'comfortable';
   pinned: boolean;
-  matches: Filter[];
   onTogglePin: (id: number) => void;
+  isMatch: boolean;
+  isCrashHead: boolean;
+  expanded: boolean;
+  onToggleExpand: (id: number) => void;
 }
 
-function formatTs(ts: number): string {
-  const d = new Date(ts);
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-}
+export const LogRow = memo(function LogRow({
+  entry,
+  filters,
+  search,
+  showTimestamps,
+  showPid,
+  wrapLines,
+  density,
+  pinned,
+  onTogglePin,
+  isMatch,
+  isCrashHead,
+  expanded,
+  onToggleExpand,
+}: LogRowProps) {
+  const msgRanges = useMemo(() => {
+    const out: FieldRange[] = [];
+    for (const f of filters) {
+      if (f.type === 'message') out.push(...highlightField(entry.message, f.value, f.color));
+    }
+    if (search) out.push(...highlightField(entry.message, search, 'search'));
+    return out;
+  }, [entry.message, filters, search]);
 
-export const LogRow = memo(function LogRow(props: LogRowProps) {
-  const { entry, density, showTimestamps, showPid, wrapLines, pinned, matches, onTogglePin } = props;
-  const matched = matches.length > 0;
+  const tagRanges = useMemo(() => {
+    const out: FieldRange[] = [];
+    for (const f of filters) {
+      if (f.type === 'tag' || f.type === 'message') {
+        out.push(...highlightField(entry.tag, f.value, f.color));
+      }
+    }
+    return out;
+  }, [entry.tag, filters]);
+
+  const pkgRanges = useMemo(() => {
+    const out: FieldRange[] = [];
+    for (const f of filters) {
+      if (f.type === 'process' || f.type === 'message') {
+        out.push(...highlightField(entry.pkg, f.value, f.color));
+      }
+    }
+    return out;
+  }, [entry.pkg, filters]);
 
   const cls = [
     'row',
-    matched ? 'match' : '',
     entry.isCrashLine ? 'crash' : '',
     pinned ? 'pinned' : '',
+    isMatch ? 'match' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
   return (
-    <div className={cls} data-density={density} data-level={entry.level}>
-      <span className="row-rail" />
-      <button className="row-pin" onClick={() => onTogglePin(entry.id)} title="Pin row">
-        ★
+    <div className={cls} data-level={entry.level} data-density={density}>
+      <div className="row-rail" />
+      <button
+        className="row-pin"
+        onClick={() => onTogglePin(entry.id)}
+        title={pinned ? 'Unpin' : 'Pin line'}
+      >
+        {pinned ? <Icons.PinFilled size={11} /> : <Icons.Pin size={11} />}
       </button>
       {showTimestamps && <span className="cell ts">{formatTs(entry.ts)}</span>}
       {showPid && (
@@ -50,10 +151,28 @@ export const LogRow = memo(function LogRow(props: LogRowProps) {
           {entry.pid}-{entry.tid}
         </span>
       )}
-      <span className="cell pkg">{entry.pkg}</span>
-      <span className="cell tag">{entry.tag}</span>
+      <span className="cell pkg" title={entry.pkg}>
+        <HighlightedText text={entry.pkg} ranges={pkgRanges} />
+      </span>
+      <span className="cell tag" title={entry.tag}>
+        <HighlightedText text={entry.tag} ranges={tagRanges} />
+      </span>
       <span className={`cell level lvl-${entry.level}`}>{entry.level}</span>
-      <span className={`cell msg ${wrapLines ? 'wrap' : ''}`}>{entry.message}</span>
+      <span className={`cell msg ${wrapLines ? 'wrap' : ''}`}>
+        <HighlightedText text={entry.message} ranges={msgRanges} />
+        {isCrashHead && (
+          <button className="crash-toggle" onClick={() => onToggleExpand(entry.id)}>
+            {expanded ? 'Collapse stack trace' : 'Show stack trace'}
+            <Icons.Chevron
+              size={11}
+              style={{
+                transform: expanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 200ms var(--ease-out)',
+              }}
+            />
+          </button>
+        )}
+      </span>
     </div>
   );
 });

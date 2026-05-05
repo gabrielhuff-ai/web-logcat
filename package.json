@@ -13,6 +13,7 @@
     "format": "prettier -w ."
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
