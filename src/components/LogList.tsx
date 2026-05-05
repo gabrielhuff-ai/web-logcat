@@ -14,23 +14,19 @@
 //     the parent's `max-content` size.
 //
 // Scroll anchoring on head trim:
-//   - The parent (`App.tsx`) writes the pixel delta of "rows that vanished
-//     from the visible list because of FIFO trim while scroll-locked" into
-//     `compensationRef`. After every render where `entries.length` changed
-//     we run a layout effect that subtracts that delta from `scrollTop`
-//     before paint, so the rows the user is reading stay anchored at their
-//     on-screen position. The math uses the density-derived row-height
-//     estimate; in wrap mode actual heights drift slightly, which is a
-//     known limitation (documented in docs/TASKS.md).
+//   - The parent (`App.tsx`) calls `compensateScroll(px)` synchronously
+//     inside `flushIncoming`, *before* the corresponding setLogs is
+//     queued, so the new scrollTop is in place by the time the
+//     virtualiser runs `getVirtualItems()` on the next render. This keeps
+//     the visible items aligned with the user's scroll position with no
+//     paint between the two — earlier we did it in a useLayoutEffect on
+//     [entries], which adjusted scrollTop *after* the commit; the
+//     virtualiser had already produced items for the old scroll position
+//     so the browser briefly painted the misalignment as a "blink".
+//   - The math uses the density-derived row-height estimate; in wrap mode
+//     actual heights drift slightly (documented in docs/TASKS.md).
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  type MutableRefObject,
-  type UIEvent,
-} from 'react';
+import { useEffect, useMemo, useRef, type UIEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as Icons from './Icons';
 import { entryMatches } from '../lib/filters';
@@ -55,9 +51,10 @@ export interface LogListProps {
   setAutoScroll: (v: boolean) => void;
   deviceModel: string;
   hasFilters: boolean;
-  /** Pixels to subtract from scrollTop on next layout (set by App when
-   *  the FIFO trim evicts visible entries while scroll-locked). */
-  compensationRef?: MutableRefObject<number>;
+  /** Imperative API: parent registers a callback that subtracts pixels
+   *  from scrollTop. Called synchronously inside flushIncoming when the
+   *  FIFO trim evicts visible entries while scroll-locked. */
+  registerCompensate?: (fn: (px: number) => void) => void;
   /** Imperative API: parent calls this to scroll to a given timestamp. */
   registerScrollToTs?: (fn: (ts: number) => void) => void;
 }
@@ -77,7 +74,7 @@ export function LogList({
   setAutoScroll,
   deviceModel,
   hasFilters,
-  compensationRef,
+  registerCompensate,
   registerScrollToTs,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,28 +101,27 @@ export function LogList({
     }
   }, [entries.length, autoScroll, virtualize, virtualizer]);
 
-  // Trim-anchor: consume pending compensation from App. Runs *before paint*
-  // (useLayoutEffect) so the user never sees the intermediate "scrolled
-  // forward" state where scrollHeight has shrunk but scrollTop hasn't.
+  // Trim-anchor: expose an imperative `compensateScroll(px)` callback to
+  // the parent. The parent calls it *synchronously* inside flushIncoming,
+  // before setLogs is queued, so by the time the virtualiser re-renders
+  // it reads the new scrollTop on the *same* render that produces the new
+  // entries — the visible items at their paddingTop offsets line up with
+  // the user's scroll position, no flicker.
   //
-  // Dep is `entries` (the array reference), not `entries.length`. At the
-  // 50k hard cap each flush adds N and trims N, so `filtered.length` is
-  // invariant — depending on the length wouldn't fire the effect and the
-  // viewport would drift. The reference identity changes on every flush
-  // (filtered useMemo recomputes when logs changes), so the effect runs
-  // exactly when we need it. Cheap when there's no pending compensation.
-  //
-  // Skipped if autoScroll has flipped on in the meantime (the auto-tail
-  // effect above will pin to the bottom regardless).
-  useLayoutEffect(() => {
-    if (!compensationRef) return;
-    const px = compensationRef.current;
-    compensationRef.current = 0;
-    if (px <= 0 || autoScroll) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = Math.max(0, el.scrollTop - px);
-  }, [entries, autoScroll, compensationRef]);
+  // Earlier we did this in a useLayoutEffect on [entries], which adjusted
+  // scrollTop *after* the commit. The virtualiser had already computed
+  // visible items for the *old* scrollTop, so the browser briefly painted
+  // rows at positions that no longer matched the (then-updated) scroll
+  // position before the next scroll-event cycle re-aligned them. That's
+  // what the user saw as "blinking" at the 50k cap.
+  useEffect(() => {
+    registerCompensate?.((px: number) => {
+      if (px <= 0) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTop = Math.max(0, el.scrollTop - px);
+    });
+  }, [registerCompensate]);
 
   // Imperative jump-to-timestamp from the heatmap.
   useEffect(() => {

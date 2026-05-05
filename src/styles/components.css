@@ -484,6 +484,71 @@
   background: var(--on-accent);
 }
 
+/* ===== Help dialog (? shortcut) ===== */
+.help-scrim {
+  position: absolute;
+  inset: 0;
+  background: oklch(0 0 0 / 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  animation: fadeIn 200ms var(--ease-out) both;
+}
+.help {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  z-index: 201;
+  animation: slideUp 240ms var(--ease-spring) both;
+  overflow: hidden;
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.help-head h2 {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: 600;
+}
+.help-body {
+  padding: 8px 12px 16px;
+  overflow-y: auto;
+}
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+.help-table tr td {
+  padding: 8px 8px;
+  vertical-align: middle;
+}
+.help-table tr + tr td {
+  border-top: 1px solid var(--line-soft);
+}
+.help-keys {
+  white-space: nowrap;
+  width: 1%;
+}
+.help-keys .kbd + .kbd {
+  margin-left: 4px;
+}
+.help-desc {
+  color: var(--fg-1);
+}
+
 /* ===== Heatmap gutter ===== */
 .heatmap {
   width: 14px;

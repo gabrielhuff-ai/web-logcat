@@ -61,23 +61,28 @@ All components below were ported from `design/source/` and wired into
   exact for single-line rows (always the case when wrap is off) but
   drifts for wrapped + crash rows. Either disable anchoring with wrap on
   or use `virtualizer.measure()` for the trimmed slice.
-- [ ] Persist `filters` across reloads (localStorage, scoped per device serial)
-- [ ] `?` keyboard shortcut to open a help dialog with the shortcut list
-- [ ] Decide whether to keep "fake data" affordance in production (or hide
-  it behind `?dev=1`)
-- [ ] Tighten the highlight palette: tag-typed filters currently also
-  highlight pkg cells via the `tag||message` rule — verify this matches
-  the design's intent or restrict it
-- [ ] Inspect bundle: `index-*.js` is ~85 KB gzipped; the bulk is the
-  yume-chan ADB client + WebCrypto. Consider lazy-loading `lib/adb.ts`
-  via dynamic import so the empty state and simulated path stay tiny
+- [x] **Persist `filters` per device serial.** Stored under
+  `weblogcat:filters:<serial>` in localStorage; restored when the same
+  device reconnects. `makeFilter` is re-run on load so the in-session id
+  counter stays consistent.
+- [x] **`?` keyboard shortcut → help dialog.** `HelpDialog` lists all
+  shortcuts; opens with `?`, closes on Esc / scrim / Close button.
+- [x] **Hide "fake data" affordance in production.** Gated on
+  `import.meta.env.DEV || ?dev=1`, so the deployed landing page stays
+  focused on real WebUSB but the simulator stays one URL param away.
+- [x] **Lazy-load `lib/adb.ts`** via dynamic import inside `connectReal`.
+  Initial bundle dropped from 84 → 67 KB gzip; the ADB chunk (18 KB
+  gzip) is fetched only when the user clicks Connect.
+- [x] Verified the highlight palette matches the design's intent:
+  message filters highlight all three of msg/tag/pkg, tag filters
+  highlight tag only, process filters highlight pkg only. No change
+  needed — the original wording in this list was speculative.
 
 ## Phase 4 — Tests + tooling
 
-These are deliberately deferred until features stop churning.
-
-- [ ] Unit tests for `lib/filters.ts` and `parseLogcatLine` (the highest-
-  ROI tests; pure functions, easy)
+- [x] **Unit tests for `lib/filters.ts` and `parseLogcatLine`.** Vitest;
+  24 tests covering the parser, matcher, highlighter, palette cycling,
+  and the parser's resilience to malformed lines. CI runs `npm test`.
 - [ ] Add Playwright smoke test on the deployed staging URL
 - [ ] Tighten ESLint to include `react-hooks/exhaustive-deps` as `error`
   once the few intentional skips are commented

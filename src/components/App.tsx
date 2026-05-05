@@ -16,15 +16,20 @@ import { LogList } from './LogList';
 import { Heatmap, type HeatmapBucket } from './Heatmap';
 import { SettingsPanel } from './SettingsPanel';
 import { SearchOverlay } from './SearchOverlay';
+import { HelpDialog } from './HelpDialog';
 import * as Icons from './Icons';
-import { entryMatches } from '../lib/filters';
+import { entryMatches, makeFilter } from '../lib/filters';
 import {
   KNOWN_PROCESSES,
   KNOWN_TAGS,
   generateBatch,
   seedHistory,
 } from '../lib/logGenerator';
-import { connectDevice, type LogStream } from '../lib/adb';
+// Type-only import: keeps the yume-chan ADB client + WebCrypto out of
+// the initial bundle. The runtime module is imported lazily inside
+// `connectReal` below so the empty-state landing page and the simulator
+// path don't pay for it.
+import type { LogStream } from '../lib/adb';
 import type { ConnectStep } from './EmptyState';
 import { useTweaks } from '../lib/tweaks';
 import type {
@@ -47,6 +52,15 @@ const MAX_LOGS_HARD = 50_000;
 // Batch ingest into setLogs at most once every FLUSH_MS to avoid 200+
 // re-renders per second on real-device streams.
 const FLUSH_MS = 100;
+
+// Whether to surface the "fake data" affordance on the empty state.
+// Always true in `npm run dev` so the iteration loop is fast; in
+// production builds it's only enabled with `?dev=1` so the deployed
+// landing page stays focused on real WebUSB.
+const SHOW_FAKE_AFFORDANCE =
+  import.meta.env.DEV ||
+  (typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('dev'));
 
 const FAKE_DEVICE: DeviceInfo = {
   serial: 'fake-device-001',
@@ -79,6 +93,7 @@ export function App() {
   const [pinned, setPinned] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [rate, setRate] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -117,10 +132,13 @@ export function App() {
   // for crash-group expansion).
   const visibleIdsRef = useRef<Set<number>>(new Set());
 
-  // `compensationRef` is shared with LogList: App writes pending pixel
-  // deltas, LogList consumes them in a useLayoutEffect that runs after the
-  // DOM has been resized but before paint.
-  const compensationRef = useRef(0);
+  // `compensateScrollRef` is the imperative callback LogList registers
+  // for "subtract N pixels from scrollTop right now". We invoke it
+  // synchronously in flushIncoming, *before* setLogs, so the virtualiser
+  // reads the new scrollTop on the first render that has the new entries
+  // — items at their paddingTop offsets line up with the user's scroll
+  // position with no intermediate paint.
+  const compensateScrollRef = useRef<((px: number) => void) | null>(null);
 
   const rowHeightRef = useRef(rowHeightFor(tweaks.density));
   useEffect(() => {
@@ -140,13 +158,12 @@ export function App() {
     if (batch.length === 0) return;
     incomingRef.current = [];
 
-    // We compute the trim + anchor math *before* calling setLogs, against
-    // `logsRef.current` (kept in sync with `logs` via a useEffect below).
-    // The earlier version used a functional updater (setLogs(prev => …)) and
-    // captured `trimmedVisible` from outside the updater closure — but the
-    // updater runs during React's render phase, *after* our synchronous
-    // `compensationRef += …` line, so the increment was always 0 and the
-    // anchor never engaged. Doing the math up here keeps it sequential.
+    // Compute the trim + anchor math against `logsRef.current` (kept in
+    // sync with `logs` via a useEffect below) so we can call the
+    // compensate callback *before* setLogs is queued. Doing it before
+    // setLogs is critical: the virtualiser reads scrollTop during render,
+    // so it needs the new value in place by the time React processes our
+    // setLogs and re-renders LogList.
     const prev = logsRef.current;
     const next = prev.concat(batch);
     const cap = autoScrollRef.current ? MAX_LOGS : MAX_LOGS_HARD;
@@ -159,7 +176,7 @@ export function App() {
           if (visible.has(next[i].id)) trimmedVisible++;
         }
         if (trimmedVisible > 0) {
-          compensationRef.current += trimmedVisible * rowHeightRef.current;
+          compensateScrollRef.current?.(trimmedVisible * rowHeightRef.current);
         }
       }
       next.splice(0, removeCount);
@@ -216,6 +233,48 @@ export function App() {
     prevFilterCountRef.current = curr;
   }, [filters.length]);
 
+  // ---- Filter persistence -------------------------------------------------
+  // Stored per device serial under `weblogcat:filters:<serial>` so a
+  // developer who comes back to the same physical device gets their
+  // chip-bar back. We re-derive each filter through `makeFilter` on load
+  // so the in-session id counter stays consistent (otherwise the next
+  // chip the user adds would collide with a persisted id).
+  useEffect(() => {
+    if (!device) return;
+    const key = `weblogcat:filters:${device.serial}`;
+    let parsed: Array<{ type: string; value: string }>;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+    } catch {
+      return;
+    }
+    const restored: Filter[] = [];
+    for (const p of parsed) {
+      if (typeof p?.value !== 'string') continue;
+      const input = p.type === 'message' ? p.value : `${p.type}:${p.value}`;
+      const f = makeFilter(input);
+      if (f) restored.push(f);
+    }
+    if (restored.length > 0) setFilters(restored);
+    // Run when device changes — load happens once per connection.
+  }, [device]);
+
+  useEffect(() => {
+    if (!device) return;
+    const key = `weblogcat:filters:${device.serial}`;
+    try {
+      // Persist only the user-meaningful fields (type + value); ids and
+      // colors get re-derived on next load through makeFilter.
+      const slim = filters.map(({ type, value }) => ({ type, value }));
+      localStorage.setItem(key, JSON.stringify(slim));
+    } catch {
+      // Quota / privacy mode — silently ignore.
+    }
+  }, [device, filters]);
+
   // Live rate (logs/second) recomputed every 500ms.
   // Read `logs` through a ref so the interval doesn't get torn down and
   // re-created on every ingest tick — at FLUSH_MS=100 the previous
@@ -254,6 +313,11 @@ export function App() {
   const connectReal = useCallback(
     async (setStep?: (step: ConnectStep) => void) => {
       try {
+        // Lazy-load the ADB transport (which pulls in @yume-chan/adb
+        // + WebCrypto, ~140 KB minified) only when the user actually
+        // initiates a real connect. The simulator + landing page stay
+        // in the initial bundle.
+        const { connectDevice } = await import('../lib/adb');
         const result = await connectDevice({
           onEntry: (e) => queueEntries([e]),
           onError: (err) => showToast(err.message),
@@ -474,6 +538,10 @@ export function App() {
         e.preventDefault();
         focusFilterRef.current?.();
       }
+      if (e.key === '?' && !inField) {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+      }
       if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setSearchOpen(true);
@@ -495,7 +563,13 @@ export function App() {
 
   // ---- Render -------------------------------------------------------------
   if (!device) {
-    return <EmptyState onConnect={connectReal} onUseFakeData={connectFake} />;
+    return (
+      <EmptyState
+        onConnect={connectReal}
+        onUseFakeData={connectFake}
+        showFakeAffordance={SHOW_FAKE_AFFORDANCE}
+      />
+    );
   }
 
   return (
@@ -574,7 +648,9 @@ export function App() {
           setAutoScroll={setAutoScrollSafe}
           deviceModel={device.model}
           hasFilters={filters.length > 0}
-          compensationRef={compensationRef}
+          registerCompensate={(fn) => {
+            compensateScrollRef.current = fn;
+          }}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
           }}
@@ -610,6 +686,8 @@ export function App() {
         tweaks={tweaks}
         onChange={setTweaks}
       />
+
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

@@ -24,9 +24,12 @@ export interface EmptyStateProps {
    */
   onConnect: (setStep: (step: ConnectStep) => void) => Promise<void>;
   onUseFakeData: () => void;
+  /** When false, the "fake data" affordance is hidden — used to keep the
+   *  production landing page focused on the real WebUSB flow. */
+  showFakeAffordance: boolean;
 }
 
-export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
+export function EmptyState({ onConnect, onUseFakeData, showFakeAffordance }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
 
@@ -80,19 +83,21 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
             )}
           </button>
 
-          <div className="empty-or">
-            or try the app with{' '}
-            <button className="link" onClick={onUseFakeData} disabled={connecting}>
-              fake data
-            </button>
-          </div>
+          {showFakeAffordance && (
+            <div className="empty-or">
+              or try the app with{' '}
+              <button className="link" onClick={onUseFakeData} disabled={connecting}>
+                fake data
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="empty-hint">
-          <span className="kbd">⌘ K</span>
-          to clear logs,
           <span className="kbd">⌘ F</span>
-          to search
+          to search,
+          <span className="kbd">?</span>
+          for keyboard shortcuts
         </div>
       </div>
     </div>

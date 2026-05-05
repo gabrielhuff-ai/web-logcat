@@ -21,9 +21,8 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
-      # ESLint is configured but tolerated for now — flip --max-warnings 0
-      # in package.json once the codebase is fully ported.
-      - run: npm run lint || true
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
         env:
           # Build with the production base path so the output matches what

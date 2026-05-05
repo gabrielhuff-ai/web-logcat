@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint . --ext ts,tsx --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier -w ."
   },
   "dependencies": {
@@ -33,6 +35,7 @@
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^4.1.5"
   }
 }
