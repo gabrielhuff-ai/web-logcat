@@ -341,5 +341,8 @@ export function seedHistory(seconds = 60, perSecond = 4): LogEntry[] {
   return out;
 }
 
-export const KNOWN_PROCESSES = PROCESSES.map((p) => p.pkg);
-export const KNOWN_TAGS = Array.from(new Set(Object.values(TAG_POOL).flat()));
+// `KNOWN_PROCESSES` and `KNOWN_TAGS` used to live here too, but they're
+// pure data needed by FilterBar's autocomplete on every session — even
+// when the simulator never runs. They're now in `./knownNames.ts` so
+// the FilterBar can import them statically while this whole module
+// stays lazy-loaded.

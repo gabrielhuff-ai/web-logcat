@@ -28,3 +28,32 @@ jobs:
           # Build with the production base path so the output matches what
           # gets deployed; the artifact itself isn't published from CI.
           BASE_PATH: /web-logcat/
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Build with the default base ("/") so `npm run preview` serves the
+      # app at the root and Playwright can hit http://localhost:4173/.
+      - run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

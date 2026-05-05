@@ -19,12 +19,11 @@ import { SearchOverlay } from './SearchOverlay';
 import { HelpDialog } from './HelpDialog';
 import * as Icons from './Icons';
 import { entryMatches, makeFilter } from '../lib/filters';
-import {
-  KNOWN_PROCESSES,
-  KNOWN_TAGS,
-  generateBatch,
-  seedHistory,
-} from '../lib/logGenerator';
+import { KNOWN_PROCESSES, KNOWN_TAGS } from '../lib/knownNames';
+// `lib/logGenerator` is dynamic-imported on demand inside connectFake
+// — see SimulatorAPI below — so the simulator code (~10 KB minified) is
+// only fetched when the user actually opts into fake data.
+type SimulatorAPI = typeof import('../lib/logGenerator');
 // Type-only import: keeps the yume-chan ADB client + WebCrypto out of
 // the initial bundle. The runtime module is imported lazily inside
 // `connectReal` below so the empty-state landing page and the simulator
@@ -39,7 +38,7 @@ import type {
   LogEntry,
   LogLevel,
 } from '../types';
-import { formatTs, rowHeightFor } from '../lib/format';
+import { formatTs } from '../lib/format';
 
 // Soft cap: while auto-tailing the user is "looking at the present", so
 // FIFO-trim aggressively to keep memory bounded.
@@ -52,15 +51,6 @@ const MAX_LOGS_HARD = 50_000;
 // Batch ingest into setLogs at most once every FLUSH_MS to avoid 200+
 // re-renders per second on real-device streams.
 const FLUSH_MS = 100;
-
-// Whether to surface the "fake data" affordance on the empty state.
-// Always true in `npm run dev` so the iteration loop is fast; in
-// production builds it's only enabled with `?dev=1` so the deployed
-// landing page stays focused on real WebUSB.
-const SHOW_FAKE_AFFORDANCE =
-  import.meta.env.DEV ||
-  (typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('dev'));
 
 const FAKE_DEVICE: DeviceInfo = {
   serial: 'fake-device-001',
@@ -133,17 +123,14 @@ export function App() {
   const visibleIdsRef = useRef<Set<number>>(new Set());
 
   // `compensateScrollRef` is the imperative callback LogList registers
-  // for "subtract N pixels from scrollTop right now". We invoke it
-  // synchronously in flushIncoming, *before* setLogs, so the virtualiser
-  // reads the new scrollTop on the first render that has the new entries
-  // — items at their paddingTop offsets line up with the user's scroll
-  // position with no intermediate paint.
-  const compensateScrollRef = useRef<((px: number) => void) | null>(null);
-
-  const rowHeightRef = useRef(rowHeightFor(tweaks.density));
-  useEffect(() => {
-    rowHeightRef.current = rowHeightFor(tweaks.density);
-  }, [tweaks.density]);
+  // for "the FIFO trim just evicted N visible rows; anchor scrollTop
+  // accordingly". We invoke it synchronously in flushIncoming, *before*
+  // setLogs, so the virtualiser reads the new scrollTop on the first
+  // render that has the new entries — items at their paddingTop offsets
+  // line up with the user's scroll position with no intermediate paint.
+  // The pixel-per-row math happens inside LogList where we can use the
+  // virtualiser's measured average (matters in wrap mode).
+  const compensateScrollRef = useRef<((rowsTrimmed: number) => void) | null>(null);
 
   // ---- Ingest batching ----------------------------------------------------
   // Real devices can emit hundreds of lines per second. Calling setLogs
@@ -176,7 +163,7 @@ export function App() {
           if (visible.has(next[i].id)) trimmedVisible++;
         }
         if (trimmedVisible > 0) {
-          compensateScrollRef.current?.(trimmedVisible * rowHeightRef.current);
+          compensateScrollRef.current?.(trimmedVisible);
         }
       }
       next.splice(0, removeCount);
@@ -208,11 +195,18 @@ export function App() {
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 1800);
   }, []);
 
+  // Holds the lazy-loaded simulator module. Populated by connectFake;
+  // the streaming effect below reads `generateBatch` through this ref so
+  // the static import isn't required.
+  const simulatorRef = useRef<SimulatorAPI | null>(null);
+
   // ---- Streaming: simulator (real ADB stream is in `connectReal`) ---------
   useEffect(() => {
     if (!device || !usingFake) return;
     const interval = window.setInterval(() => {
-      queueEntries(generateBatch(Date.now(), tweaks.streamingSpeed));
+      const sim = simulatorRef.current;
+      if (!sim) return;
+      queueEntries(sim.generateBatch(Date.now(), tweaks.streamingSpeed));
     }, 600);
     return () => window.clearInterval(interval);
   }, [device, usingFake, tweaks.streamingSpeed, queueEntries]);
@@ -301,9 +295,16 @@ export function App() {
   }, [device]);
 
   // ---- Connection handlers ------------------------------------------------
-  const connectFake = useCallback(() => {
+  const connectFake = useCallback(async () => {
     resetIngest();
-    setLogs(seedHistory(60, 5));
+    // Lazy-load the simulator the first time the user opts into fake
+    // data. Cached on simulatorRef so subsequent reconnects (from
+    // disconnect → fake-data again) don't re-fetch the chunk.
+    if (!simulatorRef.current) {
+      simulatorRef.current = await import('../lib/logGenerator');
+    }
+    const sim = simulatorRef.current;
+    setLogs(sim.seedHistory(60, 5));
     setDevice(FAKE_DEVICE);
     setDevices([FAKE_DEVICE]);
     setUsingFake(true);
@@ -563,13 +564,7 @@ export function App() {
 
   // ---- Render -------------------------------------------------------------
   if (!device) {
-    return (
-      <EmptyState
-        onConnect={connectReal}
-        onUseFakeData={connectFake}
-        showFakeAffordance={SHOW_FAKE_AFFORDANCE}
-      />
-    );
+    return <EmptyState onConnect={connectReal} onUseFakeData={connectFake} />;
   }
 
   return (

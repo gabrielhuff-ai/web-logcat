@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -19,5 +20,11 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     target: 'es2022',
+  },
+  test: {
+    // Scope Vitest to the unit tests under src/. Playwright specs in
+    // tests/ live in their own runner — without this they'd both be
+    // picked up by Vitest, which doesn't know how to execute them.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 });

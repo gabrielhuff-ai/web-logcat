@@ -101,27 +101,30 @@ export function LogList({
     }
   }, [entries.length, autoScroll, virtualize, virtualizer]);
 
-  // Trim-anchor: expose an imperative `compensateScroll(px)` callback to
+  // Trim-anchor: expose an imperative `compensateScroll(rowsTrimmed)` to
   // the parent. The parent calls it *synchronously* inside flushIncoming,
   // before setLogs is queued, so by the time the virtualiser re-renders
-  // it reads the new scrollTop on the *same* render that produces the new
-  // entries — the visible items at their paddingTop offsets line up with
-  // the user's scroll position, no flicker.
+  // it reads the new scrollTop on the *same* render that produces the
+  // new entries — visible items at their paddingTop offsets line up with
+  // the user's scroll position with no flicker.
   //
-  // Earlier we did this in a useLayoutEffect on [entries], which adjusted
-  // scrollTop *after* the commit. The virtualiser had already computed
-  // visible items for the *old* scrollTop, so the browser briefly painted
-  // rows at positions that no longer matched the (then-updated) scroll
-  // position before the next scroll-event cycle re-aligned them. That's
-  // what the user saw as "blinking" at the 50k cap.
+  // We take a row count rather than a pixel delta so the multiplication
+  // by the row height happens here, where we can use the *measured*
+  // average from the virtualiser (`getTotalSize() / count`). That
+  // matters in wrap mode: rows can wrap to multiple lines, so the static
+  // density-derived estimate undershoots and the anchor drifts. The
+  // measured average reflects actual heights to within a row or two.
   useEffect(() => {
-    registerCompensate?.((px: number) => {
-      if (px <= 0) return;
+    registerCompensate?.((rowsTrimmed: number) => {
+      if (rowsTrimmed <= 0) return;
       const el = scrollRef.current;
       if (!el) return;
+      const total = virtualize ? virtualizer.getTotalSize() : el.scrollHeight;
+      const avg = entries.length > 0 && total > 0 ? total / entries.length : rowHeight;
+      const px = rowsTrimmed * avg;
       el.scrollTop = Math.max(0, el.scrollTop - px);
     });
-  }, [registerCompensate]);
+  }, [registerCompensate, virtualize, virtualizer, entries.length, rowHeight]);
 
   // Imperative jump-to-timestamp from the heatmap.
   useEffect(() => {

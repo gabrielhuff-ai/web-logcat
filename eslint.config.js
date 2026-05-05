@@ -15,6 +15,10 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // The hooks plugin ships exhaustive-deps as `warn`. With our
+      // `--max-warnings 0` lint script that's already error-equivalent
+      // in CI, but explicit is better than implicit.
+      'react-hooks/exhaustive-deps': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
