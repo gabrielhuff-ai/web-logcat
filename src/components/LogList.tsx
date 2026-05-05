@@ -200,12 +200,12 @@ export function LogList({
     const last = items[items.length - 1];
     const bottom = last ? Math.max(0, totalSize - last.end) : 0;
     body = (
-      <div style={{ paddingTop: top, paddingBottom: bottom }}>
+      <div className="row-list" style={{ paddingTop: top, paddingBottom: bottom }}>
         {items.map((vi) => renderRow(entries[vi.index]))}
       </div>
     );
   } else {
-    body = entries.map((l) => renderRow(l));
+    body = <div className="row-list">{entries.map((l) => renderRow(l))}</div>;
   }
 
   return (

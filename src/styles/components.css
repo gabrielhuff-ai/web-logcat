@@ -37,16 +37,25 @@
  * the scroll container scrolls horizontally — instead of ellipsizing
  * the message inside a fixed-width cell.
  *
- * - .row[data-wrap="false"]: shrink-wrap to content (max-content) with a
- *   floor at viewport width so short messages still get a full-width
- *   hover background and rail.
+ * The list shrink-wraps to its widest child (max-content) with a floor
+ * at 100% of the scroll viewport, and every row stretches to fill that
+ * shared width via `width: 100%`. This keeps short rows' hover/match
+ * backgrounds and the row-rail extending under the wider rows once the
+ * user scrolls horizontally — without it, short rows would only paint
+ * up to their own content extent and the area now in view past their
+ * end would show the scroll container's bg instead.
+ *
  * - .cell.msg:not(.wrap): size to content (no flex-grow into a 0 basis),
  *   no overflow clipping, no text-overflow ellipsis. The :not(.wrap)
  *   selector has higher specificity than `.cell.msg` so this overrides
  *   the design defaults in app.css cleanly. */
-.row[data-wrap='false'] {
+.row-list {
   width: max-content;
   min-width: 100%;
+}
+.row[data-wrap='false'] {
+  width: 100%;
+  min-width: max-content;
 }
 .cell.msg:not(.wrap) {
   flex: 0 0 auto;
