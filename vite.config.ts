@@ -1,5 +1,8 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
+// `defineConfig` from `vitest/config` (rather than `vite`) extends the
+// Vite config type with the `test` property — without it, tsc -b on
+// vite.config.ts fails with "test does not exist in type
+// UserConfigExport". Equivalent at runtime to the regular vite import.
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // `base` controls the public path the app is served from.
