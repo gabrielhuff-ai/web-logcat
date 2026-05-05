@@ -13,7 +13,7 @@ import { Toolbar } from './Toolbar';
 import { FilterBar } from './FilterBar';
 import { LevelRow } from './LevelRow';
 import { LogList } from './LogList';
-import { Heatmap, Scrubber, type HeatmapBucket } from './Heatmap';
+import { Heatmap, type HeatmapBucket } from './Heatmap';
 import { SettingsPanel } from './SettingsPanel';
 import { SearchOverlay } from './SearchOverlay';
 import * as Icons from './Icons';
@@ -140,32 +140,31 @@ export function App() {
     if (batch.length === 0) return;
     incomingRef.current = [];
 
-    // Capture how many of the about-to-be-evicted entries were visible to
-    // the user, so we can anchor scrollTop after the trim.
-    let trimmedVisible = 0;
-
-    setLogs((prev) => {
-      const next = prev.concat(batch);
-      // Auto-tailing: trim to MAX_LOGS so the live view stays bounded.
-      // Scroll-locked: keep up to MAX_LOGS_HARD so rows above the viewport
-      // don't get evicted while the user is reading them.
-      const cap = autoScrollRef.current ? MAX_LOGS : MAX_LOGS_HARD;
-      if (next.length > cap) {
-        const removeCount = next.length - cap;
-        if (!autoScrollRef.current) {
-          const visible = visibleIdsRef.current;
-          for (let i = 0; i < removeCount; i++) {
-            if (visible.has(next[i].id)) trimmedVisible++;
-          }
+    // We compute the trim + anchor math *before* calling setLogs, against
+    // `logsRef.current` (kept in sync with `logs` via a useEffect below).
+    // The earlier version used a functional updater (setLogs(prev => …)) and
+    // captured `trimmedVisible` from outside the updater closure — but the
+    // updater runs during React's render phase, *after* our synchronous
+    // `compensationRef += …` line, so the increment was always 0 and the
+    // anchor never engaged. Doing the math up here keeps it sequential.
+    const prev = logsRef.current;
+    const next = prev.concat(batch);
+    const cap = autoScrollRef.current ? MAX_LOGS : MAX_LOGS_HARD;
+    if (next.length > cap) {
+      const removeCount = next.length - cap;
+      if (!autoScrollRef.current) {
+        const visible = visibleIdsRef.current;
+        let trimmedVisible = 0;
+        for (let i = 0; i < removeCount; i++) {
+          if (visible.has(next[i].id)) trimmedVisible++;
         }
-        next.splice(0, removeCount);
+        if (trimmedVisible > 0) {
+          compensationRef.current += trimmedVisible * rowHeightRef.current;
+        }
       }
-      return next;
-    });
-
-    if (trimmedVisible > 0) {
-      compensationRef.current += trimmedVisible * rowHeightRef.current;
+      next.splice(0, removeCount);
     }
+    setLogs(next);
   }, []);
 
   const queueEntries = useCallback(
@@ -221,6 +220,8 @@ export function App() {
   // Read `logs` through a ref so the interval doesn't get torn down and
   // re-created on every ingest tick — at FLUSH_MS=100 the previous
   // [device, logs] dependency rebuilt the interval ~10×/s for no reason.
+  // Also used by flushIncoming below to compute the trim+anchor math
+  // sequentially, *outside* the React render cycle.
   const logsRef = useRef(logs);
   useEffect(() => {
     logsRef.current = logs;
@@ -552,7 +553,6 @@ export function App() {
         {tweaks.showHeatmap && (
           <Heatmap
             buckets={buckets}
-            currentSecond={59}
             onJumpToSecond={(i) => {
               const targetTs = Date.now() - (59 - i) * 1000;
               scrollToTsRef.current?.(targetTs);
@@ -580,18 +580,6 @@ export function App() {
           }}
         />
       </div>
-
-      {tweaks.showScrubber && (
-        <Scrubber
-          buckets={buckets}
-          viewportStart={0.85}
-          viewportEnd={1.0}
-          onScrub={() => {
-            /* TODO: jump to scrubbed position once full timeline window is implemented */
-          }}
-          total={logs.length}
-        />
-      )}
 
       {!autoScroll && (
         <button className="scroll-to-bottom" onClick={() => setAutoScrollSafe(true)}>

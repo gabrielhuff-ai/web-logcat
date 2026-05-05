@@ -91,12 +91,6 @@ export function SettingsPanel({ open, onClose, tweaks, onChange }: SettingsPanel
               onClick={() => onChange({ showHeatmap: !tweaks.showHeatmap })}
             />
           </Row>
-          <Row k="Timeline scrubber">
-            <Toggle
-              on={tweaks.showScrubber}
-              onClick={() => onChange({ showScrubber: !tweaks.showScrubber })}
-            />
-          </Row>
         </Section>
 
         <Section label="About">

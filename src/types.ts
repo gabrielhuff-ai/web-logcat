@@ -48,7 +48,6 @@ export interface Tweaks {
   showPid: boolean;
   wrapLines: boolean;
   showHeatmap: boolean;
-  showScrubber: boolean;
   /** Multiplier applied to the simulated stream rate (1 = default). */
   streamingSpeed: number;
 }

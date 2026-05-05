@@ -17,7 +17,6 @@ export const DEFAULT_TWEAKS: Tweaks = {
   showPid: false,
   wrapLines: false,
   showHeatmap: false,
-  showScrubber: false,
   streamingSpeed: 1,
 };
 

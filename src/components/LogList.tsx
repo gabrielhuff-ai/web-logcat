@@ -107,6 +107,14 @@ export function LogList({
   // Trim-anchor: consume pending compensation from App. Runs *before paint*
   // (useLayoutEffect) so the user never sees the intermediate "scrolled
   // forward" state where scrollHeight has shrunk but scrollTop hasn't.
+  //
+  // Dep is `entries` (the array reference), not `entries.length`. At the
+  // 50k hard cap each flush adds N and trims N, so `filtered.length` is
+  // invariant — depending on the length wouldn't fire the effect and the
+  // viewport would drift. The reference identity changes on every flush
+  // (filtered useMemo recomputes when logs changes), so the effect runs
+  // exactly when we need it. Cheap when there's no pending compensation.
+  //
   // Skipped if autoScroll has flipped on in the meantime (the auto-tail
   // effect above will pin to the bottom regardless).
   useLayoutEffect(() => {
@@ -117,7 +125,7 @@ export function LogList({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = Math.max(0, el.scrollTop - px);
-  }, [entries.length, autoScroll, compensationRef]);
+  }, [entries, autoScroll, compensationRef]);
 
   // Imperative jump-to-timestamp from the heatmap.
   useEffect(() => {

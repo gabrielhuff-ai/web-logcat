@@ -15,7 +15,7 @@ All components below were ported from `design/source/` and wired into
 - [x] **EmptyState** — animated USB-cable + phone illustration with staged connect animation
 - [x] **SettingsPanel** — theme segmented, 4-color accent grid, density segmented, heatmap + scrubber toggles
 - [x] **SearchOverlay** — live match count, highlights via `hl-search`, esc dismisses
-- [x] **Heatmap** + **Scrubber** — 60-cell gutter and timeline scrubber. Click heatmap → jumps to ts in log list
+- [x] **Heatmap** — 60-cell gutter on the left of the log area. Click → jumps to ts in log list. (The bottom timeline scrubber from the original design has been deleted: it visualised the same buckets as the heatmap and its viewport rectangle wasn't wired to anything actionable.)
 - [x] **Resume tail pill** — `.scroll-to-bottom` shown when `autoScroll` is off
 - [x] **Toast** — bottom-centre, used for connect/disconnect/clear/export/theme messages
 - [x] **List virtualisation** — `@tanstack/react-virtual` engages past 800 visible rows; pinned-block stays sticky outside the virtualised range
@@ -65,9 +65,6 @@ All components below were ported from `design/source/` and wired into
 - [ ] `?` keyboard shortcut to open a help dialog with the shortcut list
 - [ ] Decide whether to keep "fake data" affordance in production (or hide
   it behind `?dev=1`)
-- [ ] Wire the **Scrubber** to actually scrub the log viewport, not just
-  visualise it. Right now it renders the buckets and a fixed window
-  rectangle but `onScrub` is a no-op
 - [ ] Tighten the highlight palette: tag-typed filters currently also
   highlight pkg cells via the `tag||message` rule — verify this matches
   the design's intent or restrict it
