@@ -18,6 +18,7 @@ import { DumpsysWidget } from '../components/widgets/DumpsysWidget';
 import { FilesWidget } from '../components/widgets/FilesWidget';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
 import { ShellWidget } from '../components/widgets/ShellWidget';
+import { MirrorWidget } from '../components/widgets/MirrorWidget';
 import { StubWidget } from '../components/widgets/StubWidget';
 import type { WidgetKind } from '../types';
 
@@ -80,9 +81,9 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Screen Mirror',
     icon: Icons.Mirror,
     desc: 'scrcpy-style live device screen',
-    comp: StubWidget,
-    defaultSize: { w: 4, h: 8 },
-    enabled: false,
+    comp: MirrorWidget,
+    defaultSize: { w: 3, h: 10 },
+    enabled: true,
     maxInstances: 1,
   },
 };

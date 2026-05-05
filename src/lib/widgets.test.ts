@@ -11,12 +11,12 @@ describe('widgets registry', () => {
     expect(WIDGET_KINDS).toEqual(expected);
   });
 
-  it('has Logcat + Shell + Dumpsys + Files enabled and Mirror disabled in Phase 7+8', () => {
+  it('has all five widget kinds enabled after Phases 7+8+9', () => {
     expect(WIDGETS.logcat.enabled).toBe(true);
     expect(WIDGETS.shell.enabled).toBe(true);
     expect(WIDGETS.dumpsys.enabled).toBe(true);
     expect(WIDGETS.files.enabled).toBe(true);
-    expect(WIDGETS.mirror.enabled).toBe(false);
+    expect(WIDGETS.mirror.enabled).toBe(true);
   });
 
   it('hard-caps Mirror at 1 instance', () => {

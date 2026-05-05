@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   COLS,
+  DEFAULT_LAYOUT,
   GAP,
   MIN_H,
   MIN_W,
-  PHASE_6_DEFAULT_LAYOUT,
   ROW_PX,
   colWidth,
   placeBelow,
@@ -112,26 +112,42 @@ describe('layout: totalRows', () => {
   });
 });
 
-describe('layout: PHASE_6_DEFAULT_LAYOUT', () => {
-  it('places a full-width Logcat tile on top', () => {
-    const logcat = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'logcat');
-    expect(logcat).toBeDefined();
-    expect(logcat!.x).toBe(0);
-    expect(logcat!.y).toBe(0);
-    expect(logcat!.w).toBe(COLS);
+describe('layout: DEFAULT_LAYOUT', () => {
+  it('anchors Mirror in the left column, full height', () => {
+    const mirror = DEFAULT_LAYOUT.find((t) => t.kind === 'mirror');
+    expect(mirror).toBeDefined();
+    expect(mirror!.x).toBe(0);
+    expect(mirror!.y).toBe(0);
+    expect(mirror!.w).toBe(3);
+    expect(mirror!.h).toBe(10);
   });
 
-  it('places a Shell tile directly below the Logcat tile', () => {
-    const logcat = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'logcat')!;
-    const shell = PHASE_6_DEFAULT_LAYOUT.find((t) => t.kind === 'shell');
+  it('places Logcat top-right of Mirror, 9 cols wide', () => {
+    const logcat = DEFAULT_LAYOUT.find((t) => t.kind === 'logcat');
+    expect(logcat).toBeDefined();
+    expect(logcat!.x).toBe(3);
+    expect(logcat!.y).toBe(0);
+    expect(logcat!.w).toBe(9);
+    expect(logcat!.h).toBe(6);
+  });
+
+  it('places Shell + Dumpsys in the bottom-right cluster', () => {
+    const shell = DEFAULT_LAYOUT.find((t) => t.kind === 'shell');
+    const dumpsys = DEFAULT_LAYOUT.find((t) => t.kind === 'dumpsys');
     expect(shell).toBeDefined();
-    expect(shell!.y).toBe(logcat.y + logcat.h);
+    expect(dumpsys).toBeDefined();
+    expect(shell!.x).toBe(3);
+    expect(shell!.y).toBe(6);
     expect(shell!.w).toBe(5);
     expect(shell!.h).toBe(4);
+    expect(dumpsys!.x).toBe(8);
+    expect(dumpsys!.y).toBe(6);
+    expect(dumpsys!.w).toBe(4);
+    expect(dumpsys!.h).toBe(4);
   });
 
-  it('contains no tiles for kinds whose widget has not shipped yet', () => {
-    const kinds = PHASE_6_DEFAULT_LAYOUT.map((t) => t.kind).sort();
-    expect(kinds).toEqual(['logcat', 'shell']);
+  it('does not include Files (palette-only per HANDOFF)', () => {
+    const kinds = DEFAULT_LAYOUT.map((t) => t.kind);
+    expect(kinds).not.toContain('files');
   });
 });
