@@ -1,0 +1,79 @@
+name: Deploy
+
+# Deploys to GitHub Pages (zero-cost, HTTPS by default — required for WebUSB).
+#
+# Two environments, both served from the same Pages site:
+#   https://<owner>.github.io/web-logcat/          ← production  (release branch)
+#   https://<owner>.github.io/web-logcat/staging/  ← staging     (main branch)
+#
+# Implementation: the `gh-pages` branch is the source of truth for the
+# published site. Production deploys write to the branch root and *keep*
+# the existing /staging/ folder. Staging deploys write only into /staging/
+# and keep everything else.
+#
+# One-time setup in GitHub: Settings → Pages → Source = "Deploy from a
+# branch" → branch = gh-pages, folder = / (root).
+
+on:
+  push:
+    branches: [main, release]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Resolve target environment
+        id: env
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/release" ]; then
+            # Production: deploy to branch root. keep_files=true so the
+            # /staging/ subtree (managed by the staging deploy) survives.
+            # Trade-off: orphaned production assets aren't cleaned up
+            # automatically — Vite hashes filenames, so bloat is bounded.
+            echo "name=production" >> "$GITHUB_OUTPUT"
+            echo "base=/web-logcat/" >> "$GITHUB_OUTPUT"
+            echo "destination_dir=." >> "$GITHUB_OUTPUT"
+            echo "keep_files=true" >> "$GITHUB_OUTPUT"
+          else
+            # Staging: deploy to /staging/ subdir. keep_files=false so old
+            # staging assets are cleaned. The branch root (production)
+            # isn't touched because destination_dir scopes the wipe.
+            echo "name=staging" >> "$GITHUB_OUTPUT"
+            echo "base=/web-logcat/staging/" >> "$GITHUB_OUTPUT"
+            echo "destination_dir=staging" >> "$GITHUB_OUTPUT"
+            echo "keep_files=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (${{ steps.env.outputs.name }})
+        run: npm run build
+        env:
+          BASE_PATH: ${{ steps.env.outputs.base }}
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.env.outputs.destination_dir }}
+          keep_files: ${{ steps.env.outputs.keep_files }}
+          commit_message: "deploy ${{ steps.env.outputs.name }}: ${{ github.sha }}"
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com

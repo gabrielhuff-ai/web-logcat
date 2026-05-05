@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, release]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      # ESLint is configured but tolerated for now — flip --max-warnings 0
+      # in package.json once the codebase is fully ported.
+      - run: npm run lint || true
+      - run: npm run build
+        env:
+          # Build with the production base path so the output matches what
+          # gets deployed; the artifact itself isn't published from CI.
+          BASE_PATH: /web-logcat/
