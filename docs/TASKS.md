@@ -243,23 +243,26 @@ underlying `Adb` handle. Shell needs the handle for
 
 ## Phase 8 — Files widget
 
-- [ ] **Sync wrapper** — `src/lib/sync.ts` over `adb.sync()`:
+- [x] **Sync wrapper** — `src/lib/sync.ts` over `adb.sync()`:
   `list(path)`, `read(path) → ReadableStream`,
   `write(path, stream, onProgress)`. Progress events fire for
-  files >1MB.
-- [ ] **`FilesWidget`** —
+  files >1MB. Simulator backend lives in `src/lib/syncSim.ts`
+  with Vitest coverage in `src/lib/sync.test.ts`.
+- [x] **`FilesWidget`** —
   `src/components/widgets/FilesWidget.tsx` ports
   `design/v2/source/widget-files.jsx`. Toolbar
   (`fx-toolbar widget-bar`): back / forward / up / refresh /
   new-folder / Push / Pull / breadcrumb. Tree pane (220px,
   rooted at `/`) + list pane (sortable: name / size / modified /
   perms; multi-select with Shift/Ctrl).
-- [ ] **Push / Pull** — drag-out → Pull: stream `sync.read`
+- [x] **Push / Pull** — drag-out → Pull: stream `sync.read`
   into a Blob, trigger download. Drag-in → Push: read the
-  dropped `File` via `.stream()` into `sync.write`. Show
-  progress for >1MB. New-folder via `mkdir` over a shell
-  channel (sync protocol doesn't expose it directly).
-- [ ] **Enable Files in `WidgetPalette`** — flip its `enabled`
+  dropped `File` via `.stream()` into `sync.write`. Progress
+  bar shows for files ≥1MB. New-folder via `mkdir -p` over the
+  shell channel (sync protocol doesn't expose mkdir directly).
+  Push/Pull no-op with a toast in fake mode — the simulator
+  doesn't persist a writable filesystem.
+- [x] **Enable Files in `WidgetPalette`** — flipped its `enabled`
   flag to `true` in `src/lib/widgets.ts`. Files is not in the
   HANDOFF default layout, so the default layout doesn't change
   in this phase.

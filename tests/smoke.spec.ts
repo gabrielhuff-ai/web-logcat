@@ -101,14 +101,35 @@ test.describe('dashboard', () => {
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
-    // Phase 6 ships Logcat + Shell; the others are disabled stubs.
+    // Phase 8 ships Logcat + Shell + Files; Dumpsys + Mirror are
+    // still disabled stubs.
     const cards = page.locator('.palette-card');
     await expect(cards).toHaveCount(5);
     await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
     await expect(cards.filter({ hasText: 'Shell' })).not.toBeDisabled();
+    await expect(cards.filter({ hasText: 'Files' })).not.toBeDisabled();
     await expect(cards.filter({ hasText: 'Dumpsys' })).toBeDisabled();
-    await expect(cards.filter({ hasText: 'Files' })).toBeDisabled();
     await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
+  });
+
+  test('adding a Files widget renders the toolbar + sdcard tree', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(2);
+
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
+    await expect(page.locator('.tile')).toHaveCount(3);
+
+    const fxTile = page.locator('.fx-widget').first();
+    await expect(fxTile).toBeVisible();
+    // Toolbar carries the breadcrumb pointing at the canned default
+    // path (`/sdcard/Download`) — confirms the simulator list resolved.
+    await expect(fxTile.locator('.fx-crumb.current')).toContainText('Download');
+    // Files row renders for one of the canned simulator entries.
+    await expect(fxTile.locator('.fx-row').filter({ hasText: 'invoice-202411.pdf' })).toBeVisible();
   });
 
   test('adding a Logcat widget yields an extra tile with independent filters', async ({
