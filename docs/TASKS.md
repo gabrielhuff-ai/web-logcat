@@ -250,12 +250,16 @@ between the first and last item — there are no users to shield.
 Highest-risk, highest-reward. Tasks split fine-grained because each is
 its own PR-sized milestone with a verifiable demo.
 
-- [ ] **Vendor scrcpy server + add deps** — pin a known-good
-  `scrcpy-server.jar` (Apache-2.0; suggest v2.7) under
+- [ ] **Vendor scrcpy server + add deps** — pin
+  `scrcpy-server-v2.7.jar` (Apache-2.0; widest device support
+  while staying current — scrcpy v2.7 still supports Android 5.0+
+  / API 21, which covers virtually all in-use devices) under
   `public/scrcpy/scrcpy-server-v2.7.jar`. Add
   `@yume-chan/scrcpy` + `@yume-chan/scrcpy-decoder-webcodecs`
   to `package.json` and to CLAUDE.md's "Acceptable additions"
-  list.
+  list. If yume-chan's current release targets a different scrcpy
+  version, follow yume-chan's compatibility matrix instead — note
+  the chosen pair in `src/lib/scrcpy.ts`.
 - [ ] **Static `MirrorWidget` skeleton** —
   `src/components/widgets/MirrorWidget.tsx` ports
   `design/v2/source/widget-mirror.jsx` pixel-perfectly: SVG
@@ -293,13 +297,17 @@ its own PR-sized milestone with a verifiable demo.
   the design CSS.
 - [ ] **Screenshot** — snapshot the current `VideoFrame`
   to a 2D canvas → PNG via `canvas.toBlob()`.
+- [ ] **Hard-cap concurrent Mirror tiles at 1** — registry
+  entry gets `maxInstances: 1`; `TileGrid.addTile` and
+  `WidgetPalette` consult it. Mirror's palette card is disabled
+  with tooltip "Only one mirror at a time" while a Mirror tile
+  exists. Product decision — keeps the scrcpy server count and
+  USB bandwidth predictable.
 - [ ] **Latency / jank pass** — Pixel 8 Pro, USB-2 and USB-3,
   measure end-to-end latency with a stopwatch + tap-flash
   test app. Target ≤150ms USB-2, ≤80ms USB-3. Document the
-  measured number in this entry. If two-Mirror-tile concurrency
-  proves brittle, soft-cap at 1 with a palette tooltip.
-- [ ] **Enable Mirror in `WidgetPalette`** (with the cap from
-  the previous step if applied).
+  measured number in this entry.
+- [ ] **Enable Mirror in `WidgetPalette`**.
 
 ## Phase 10 — Polish
 
