@@ -190,7 +190,8 @@ test.describe('dashboard', () => {
 
     // The default layout already includes a Mirror tile.
     await expect(page.locator('.mr-widget')).toHaveCount(1);
-    await expect(page.locator('.mr-bezel')).toBeVisible();
+    // The decorative SVG bezel was removed in the UI-tweaks pass; the
+    // simulated app frame now fills the tile body edge-to-edge.
     await expect(page.locator('.mirror-svg')).toBeVisible();
 
     // The three button groups + 8 hardware buttons all rendered.
