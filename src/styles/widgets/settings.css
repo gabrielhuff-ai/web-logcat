@@ -1,0 +1,235 @@
+/* =========================================================================
+ * Per-widget settings modal — Phase 11
+ * Mirrors the WidgetPalette's scrim + dialog visual language. Class
+ * prefix `.ws-*` (widget settings).
+ * ========================================================================= */
+
+.ws-back {
+  position: fixed;
+  inset: 0;
+  background: oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 60;
+  animation: fadeIn 200ms var(--ease-out);
+}
+.ws-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: oklch(from var(--bg-1) l c h / 0.95);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 80px oklch(0 0 0 / 0.6);
+  z-index: 61;
+  overflow: hidden;
+  animation: paletteIn 240ms var(--ease-out);
+}
+.ws-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--glass-line);
+  flex-shrink: 0;
+}
+.ws-head h3 {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--fg-0);
+}
+.ws-body {
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+.ws-section {
+  padding: 14px 18px 6px;
+  border-bottom: 1px solid var(--glass-line);
+}
+.ws-section:last-child {
+  border-bottom: 0;
+}
+.ws-section-label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: 10px;
+}
+.ws-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  gap: 16px;
+}
+.ws-row-key {
+  font-size: var(--t-sm);
+  color: var(--fg-1);
+}
+.ws-row-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Segmented control — matches the existing `.seg` style from the
+ * appearance popover but scoped under the modal so it doesn't leak out. */
+.ws-seg {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg-2);
+  border-radius: var(--r-md);
+  gap: 2px;
+}
+.ws-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+  transition: all var(--dur-fast, 120ms) var(--ease-out);
+}
+.ws-seg button.on {
+  background: var(--bg-0);
+  color: var(--fg-0);
+  box-shadow: var(--shadow-1);
+}
+
+/* Toggle — the v1 SettingsPanel pill. */
+.ws-toggle {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-3);
+  border-radius: 999px;
+  position: relative;
+  transition: background-color 120ms var(--ease-out);
+}
+.ws-toggle.on {
+  background: var(--accent);
+}
+.ws-toggle-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--fg-0);
+  border-radius: 50%;
+  transition: transform 160ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+.ws-toggle.on .ws-toggle-dot {
+  transform: translateX(16px);
+  background: oklch(1 0 0);
+}
+
+/* Slider (font-size). Native input range styled to match the modal. */
+.ws-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ws-slider input[type='range'] {
+  width: 130px;
+}
+.ws-slider-label {
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Text input. */
+.ws-text {
+  background: var(--bg-2);
+  border: 1px solid var(--glass-line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--fg-0);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  outline: 0;
+  min-width: 200px;
+}
+.ws-text:focus {
+  border-color: var(--accent);
+}
+
+/* Plain action button used for "Clear filters". */
+.ws-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--glass-line);
+  border-radius: 6px;
+  padding: 5px 12px;
+  color: var(--fg-1);
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.ws-btn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.ws-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inline level pill row inside the modal — reuses the v1 `.lvl-pill`
+ * styles already defined in components.css; we only need a flex
+ * container that wraps. */
+.ws-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+/* =========================================================================
+ * Per-widget font size — `--widget-font-size` is set by each widget's
+ * root container from its `useTileSettings` value. The bar / toolbar
+ * keeps the design's fixed sizes; only the body content scales.
+ * ========================================================================= */
+
+.lc-widget .row {
+  font-size: var(--widget-font-size, var(--t-sm));
+}
+.sh-widget .sh-scroll {
+  font-size: var(--widget-font-size, 12px);
+}
+.ds-widget .ds-card-row,
+.ds-widget .ds-raw {
+  font-size: var(--widget-font-size, var(--t-sm));
+}
+.fx-widget .fx-row {
+  font-size: var(--widget-font-size, var(--t-sm));
+}
+.mr-widget .mr-recording-pill,
+.mr-widget .mr-inline-notice {
+  font-size: var(--widget-font-size, var(--t-sm));
+}
+
+/* =========================================================================
+ * Logcat density — `data-density` on the widget body flips line-height
+ * and row padding.
+ * ========================================================================= */
+
+.lc-widget[data-density='comfortable'] .row {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  line-height: 1.55;
+}
+.lc-widget[data-density='compact'] .row {
+  padding-top: 1px;
+  padding-bottom: 1px;
+  line-height: 1.4;
+}

@@ -1,21 +1,25 @@
 // Logcat widget — the entire v1 logcat experience scoped to one tile.
 //
-// Owned by this component (per-instance state):
-//   - filters / search / paused / autoScroll / onlyMatches
-//   - levelEnabled / pinned / expanded
-//   - the rate display
+// Per-tile settings (font size, density, heatmap, wrap, column toggles,
+// level toggles, filters, autoScroll, paused) live in `useTileSettings`
+// and are shared with the per-widget settings modal. Bar controls and
+// modal controls write through the same setter — single source of truth.
+// Ephemeral state (logs, pinned, search overlay) stays on local
+// `useState`.
 //
 // Read from context:
 //   - device                  — `useAdb()` (so the widget re-mounts cleanly
 //                                on device change)
 //   - shared log stream       — `useLogStream()` (single upstream → N
 //                                widget subscribers; see lib/logStream.ts)
-//   - tweaks + showToast      — `useDashboardChrome()` (for theme-driven
-//                                density / display toggles + toast on clear)
+//   - global tweaks + toast   — `useDashboardChrome()` (global theme /
+//                                density acts as the dashboard-wide default
+//                                for fields the per-tile settings don't
+//                                override)
 //
-// Filter persistence: `weblogcat:filters:<serial>:<tileId>` extends the
-// v1 `weblogcat:filters:<serial>` key with the tile id so two Logcat
-// tiles on the same device get independent chip bars.
+// Filter persistence: the v1/v2 `weblogcat:filters:<serial>:<tileId>` key
+// is folded into `settings.filters` by the migration registered in
+// `logcat/logcatSettings.ts` so existing users don't lose their chips.
 //
 // Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) only fire when this
 // widget owns focus — the listener is mounted on a `tabIndex=-1` wrapper
@@ -30,6 +34,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { FilterBar } from '../FilterBar';
@@ -43,41 +48,86 @@ import { KNOWN_PROCESSES, KNOWN_TAGS } from '../../lib/knownNames';
 import { useAdb } from '../../lib/adbContext';
 import { useLogStream } from '../../lib/logStreamContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
+import { useTileSettings } from '../../lib/tileSettings';
+import { LOGCAT_DEFAULTS, type LogcatSettings } from './logcat/logcatSettings';
 import type {
   Filter,
   LevelEnabled,
   LogEntry,
   LogLevel,
+  Tweaks,
 } from '../../types';
 
 export interface LogcatWidgetProps {
-  /** Stable id of the host tile — used to namespace filter persistence. */
+  /** Stable id of the host tile — used to namespace per-instance state. */
   tileId: string;
 }
 
 export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const { device } = useAdb();
   const hub = useLogStream();
-  const { tweaks, setTweaks, showToast } = useDashboardChrome();
+  const { tweaks } = useDashboardChrome();
+  const [settings, setSettings] = useTileSettings<LogcatSettings>(
+    tileId,
+    'logcat',
+    LOGCAT_DEFAULTS,
+  );
 
+  // ---- Filter materialisation -------------------------------------------
+  // The persisted shape is the slim `{ type, value }` form; rebuild full
+  // `Filter` objects (with id + color) on hydration. We track a parallel
+  // live array to avoid re-deriving on every render.
+  const [filters, setFilters] = useState<Filter[]>(() => slimToFull(settings.filters));
+  const filtersSlimRef = useRef(settings.filters);
+  useEffect(() => {
+    // Detect external (modal) writes to filters and re-materialise.
+    if (filtersSlimRef.current !== settings.filters) {
+      filtersSlimRef.current = settings.filters;
+      const incoming = slimToFull(settings.filters);
+      // Skip the rebuild if it would yield the same effective list, to
+      // avoid clobbering the live `id` numbers when the user is editing.
+      if (!sameSlim(filters, settings.filters)) setFilters(incoming);
+    }
+  }, [settings.filters, filters]);
+  const setFiltersBoth = useCallback(
+    (next: Filter[]) => {
+      setFilters(next);
+      const slim = next.map(({ type, value }) => ({ type, value }));
+      filtersSlimRef.current = slim;
+      setSettings({ filters: slim });
+    },
+    [setSettings],
+  );
+
+  // ---- Ephemeral state ---------------------------------------------------
   const [logs, setLogs] = useState<LogEntry[]>(() => [...hub.snapshot()]);
-
-  const [filters, setFilters] = useState<Filter[]>([]);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [onlyMatches, setOnlyMatches] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [levelEnabled, setLevelEnabled] = useState<LevelEnabled>({
-    V: true,
-    D: true,
-    I: true,
-    W: true,
-    E: true,
-  });
   const [pinned, setPinned] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [rate, setRate] = useState(0);
+
+  // ---- Settings shortcuts ------------------------------------------------
+  const paused = settings.paused;
+  const autoScroll = settings.autoScroll;
+  const levelEnabled = settings.levelEnabled;
+
+  const setPaused = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) => {
+      const next = typeof v === 'function' ? (v as (prev: boolean) => boolean)(paused) : v;
+      setSettings({ paused: next });
+    },
+    [paused, setSettings],
+  );
+  const setAutoScroll = useCallback(
+    (v: boolean) => setSettings({ autoScroll: v }),
+    [setSettings],
+  );
+  const setLevelEnabled = useCallback(
+    (v: LevelEnabled) => setSettings({ levelEnabled: v }),
+    [setSettings],
+  );
 
   const pausedRef = useRef(paused);
   useEffect(() => {
@@ -85,11 +135,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   }, [paused]);
 
   // ---- Subscribe to the shared log stream --------------------------------
-  // Snapshots replace the whole buffer (used on connect / clear); appends
-  // are deltas. The hub's ring-buffer trim happens upstream, so this
-  // widget's `logs` mirrors the hub's view exactly when not paused.
-  // Per-tile pause is honoured by dropping appends but keeping the
-  // current `logs` snapshot — matches v1 behaviour.
   useEffect(() => {
     const unsubscribe = hub.subscribe((entries, kind) => {
       if (kind === 'snapshot') {
@@ -99,7 +144,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
       if (pausedRef.current) return;
       setLogs((prev) => {
         const next = prev.concat(entries);
-        // Mirror the hub's ring trim so per-widget memory stays bounded.
         const cap = hubCap(hub);
         if (next.length > cap) next.splice(0, next.length - cap);
         return next;
@@ -136,41 +180,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     else if (prev > 0 && curr === 0) setOnlyMatches(false);
     prevFilterCountRef.current = curr;
   }, [filters.length]);
-
-  // ---- Filter persistence (per device serial × tile id) ------------------
-  // Extends the v1 `weblogcat:filters:<serial>` key with the tile id so
-  // two Logcat tiles on the same device get independent chip bars.
-  const filtersKey = device ? `weblogcat:filters:${device.serial}:${tileId}` : null;
-  useEffect(() => {
-    if (!filtersKey) return;
-    let parsed: Array<{ type: string; value: string }>;
-    try {
-      const raw = localStorage.getItem(filtersKey);
-      if (!raw) return;
-      parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-    } catch {
-      return;
-    }
-    const restored: Filter[] = [];
-    for (const p of parsed) {
-      if (typeof p?.value !== 'string') continue;
-      const input = p.type === 'message' ? p.value : `${p.type}:${p.value}`;
-      const f = makeFilter(input);
-      if (f) restored.push(f);
-    }
-    if (restored.length > 0) setFilters(restored);
-  }, [filtersKey]);
-
-  useEffect(() => {
-    if (!filtersKey) return;
-    try {
-      const slim = filters.map(({ type, value }) => ({ type, value }));
-      localStorage.setItem(filtersKey, JSON.stringify(slim));
-    } catch {
-      // ignore quota / privacy mode
-    }
-  }, [filtersKey, filters]);
 
   // ---- Derived data ------------------------------------------------------
   const knownProcesses = useMemo(() => {
@@ -274,10 +283,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     });
   }, []);
 
-  // Per-widget "clear" only clears the local view — clearing the shared
-  // ring buffer would yank logs out from under sibling Logcat tiles.
-  // Decision: this matches the v1 semantics (Clear is a per-viewer concept)
-  // and gives users an obvious escape hatch from a noisy state.
+  const { showToast } = useDashboardChrome();
   const onClear = useCallback(() => {
     setLogs([]);
     setPinned(new Set());
@@ -285,11 +291,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     showToast('Logs cleared');
   }, [showToast]);
 
-  // Export the currently-visible (filter-applied) buffer to a `.log`
-  // file. Format mirrors `logcat -v threadtime` — see `formatExportLine`.
-  // Ported from v1 `app.jsx` `onExport`; the v2 filename uses the
-  // `weblogcat-<serial>-<timestamp>.log` shape so multiple exports from
-  // the same device sort by capture time.
   const onExport = useCallback(() => {
     const lines = filtered.map(formatExportLine).join('\n');
     const blob = new Blob([lines + (lines ? '\n' : '')], { type: 'text/plain' });
@@ -305,8 +306,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   }, [filtered, device, showToast]);
 
   // ---- Per-widget keyboard shortcuts -------------------------------------
-  // Only fire when focus is inside this widget. We don't want global
-  // ⌘F to toggle search on every Logcat tile at once.
   const rootRef = useRef<HTMLDivElement>(null);
   const focusFilterRef = useRef<(() => void) | null>(null);
   const scrollToTsRef = useRef<((ts: number) => void) | null>(null);
@@ -346,11 +345,8 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchOpen, onClear]);
+  }, [searchOpen, onClear, setPaused]);
 
-  // Click anywhere in the widget body grabs focus for shortcut routing.
-  // The wrapper has `tabIndex={-1}` so it's programmatically focusable
-  // without entering the tab order.
   const onMouseDownWidget = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const root = rootRef.current;
     const tgt = e.target as HTMLElement;
@@ -358,6 +354,25 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
     root.focus();
   }, []);
+
+  // ---- Compose a Tweaks-shaped object for LogList ------------------------
+  // LogList's API takes the global Tweaks; per-tile settings override the
+  // overridable subset. Density still comes from the global tweak (it's
+  // a dashboard-wide preference today; the modal could promote it to a
+  // per-tile field in a follow-up).
+  const effectiveTweaks: Tweaks = useMemo(
+    () => ({
+      ...tweaks,
+      showTimestamps: settings.showTimestamp,
+      showPid: settings.showPid,
+      showProcess: settings.showProcess,
+      showTag: settings.showTag,
+      showLevel: settings.showLevel,
+      wrapLines: settings.wrap,
+      showHeatmap: settings.heatmap,
+    }),
+    [tweaks, settings],
+  );
 
   if (!device) {
     return (
@@ -367,16 +382,22 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     );
   }
 
+  const widgetStyle: CSSProperties = {
+    ['--widget-font-size' as string]: `${settings.fontSize}px`,
+  } as CSSProperties;
+
   return (
     <div
       className="lc-widget"
       ref={rootRef}
       tabIndex={-1}
       onMouseDown={onMouseDownWidget}
+      data-density={settings.density}
+      style={widgetStyle}
     >
       <FilterBar
         filters={filters}
-        setFilters={setFilters}
+        setFilters={setFiltersBoth}
         onlyMatches={onlyMatches}
         setOnlyMatches={setOnlyMatches}
         knownProcesses={knownProcesses}
@@ -386,8 +407,8 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         onClear={onClear}
         autoScroll={autoScroll}
         setAutoScroll={setAutoScroll}
-        wrapLines={tweaks.wrapLines}
-        setWrapLines={(v) => setTweaks({ wrapLines: v })}
+        wrapLines={settings.wrap}
+        setWrapLines={(v) => setSettings({ wrap: v })}
         onExport={onExport}
         registerFocusHandler={(fn) => {
           focusFilterRef.current = fn;
@@ -403,20 +424,20 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         pinnedCount={pinned.size}
         onClearPinned={() => setPinned(new Set())}
         paused={paused}
-        showTimestamps={tweaks.showTimestamps}
-        setShowTimestamps={(v) => setTweaks({ showTimestamps: v })}
-        showPid={tweaks.showPid}
-        setShowPid={(v) => setTweaks({ showPid: v })}
-        showProcess={tweaks.showProcess}
-        setShowProcess={(v) => setTweaks({ showProcess: v })}
-        showTag={tweaks.showTag}
-        setShowTag={(v) => setTweaks({ showTag: v })}
-        showLevel={tweaks.showLevel}
-        setShowLevel={(v) => setTweaks({ showLevel: v })}
+        showTimestamps={settings.showTimestamp}
+        setShowTimestamps={(v) => setSettings({ showTimestamp: v })}
+        showPid={settings.showPid}
+        setShowPid={(v) => setSettings({ showPid: v })}
+        showProcess={settings.showProcess}
+        setShowProcess={(v) => setSettings({ showProcess: v })}
+        showTag={settings.showTag}
+        setShowTag={(v) => setSettings({ showTag: v })}
+        showLevel={settings.showLevel}
+        setShowLevel={(v) => setSettings({ showLevel: v })}
       />
 
       <div className="log-area">
-        {tweaks.showHeatmap && (
+        {settings.heatmap && (
           <Heatmap
             buckets={buckets}
             onJumpToSecond={(i) => {
@@ -435,7 +456,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           expanded={expanded}
           onToggleExpand={toggleExpand}
           crashHeads={crashHeads}
-          tweaks={tweaks}
+          tweaks={effectiveTweaks}
           autoScroll={autoScroll}
           setAutoScroll={setAutoScroll}
           deviceModel={device.model}
@@ -472,8 +493,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   );
 }
 
-/** Read the hub's effective cap. Avoids importing the constant directly so
- *  if the hub ever exposes a per-instance cap we pick it up. */
+/** Read the hub's effective cap. Avoids importing the constant directly. */
 function hubCap(_hub: unknown): number {
   return 5000;
 }
@@ -486,7 +506,6 @@ function closestCrashHead(entry: LogEntry, logs: LogEntry[], heads: Set<number>)
   return -1;
 }
 
-/** `logcat -v threadtime` shape: `MM-DD HH:MM:SS.mmm  PID  TID L tag: msg`. */
 function formatExportLine(e: LogEntry): string {
   const d = new Date(e.ts);
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
@@ -498,11 +517,31 @@ function formatExportLine(e: LogEntry): string {
   return `${ts} ${pid} ${tid} ${e.level} ${e.tag}: ${e.message}`;
 }
 
-/** Filename stamp, `YYYY-MM-DD-HHMMSS` in local time. */
 function formatExportStamp(d: Date): string {
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-` +
     `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
   );
+}
+
+function slimToFull(slim: ReadonlyArray<{ type: Filter['type']; value: string }>): Filter[] {
+  const out: Filter[] = [];
+  for (const s of slim) {
+    const input = s.type === 'message' ? s.value : `${s.type}:${s.value}`;
+    const f = makeFilter(input);
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+function sameSlim(
+  full: Filter[],
+  slim: ReadonlyArray<{ type: Filter['type']; value: string }>,
+): boolean {
+  if (full.length !== slim.length) return false;
+  for (let i = 0; i < full.length; i++) {
+    if (full[i].type !== slim[i].type || full[i].value !== slim[i].value) return false;
+  }
+  return true;
 }
