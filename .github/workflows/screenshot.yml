@@ -1,9 +1,11 @@
 name: Capture screenshot
 
 # Refreshes the README screenshot whenever main changes (and on demand
-# from the Actions tab). Pushes from this workflow use GITHUB_TOKEN, so
-# they don't trigger any other workflows — including this one — which
-# avoids self-loops without needing a `[skip ci]` convention.
+# from the Actions tab). Branch protection on `main` blocks direct
+# pushes from `GITHUB_TOKEN`, so the workflow opens a PR with the
+# refreshed image instead of committing on top. The PR auto-merges
+# once required checks pass (gated on the same `Allow auto-merge`
+# repo setting `screenshot.yml` itself depends on).
 
 on:
   push:
@@ -16,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: screenshot
@@ -52,14 +55,23 @@ jobs:
           node scripts/capture-screenshot.mjs
           kill "$PREVIEW_PID" 2>/dev/null || true
 
-      - name: Commit if changed
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/screenshot.png
-          if git diff --staged --quiet; then
-            echo "screenshot unchanged; nothing to commit"
-          else
-            git commit -m "ci: refresh README screenshot"
-            git push
-          fi
+      - name: Open PR if screenshot changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # Stable branch name so re-runs update the same PR rather than
+          # spawning new ones; the action force-pushes the latest
+          # screenshot onto it.
+          branch: ci/screenshot-refresh
+          base: main
+          commit-message: 'ci: refresh README screenshot'
+          title: 'ci: refresh README screenshot'
+          body: |
+            Auto-generated from
+            [`screenshot.yml`](.github/workflows/screenshot.yml). Closes
+            and reopens whenever the rendered dashboard differs from the
+            version checked in. Safe to merge — only `docs/screenshot.png`
+            changes.
+          add-paths: docs/screenshot.png
+          author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          delete-branch: true
