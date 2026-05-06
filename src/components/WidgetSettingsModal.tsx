@@ -3,13 +3,20 @@
 // scroll body chrome. Closed via Esc, scrim click, and the close button
 // (matching the palette's three-way dismissal).
 //
-// Each `<Tile/>` mounts its own modal instance; the modal is invisible
-// until `open === true`, so unrelated tiles pay zero cost. The body
-// components read / write through `useTileSettings` so changes flow
-// straight back into the rendered widget.
+// The scrim + dialog are portaled to `document.body` so they escape the
+// nearest `.tile`'s `backdrop-filter` containing block (which would
+// otherwise re-anchor `position: fixed` to the tile and clip the
+// modal). With the portal, the scrim spans the full viewport and blurs
+// the entire app behind it.
+//
+// Each `<Tile/>` mounts its own modal instance; the modal renders
+// nothing until `open === true`, so unrelated tiles pay zero cost. The
+// body components read / write through `useTileSettings` so changes
+// flow straight back into the rendered widget.
 
 import '../styles/widgets/settings.css';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
 import type { WidgetKind } from '../types';
@@ -38,7 +45,7 @@ export function WidgetSettingsModal({ tileId, kind, onClose }: WidgetSettingsMod
   const def = WIDGETS[kind];
   const title = `${def.name} · settings`;
 
-  return (
+  return createPortal(
     <>
       <div className="ws-back" onClick={onClose} />
       <div className="ws-modal" role="dialog" aria-label={title}>
@@ -50,7 +57,8 @@ export function WidgetSettingsModal({ tileId, kind, onClose }: WidgetSettingsMod
         </div>
         <div className="ws-body">{renderBody(kind, tileId)}</div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
 
