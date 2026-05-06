@@ -17,9 +17,8 @@ import * as Icons from '../components/Icons';
 import { DumpsysWidget } from '../components/widgets/DumpsysWidget';
 import { FilesWidget } from '../components/widgets/FilesWidget';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
-import { ShellWidget } from '../components/widgets/ShellWidget';
 import { MirrorWidget } from '../components/widgets/MirrorWidget';
-import { StubWidget } from '../components/widgets/StubWidget';
+import { ShellWidget } from '../components/widgets/ShellWidget';
 import type { WidgetKind } from '../types';
 
 export interface WidgetProps {
