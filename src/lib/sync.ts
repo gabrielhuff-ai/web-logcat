@@ -90,6 +90,31 @@ export function createSync(adb: Adb | null): SyncFs {
 }
 
 // ---------------------------------------------------------------------------
+// Error helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-wrap an error from yume-chan with operation context so the toast
+ * the widget shows tells the user *what* failed (push vs. pull, on which
+ * path) rather than just surfacing the raw deserializer message.
+ *
+ * `ExactReadableEndedError` is the one we see most: it bubbles up when
+ * the device or transport closes the sync socket mid-response (no FAIL
+ * frame). The user's only signal is the toast, so spell out what to try.
+ */
+function annotateSyncError(e: unknown, op: 'push' | 'pull', path: string): Error {
+  const original = e instanceof Error ? e : new Error(String(e));
+  if (/ExactReadable ended/i.test(original.message)) {
+    return new Error(
+      `${op === 'push' ? 'Push' : 'Pull'} failed: device closed the ` +
+        `sync channel for ${path}. This usually means a permissions or ` +
+        `path error — try a writable directory like /sdcard/Download.`,
+    );
+  }
+  return new Error(`${op === 'push' ? 'Push' : 'Pull'} failed: ${original.message}`);
+}
+
+// ---------------------------------------------------------------------------
 // Real ADB-backed implementation.
 // ---------------------------------------------------------------------------
 
@@ -139,14 +164,18 @@ function createRealSync(adb: Adb): SyncFs {
       let reader: AnyReader | null = null;
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
-          if (!reader) {
-            const s = await openSync();
-            const inner = s.read(path) as unknown as { getReader(): AnyReader };
-            reader = inner.getReader();
+          try {
+            if (!reader) {
+              const s = await openSync();
+              const inner = s.read(path) as unknown as { getReader(): AnyReader };
+              reader = inner.getReader();
+            }
+            const { done, value } = await reader.read();
+            if (done) controller.close();
+            else if (value) controller.enqueue(value);
+          } catch (e) {
+            controller.error(annotateSyncError(e, 'pull', path));
           }
-          const { done, value } = await reader.read();
-          if (done) controller.close();
-          else if (value) controller.enqueue(value);
         },
         async cancel() {
           try {
@@ -159,7 +188,12 @@ function createRealSync(adb: Adb): SyncFs {
     },
 
     async write(path, stream, options) {
-      const s = await openSync();
+      let s;
+      try {
+        s = await openSync();
+      } catch (e) {
+        throw annotateSyncError(e, 'push', path);
+      }
       const onProgress = options?.onProgress;
       const total = options?.total ?? null;
       let bytes = 0;
@@ -186,13 +220,17 @@ function createRealSync(adb: Adb): SyncFs {
       // yume-chan's `write` accepts MaybeConsumable<Uint8Array>. A plain
       // `ReadableStream<Uint8Array>` flows through unchanged because of
       // the `T | Consumable<T>` union — no wrapping needed.
-      await s.write({
-        filename: path,
-        // Cast: the widget gives us the global ReadableStream from File.stream();
-        // yume-chan re-exports its own type-compatible shape from stream-extra.
-        // The runtime shape is identical (Web Streams).
-        file: counting as unknown as Parameters<typeof s.write>[0]['file'],
-      });
+      try {
+        await s.write({
+          filename: path,
+          // Cast: the widget gives us the global ReadableStream from File.stream();
+          // yume-chan re-exports its own type-compatible shape from stream-extra.
+          // The runtime shape is identical (Web Streams).
+          file: counting as unknown as Parameters<typeof s.write>[0]['file'],
+        });
+      } catch (e) {
+        throw annotateSyncError(e, 'push', path);
+      }
 
       // Final tick — if the stream produced fewer bytes than expected
       // (e.g. seek), still flush the last value so the UI lands at 100%.

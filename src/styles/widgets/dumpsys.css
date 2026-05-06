@@ -388,13 +388,17 @@
   height: 64px;
   margin-top: 10px;
   padding: 4px 0;
+  /* Real `dumpsys gfxinfo` HISTOGRAM lines can hold ~150 buckets. Without
+     clipping the overflow, narrow widget widths let the bars spill past
+     the card edge and into adjacent tiles. */
+  overflow: hidden;
 }
 .ds-histogram-col {
   flex: 1;
   display: flex;
   align-items: flex-end;
   height: 100%;
-  min-width: 4px;
+  min-width: 0;
 }
 .ds-histogram-bar {
   width: 100%;

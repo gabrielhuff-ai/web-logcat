@@ -10,8 +10,13 @@
 //
 // Plain ESM (no TypeScript) so we can run it under `node` directly
 // without spinning up tsx/ts-node.
+//
+// Imports `chromium` from `@playwright/test` (a direct devDependency)
+// rather than `playwright` (a transitive). `npm ci` doesn't promise to
+// hoist transitive deps to the top level, so the direct import is the
+// only one we can rely on.
 
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 
 const URL = process.env.URL ?? 'http://localhost:4173/';
 const OUT = process.env.OUT ?? 'docs/screenshot.png';

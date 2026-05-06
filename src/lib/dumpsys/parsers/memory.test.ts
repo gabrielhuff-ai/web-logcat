@@ -43,4 +43,15 @@ describe('parseMeminfo', () => {
     expect(out.totalRamKb).toBe(8000000);
     expect(out.freeRamKb).toBe(2000000);
   });
+
+  it('parses the Android-13+ "kB" footer (no commas, space before unit)', () => {
+    const out = parseMeminfo(
+      'Total RAM:    11924036 kB (status normal)\n' +
+        ' Free RAM:    4202440 kB\n' +
+        ' Used RAM:    7610212 kB\n',
+    );
+    expect(out.totalRamKb).toBe(11924036);
+    expect(out.freeRamKb).toBe(4202440);
+    expect(out.usedRamKb).toBe(7610212);
+  });
 });

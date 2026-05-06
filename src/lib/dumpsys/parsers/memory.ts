@@ -109,8 +109,13 @@ export function parseMeminfo(raw: string): MemoryParsed {
   procs.sort((a, b) => b.kb - a.kb);
 
   // ---- Footer ------------------------------------------------------------
+  // Real devices print the trailing unit a few different ways:
+  //   "Total RAM: 11,924,000K"      (older builds)
+  //   "Total RAM: 11924036 kB"      (Android 13+)
+  //   "Total RAM:    11924036K"     (whitespace varies)
+  // Allow any whitespace before the unit and either `K` or `kB`.
   const tag = (key: string): number | null => {
-    const re = new RegExp(`${escape(key)}:\\s*([\\d,]+)K`, 'i');
+    const re = new RegExp(`${escape(key)}:\\s*([\\d,]+)\\s*[kK]`, 'i');
     const m = re.exec(raw);
     if (!m) return null;
     const n = Number(m[1].replace(/,/g, ''));
