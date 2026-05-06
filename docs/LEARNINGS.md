@@ -94,17 +94,35 @@ PR, GitHub merges when required checks pass, and the resulting merge
 5. Either auto-merge fires (merge webhook → next phase) or CI fails
    (failure webhook → fix).
 
-**Recommendation** — confirm the **two prerequisites at the start of
-the session**, in this order:
+**Recommendation** — confirm the **two prerequisites for every target
+branch you'll merge into**, in this order:
 
-- Repository settings → Pull Requests → **Allow auto-merge** ticked.
-- Settings → Branches → branch protection rule on the integration
-  branch with the required status checks (typically `build` + `e2e`).
+- Repository settings → Pull Requests → **Allow auto-merge** ticked
+  (one-time, repo-wide).
+- Settings → Branches → branch protection rule **on each branch you
+  intend to auto-merge to**, with the required status checks
+  (typically `build` + `e2e`). This is **per branch**, not repo-wide:
+  protecting `v2` does NOT cover `main`.
 
-If either is missing, ask the user to enable it once at the start; the
-30-second setup pays off across every PR in the session. Without
-branch protection, `enable_pr_auto_merge` returns "Protected branch
-rules not configured for this branch" and the PR sits.
+The protection rule does not block direct merges by repo
+collaborators (we still merge via the merge tool). It just gives
+auto-merge a "checks must pass" condition to wait on. Without it,
+`enable_pr_auto_merge` returns *"required checks are failing"* (a
+misleading error — actually means "no required checks defined"), and
+the orchestrator session ends up blind to "all green" until something
+else trips a webhook (LEARNINGS#1). At that point the user has to
+ping in.
+
+**If the user declines the setup** (small chain, doesn't justify the
+30-second cost), be loud and clear at the START of the chain:
+*"without auto-merge on `<branch>`, you'll need to ping me each time
+CI passes — the silent-success path has no wake-up signal."* Set
+expectations explicitly so the friction isn't a surprise.
+
+If the friction shows up twice in the same chain, **stop and insist**
+on the setup rather than tolerating a third instance. Repeated pings
+across the same session is a hard signal that the prerequisite hasn't
+been met.
 
 ---
 
