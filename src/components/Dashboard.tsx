@@ -111,20 +111,20 @@ function DashTopbar({
 
   return (
     <div className="dash-top">
-      <div className="dash-brand">
+      <button
+        type="button"
+        className="dash-brand"
+        onClick={onDisconnect}
+        title="Disconnect and return to the empty state"
+      >
         <span className="dash-brand-glyph">
-          <svg width="18" height="18" viewBox="0 0 18 18">
-            <path
-              d="M 4 5 L 4 13 M 8 3 L 8 15 M 12 7 L 12 11 M 14 5 L 14 13"
-              stroke="var(--accent)"
-              strokeWidth={1.6}
-              strokeLinecap="round"
-            />
-          </svg>
+          <span className="dash-brand-square s1" />
+          <span className="dash-brand-square s2" />
+          <span className="dash-brand-square s3" />
         </span>
         <span className="dash-brand-name">WebLogcat</span>
         <span className="dash-brand-sub">Dashboard</span>
-      </div>
+      </button>
 
       <div className="dash-device" onClick={() => setDevOpen((o) => !o)}>
         <span className="dash-device-status" data-fake={usingFake}>
