@@ -660,3 +660,10 @@
   line-height: 1.4;
 }
 
+.dash-appearance-pop .seg.seg-3 button { padding: 6px 8px; }
+.dash-perf-hint {
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  line-height: 1.4;
+}
+

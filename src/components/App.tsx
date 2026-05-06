@@ -34,7 +34,7 @@ const FAKE_DEVICE: DeviceInfo = {
 const FLUSH_MS = 100;
 
 export function App() {
-  const { tweaks, update: setTweaks } = useTweaks();
+  const { tweaks, performanceModeOn, update: setTweaks } = useTweaks();
 
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -201,8 +201,8 @@ export function App() {
   // Memoise the chrome context value so widgets don't re-render on
   // unrelated App state changes.
   const chrome = useMemo(
-    () => ({ tweaks, setTweaks, showToast }),
-    [tweaks, setTweaks, showToast],
+    () => ({ tweaks, setTweaks, showToast, performanceModeOn }),
+    [tweaks, setTweaks, showToast, performanceModeOn],
   );
 
   if (!device) {

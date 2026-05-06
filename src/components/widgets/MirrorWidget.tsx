@@ -76,7 +76,15 @@ const POWER_MODE_NORMAL = 2;
 
 export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   const { device, adb, usingFake } = useAdb();
-  const { showToast } = useDashboardChrome();
+  const { showToast, performanceModeOn } = useDashboardChrome();
+  // Stash perf mode in a ref so the session-init effect can read the
+  // current value without restarting the scrcpy server every time the
+  // user flips the toggle. The clamp is applied at session start; toggling
+  // mid-session is a no-op until the widget re-mounts.
+  const perfRef = useRef(performanceModeOn);
+  useEffect(() => {
+    perfRef.current = performanceModeOn;
+  }, [performanceModeOn]);
   const [settings] = useTileSettings<MirrorSettings>(tileId, 'mirror', MIRROR_DEFAULTS);
 
   // ---- Toolbar / pill state (rerenders when changed) -------------------
@@ -159,7 +167,16 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         ]);
         if (cancelled) return;
 
-        const session = await startScrcpy(adb);
+        // Performance mode caps scrcpy at 30 fps + 4 Mb/s — both
+        // delivered by the scrcpy server itself, so the WebCodecs
+        // decoder never sees the full firehose. Untouched in normal
+        // mode (0 fps cap = scrcpy default of "encoder native rate").
+        const session = await startScrcpy(
+          adb,
+          perfRef.current
+            ? { maxFps: 30, bitRate: 4_000_000 }
+            : {},
+        );
         if (cancelled) {
           await session.dispose();
           return;

@@ -12,6 +12,8 @@ export interface DashboardChromeValue {
   tweaks: Tweaks;
   setTweaks: (patch: Partial<Tweaks>) => void;
   showToast: (msg: string) => void;
+  /** Resolved performance-mode boolean ('auto' is auto-detected). */
+  performanceModeOn: boolean;
 }
 
 export const DashboardChromeContext = createContext<DashboardChromeValue | null>(null);
