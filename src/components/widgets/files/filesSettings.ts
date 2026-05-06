@@ -10,7 +10,11 @@ export interface FilesSettings {
 
 export const FILES_DEFAULTS: FilesSettings = {
   fontSize: 12,
-  startingPath: '/sdcard',
+  // `/sdcard/Download` (rather than just `/sdcard`) is where the
+  // simulator's canned files live, and on a real Pixel it's the most
+  // common landing spot for user-generated content. Users see content
+  // immediately on first mount instead of an empty list of subdirs.
+  startingPath: '/sdcard/Download',
 };
 
 // Legacy key: `weblogcat:files:<serial>:<tileId>:cwd` → settings.startingPath
