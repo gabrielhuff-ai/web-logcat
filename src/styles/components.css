@@ -1,5 +1,5 @@
 /* Component-level styles consolidated from the per-component <style>
- * blocks in design/source/. Keeps tokens.css and app.css clean as the
+ * blocks in design/v1/source/. Keeps tokens.css and app.css clean as the
  * "design originals". */
 
 /* ===== Log area: heatmap + scroll container =====
@@ -364,135 +364,11 @@
 .lvl-pill.off .lvl-name { text-decoration: line-through; opacity: 0.7; }
 .lvl-pill:hover { background: var(--bg-3); }
 
-/* ===== Settings panel ===== */
-.settings-scrim {
-  position: absolute;
-  inset: 0;
-  background: oklch(0 0 0 / 0.4);
-  backdrop-filter: blur(2px);
-  z-index: 100;
-  animation: fadeIn 200ms var(--ease-out) both;
-}
-.settings {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(440px, 92vw);
-  background: var(--bg-1);
-  border-left: 1px solid var(--line);
-  z-index: 101;
-  padding: 0;
-  animation: slideInRight 280ms var(--ease-out) both;
-  overflow-y: auto;
-}
-@keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-.settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--line);
-}
-.settings-head h2 { margin: 0; font-size: var(--t-lg); font-weight: 600; }
-.settings-section { padding: 24px; border-bottom: 1px solid var(--line); }
-.settings-label {
-  font-size: var(--t-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--fg-3);
-  margin-bottom: 16px;
-}
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  gap: 16px;
-}
-.settings-key { font-size: var(--t-base); color: var(--fg-1); }
-.seg {
-  display: inline-flex;
-  padding: 3px;
-  background: var(--bg-2);
-  border-radius: var(--r-md);
-  gap: 2px;
-}
-.seg button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: var(--t-sm);
-  color: var(--fg-2);
-  transition: all var(--dur-fast) var(--ease-out);
-  text-transform: capitalize;
-}
-.seg button.active {
-  background: var(--bg-0);
-  color: var(--fg-0);
-  box-shadow: var(--shadow-1);
-}
-.accents {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-.accent-swatch {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: var(--bg-2);
-  font-size: var(--t-sm);
-  color: var(--fg-1);
-  border: 1.5px solid transparent;
-  transition: all var(--dur-fast) var(--ease-out);
-}
-.accent-swatch:hover { background: var(--bg-3); }
-.accent-swatch.active {
-  border-color: var(--accent);
-  color: var(--fg-0);
-}
-.accent-swatch .sw {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--bg-2);
-}
-.settings-about {
-  font-size: var(--t-sm);
-  color: var(--fg-2);
-  line-height: 1.7;
-}
-.toggle {
-  width: 36px;
-  height: 20px;
-  background: var(--bg-3);
-  border-radius: 999px;
-  position: relative;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-.toggle.on { background: var(--accent); }
-.toggle-dot {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--fg-0);
-  border-radius: 50%;
-  transition: transform var(--dur-fast) var(--ease-spring);
-}
-.toggle.on .toggle-dot {
-  transform: translateX(16px);
-  background: var(--on-accent);
-}
+/* The v1 settings drawer (`.settings*`, `.seg`, `.accent-swatch`,
+ * `.toggle*`) was removed in Phase 10 along with `SettingsPanel.tsx`.
+ * Theme + accent moved to the dashboard topbar; density / heatmap
+ * became Logcat-widget-internal in v2; the scrubber was deleted in
+ * Phase 1. Nothing remains for a global settings drawer to host. */
 
 /* ===== Help dialog (? shortcut) ===== */
 .help-scrim {
@@ -589,3 +465,50 @@
   opacity: 1 !important;
   transform: scaleX(1.3);
 }
+
+/* Per-widget design CSS (`.lc-*`, `.sh-*`, `.ds-*`, `.fx-*`, `.mr-*`)
+ * was moved to `src/styles/widgets/<kind>.css` in Phase 10 and is now
+ * imported by each widget component (so the rules co-load with the
+ * lazy chunk). Cross-cutting tile chrome — `.tile-loading`, the
+ * palette `.disabled` overrides, and the topbar device-pop footer
+ * spacing — stays here. */
+
+/* ===== v2: Tile lazy-load fallback =====
+ * Phase 10: every non-Logcat widget kind ships in its own dynamically-
+ * imported chunk. While the chunk fetches, `<Tile/>` renders this small
+ * placeholder via `<Suspense/>`. Cached chunks resolve synchronously on
+ * subsequent adds, so this is only visible the very first time the
+ * user adds a Shell / Dumpsys / Files / Mirror tile in a session. */
+.tile-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: var(--t-sm);
+  color: var(--fg-3);
+}
+
+/* ===== v2: WidgetPalette disabled card =====
+ * The palette renders all 5 widget cards but greys-out kinds whose
+ * registry entry is `enabled: false`, plus Mirror when its
+ * `maxInstances: 1` cap is hit. Cursor + pointer-events make the card
+ * feel non-interactive without removing it from the layout. */
+.palette-card.disabled,
+.palette-card[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.5);
+}
+.palette-card.disabled:hover,
+.palette-card[disabled]:hover {
+  background: oklch(from var(--bg-2) l c h / 0.6);
+  border-color: var(--glass-line);
+  transform: none;
+}
+
+/* ===== v2: Dashboard topbar — extra device-pop footer button =====
+ * The v1 dropdown had two trailing buttons (Pair new / Disconnect).
+ * dashboard.css only styles a single button; mirror the spacing for both. */
+.dash-device-pop-foot button + button {
+  margin-top: 1px;
+}
+

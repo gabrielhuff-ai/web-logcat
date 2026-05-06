@@ -1,40 +1,78 @@
 # Architecture
 
-## Module map
+## Module map (v2)
 
 ```
 src/
-├── main.tsx                # entry: mounts <App/>, imports CSS
-├── types.ts                # LogEntry, Filter, Tweaks, DeviceInfo, …
+├── main.tsx                      # entry: mounts <App/>, imports CSS
+├── types.ts                      # LogEntry, Filter, Tweaks, DeviceInfo,
+│                                 # WidgetKind, Tile, LayoutState
 │
 ├── lib/
-│   ├── filters.ts          # parse/match/highlight — pure, fully ported
-│   ├── logGenerator.ts     # simulator, fully ported (used in dev)
-│   ├── tweaks.ts           # useTweaks() hook — localStorage-backed prefs
-│   └── adb.ts              # STUB — real WebUSB+ADB transport
+│   ├── filters.ts                # parse/match/highlight — pure
+│   ├── logGenerator.ts           # simulator (lazy-loaded)
+│   ├── tweaks.ts                 # useTweaks() — localStorage prefs
+│   ├── adb.ts                    # WebUSB + ADB transport (lazy)
+│   ├── adbContext.ts             # AdbContext + useAdb() hook
+│   ├── AdbProvider.tsx           # <AdbProvider/> — wraps the dashboard
+│   ├── logStream.ts              # LogStreamHub — single-upstream pub/sub
+│   ├── logStreamContext.ts       # context + useLogStream()
+│   ├── dashboardChrome.ts        # tweaks + showToast for widgets
+│   ├── widgets.ts                # widget registry (kind → def)
+│   ├── layout.ts                 # tile-grid snap math + persistence
+│   ├── shellSim.ts               # in-memory ADB-shell built-ins (sim path)
+│   ├── format.ts                 # formatTs, rowHeightFor
+│   └── knownNames.ts             # static tag/process pools for autocomplete
 │
 ├── components/
-│   ├── App.tsx             # owns state, the stream effect, keyboard map
-│   ├── EmptyState.tsx      # pre-connection screen
-│   ├── Toolbar.tsx         # stub — see design/source/toolbar.jsx
-│   ├── FilterBar.tsx       # stub — see design/source/filter-bar.jsx
-│   ├── LevelRow.tsx        # functional, light styling
-│   ├── LogList.tsx         # functional, naive (no virtualisation)
-│   ├── LogRow.tsx          # functional, no highlight rendering yet
-│   ├── Heatmap.tsx         # stub — returns null
-│   ├── SettingsPanel.tsx   # stub — placeholder drawer
-│   ├── SearchOverlay.tsx   # stub — wires input but no result rendering
-│   └── Icons.tsx           # only the few icons used by the scaffold
+│   ├── App.tsx                   # owns device + LogStreamHub; renders
+│   │                             # <EmptyState/> or <Dashboard/>
+│   ├── EmptyState.tsx            # pre-connection screen
+│   ├── Dashboard.tsx             # connected shell + DashTopbar
+│   ├── TileGrid.tsx              # 12-col grid, drag/resize/maximize
+│   ├── Tile.tsx                  # tile chrome (header + body + resize)
+│   ├── WidgetPalette.tsx         # +Add widget modal
+│   ├── FilterBar.tsx             # chip input + transport
+│   ├── LevelRow.tsx              # V/D/I/W/E pills + rate
+│   ├── LogList.tsx               # virtualised log area + sticky pinned block
+│   ├── LogRow.tsx                # one log line, with highlight rendering
+│   ├── Heatmap.tsx               # 60-cell gutter
+│   ├── HelpDialog.tsx            # ? shortcuts dialog
+│   ├── SearchOverlay.tsx         # ⌘F floating search box
+│   ├── Icons.tsx                 # inline SVG icon set
+│   └── widgets/
+│       ├── LogcatWidget.tsx      # the v1 logcat experience as a widget
+│       ├── ShellWidget.tsx       # interactive ADB shell (one channel per instance)
+│       ├── DumpsysWidget.tsx     # preset dumpsys runner + parsed cards / raw view
+│       ├── FilesWidget.tsx       # tree + list browser over adb.sync()
+│       └── MirrorWidget.tsx      # scrcpy-style mirror with WebCodecs decode
 │
 └── styles/
-    ├── tokens.css          # design original — colors, spacing, motion
-    ├── app.css             # design original — layout + log row + panels
-    └── components.css      # *added* — empty state, drawer, filter bar shell
+    ├── tokens.css                # design original — colors, spacing, motion
+    │                             # (extended with v2 --shadow-3 + --glass-line)
+    ├── app.css                   # design original — layout + log row + panels
+    ├── dashboard.css             # design original (v2) — tile grid + chrome
+    ├── components.css            # cross-cutting additions (empty state, filter
+    │                             # bar, level pills, heatmap, help dialog,
+    │                             # palette, tile loading)
+    └── widgets/                  # per-widget design CSS (Phase 10 split);
+        ├── logcat.css            # imported by the widget itself so the
+        ├── shell.css             # rules co-load with the lazy chunk
+        ├── dumpsys.css
+        ├── files.css
+        └── mirror.css
 ```
 
-The split `tokens.css` + `app.css` (design originals) versus
-`components.css` (additions) lets the design CSS get refreshed from
-`design/source/` without merge conflicts.
+`tokens.css`, `app.css`, and `dashboard.css` are **design originals** —
+copied verbatim from `design/v1/source/styles.css` (tokens + app) and
+`design/v2/source/dashboard.css`. The v1 → v2 design diff added two
+tokens (`--shadow-3` + `--glass-line`); they're added inline at the top
+of each theme block in `tokens.css`. Everything else stays untouched so
+those files can be refreshed from the design source without merge
+conflicts. Per-widget CSS lives under `styles/widgets/<kind>.css` and
+is imported at the top of the matching widget component. Cross-cutting
+additions (palette, tile loading, help dialog, heatmap, etc.) stay in
+`components.css`.
 
 ## State
 
@@ -44,37 +82,39 @@ Top-level state lives in `<App/>`:
 | ---------------------- | ------------------------------- | -------------------------------------- |
 | `device`               | `DeviceInfo \| null`            | `null` ⇒ render `<EmptyState/>`        |
 | `usingFake`            | `boolean`                       | true when streaming the simulator      |
-| `logs`                 | `LogEntry[]`                    | capped at `MAX_LOGS` (5000), FIFO trim |
-| `filters`              | `Filter[]`                      | chip filters                           |
-| `levelEnabled`         | `Record<LogLevel, boolean>`     | level pill state                       |
-| `paused`               | `boolean`                       | pauses ingest, not rendering           |
-| `autoScroll`           | `boolean`                       | tail mode                              |
-| `onlyMatches`          | `boolean`                       | hide non-matching rows                 |
-| `pinned`               | `Set<number>`                   | pinned row ids                         |
-| `search` / `searchOpen`| `string` / `boolean`            | ⌘F overlay                             |
-| `settingsOpen`         | `boolean`                       | drawer state                           |
+| `adb`                  | `Adb \| null`                   | live ADB handle (Phase 6+)             |
 | `tweaks`               | `Tweaks` (via `useTweaks`)      | persisted prefs                        |
+| `toast`                | `string \| null`                | bottom-centre acknowledgement          |
+| `helpOpen`             | `boolean`                       | `?` shortcuts dialog                   |
 
-Derived (memoised): `visibleLogs`, `rate`. Keep these as derived values
-unless profiling proves a need for caching ingest-time.
+Widget state — filters, paused, autoScroll, levelEnabled, pinned,
+expanded — moved from `<App/>` to `<LogcatWidget/>`. Two Logcat tiles
+on the same device get independent chip bars (persisted under
+`weblogcat:filters:<serial>:<tileId>`).
+
+Tile-grid state lives in `<TileGrid/>`: the layout array, the maximized
+tile id, and the in-flight drag/resize state. Persisted to
+`localStorage` under `weblogcat-dashboard-v1`.
 
 ## The stream
 
-Currently a `setInterval(() => setLogs(prev => prev.concat(generateBatch(...))))`
-inside `App.tsx`. The interval is gated by `pausedRef` (so toggling pause
-doesn't re-create the interval).
+`<App/>` owns a single `LogStreamHub` — see `lib/logStream.ts`. The
+transport (real ADB or simulator) calls `hub.publishMany(entries)` once
+per ingest tick; the hub keeps a ring buffer (cap `MAX_LOGS` = 5000)
+and fans out to N `LogcatWidget` subscribers. New subscribers get a
+snapshot on mount.
 
-When ADB lands, replace the simulator path with a subscription to the
-parsed line stream from `lib/adb.ts`. The state shape doesn't change.
+Why a hub: K Logcat tiles previously meant K shell channels and K ×
+50k row buffers. With the hub there's one upstream and one buffer; per-
+widget memory is just whatever the widget keeps for its filter view.
 
 ## Performance notes
 
-- `<LogRow/>` is wrapped in `memo`, but the naïve list still renders
-  every entry. Past ~500–1000 visible rows scrolling will stutter.
-  Plan: `@tanstack/react-virtual` over `visibleLogs`. The pinned block
-  stays outside the virtualised range.
-- `entryMatches` is called per row per render. If `filters` is large,
-  consider memoising per-entry match results keyed by `(entry.id, filters)`.
+- `<LogRow/>` is wrapped in `memo`; `<LogList/>` virtualises past 800
+  visible rows via `@tanstack/react-virtual`.
+- The drag/resize loop in `<TileGrid/>` coalesces pointer-move events
+  into the next animation frame — protects against >120Hz pointer
+  devices flooding React with state updates.
 
 ## Theming
 

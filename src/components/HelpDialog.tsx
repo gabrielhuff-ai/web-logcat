@@ -20,7 +20,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['⌘', 'F'], desc: 'Open search overlay' },
   { keys: ['⌘', 'K'], desc: 'Clear the log buffer' },
   { keys: ['?'], desc: 'Open this dialog' },
-  { keys: ['Esc'], desc: 'Close any open overlay (search, settings, this)' },
+  { keys: ['Esc'], desc: 'Close any open overlay (search, palette, this)' },
   { keys: ['Tab'], desc: '(In filter input) accept the highlighted suggestion' },
   { keys: ['Enter'], desc: '(In filter input) commit the chip' },
   { keys: ['Backspace'], desc: '(In filter input, empty) delete the last chip' },

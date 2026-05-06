@@ -1,0 +1,26 @@
+Applications Graphics Acceleration Info:
+Uptime: 4,240,520 Realtime: 8,120,433
+
+** Graphics info for pid 8412 [com.example.shopapp] **
+
+Stats since: 8120433ms ago
+Total frames rendered: 18420
+Janky frames: 380 (2.06%)
+Janky frames (legacy): 410 (2.22%)
+50th percentile: 7ms
+90th percentile: 12ms
+95th percentile: 18ms
+99th percentile: 32ms
+Number Missed Vsync: 18
+Number High input latency: 4
+Number Slow UI thread: 22
+Number Slow bitmap uploads: 3
+Number Slow issue draw commands: 12
+Number Frame deadline missed: 380
+HISTOGRAM: 5ms=120 6ms=820 7ms=2410 8ms=4180 9ms=3220 10ms=2410 11ms=1820 12ms=1240 13ms=820 14ms=560 15ms=420 16ms=240 17ms=180 18ms=140 19ms=80 20ms=40 21ms=20 22ms=10 25ms=4 26ms=2 28ms=2 29ms=1 30ms=1 32ms=2 36ms=2 41ms=1 53ms=1
+GPU HISTOGRAM: 0ms=120 1ms=820 2ms=2410 3ms=4180 4ms=3220 5ms=2410 6ms=1820 7ms=1240
+HWUI Caches:
+  Glyph Cache: 1.46 / 16.00 MB (90 / 1024 entries)
+  Image Cache: 8.40 / 16.00 MB (28 / 256 entries)
+  Total memory usage:
+    18.20 MB

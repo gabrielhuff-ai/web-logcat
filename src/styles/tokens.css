@@ -71,6 +71,10 @@
 
   --shadow-1: 0 1px 0 oklch(1 0 0 / 0.04), 0 6px 20px -8px oklch(0 0 0 / 0.6);
   --shadow-2: 0 1px 0 oklch(1 0 0 / 0.04), 0 16px 48px -12px oklch(0 0 0 / 0.7);
+  /* v2: glass tile shadows + glass border line, used by dashboard.css. */
+  --shadow-3: 0 1px 0 oklch(1 0 0 / 0.05), 0 28px 80px -16px oklch(0 0 0 / 0.8);
+
+  --glass-line: oklch(1 0 0 / 0.07);
 
   --lvl-v-fg: oklch(0.72 0.01 var(--hue-v));
   --lvl-v-bg: oklch(0.30 0.01 var(--hue-v));
@@ -122,6 +126,9 @@
 
   --shadow-1: 0 1px 0 oklch(0 0 0 / 0.02), 0 4px 14px -8px oklch(0 0 0 / 0.18);
   --shadow-2: 0 1px 0 oklch(0 0 0 / 0.02), 0 14px 38px -10px oklch(0 0 0 / 0.20);
+  --shadow-3: 0 1px 0 oklch(0 0 0 / 0.03), 0 24px 60px -12px oklch(0 0 0 / 0.25);
+
+  --glass-line: oklch(0 0 0 / 0.08);
 
   --lvl-v-fg: oklch(0.46 0.01 var(--hue-v));
   --lvl-v-bg: oklch(0.92 0.005 var(--hue-v));

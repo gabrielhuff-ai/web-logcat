@@ -1,5 +1,5 @@
 // Inline material-style icon set (24px viewBox, currentColor strokes).
-// Ported from design/source/icons.jsx.
+// Ported from design/v1/source/icons.jsx.
 
 import type { CSSProperties, SVGProps } from 'react';
 
@@ -79,3 +79,39 @@ export const Moon = make('M21 13a9 9 0 1 1-10-10 7 7 0 0 0 10 10z', 1.6);
 export const Check = make('M5 12l5 5L20 7', 2);
 export const Stack = make('M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4', 1.6);
 export const Highlight = make('M5 12l5 5 9-9-5-5zM2 22l4-1-3-3z', 1.6);
+
+// ---- v2: dashboard / palette / tile chrome icons ----------------------------
+export const Terminal = make(
+  'M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM6 9l4 3-4 3M12 15h6',
+  1.6,
+);
+export const Folder = make(
+  'M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  1.6,
+);
+export const Mirror = make(
+  'M5 3h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 21h8M12 17v4',
+  1.6,
+);
+export const Dumpsys = make('M4 4h16v6H4zM4 14h16v6H4zM7 7h.01M7 17h.01M11 7h6M11 17h6', 1.6);
+export const Drag = make('M9 4h2v2H9zM13 4h2v2h-2zM9 11h2v2H9zM13 11h2v2h-2zM9 18h2v2H9zM13 18h2v2h-2z');
+export const Maximize = make(
+  'M4 4h6M4 4v6M20 4h-6M20 4v6M4 20h6M4 20v-6M20 20h-6M20 20v-6',
+  1.8,
+);
+export const Minimize = make('M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5', 1.8);
+export const Layout = make('M3 4h18v16H3zM3 10h18M9 10v10', 1.6);
+
+// ---- v2: mirror widget — hardware-button + record/screenshot icons --------
+// Lifted from `design/v2/source/icons.jsx`. The strokes are 1.6 to match the
+// rest of the v2 set; sizes are passed at the call site (the Mirror toolbar
+// uses 12–13px).
+export const Camera = make(
+  'M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  1.6,
+);
+export const Record = make(
+  'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  1.6,
+);
+export const Stop = make('M5 5h14v14H5z', 1.7);

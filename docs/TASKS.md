@@ -4,7 +4,7 @@ Ordered roughly by user-visible value.
 
 ## Phase 1 — UI parity with simulated stream
 
-All components below were ported from `design/source/` and wired into
+All components below were ported from `design/v1/source/` and wired into
 `App.tsx`. Each was verified by `npm run typecheck`, `npm run lint`,
 `npm run build` against the simulator on localhost.
 
@@ -97,3 +97,297 @@ All components below were ported from `design/source/` and wired into
 - [x] **Tightened `react-hooks/exhaustive-deps` to error.** No skips
   needed — the codebase was already clean under the implicit
   warning-as-error rule. Made it explicit anyway.
+
+---
+
+# v2 — multi-widget dashboard
+
+Spec: [`design/v2/HANDOFF.md`](../design/v2/HANDOFF.md). The v1 logcat
+ships as one widget inside a draggable / resizable tile grid; four new
+widgets (Shell, Dumpsys, Files, Mirror) join it. Phases 5–10 below are
+ordered by dependency, then by user-visible value within each phase.
+Pick the top unchecked item; each entry lists the file in
+`design/v2/source/` it ports from.
+
+## Phase 5 — Dashboard scaffold (v1 → v2 atomic swap)
+
+Replace the connected layout (Toolbar + FilterBar + LevelRow + LogList)
+with a tile dashboard hosting Logcat as the first widget kind. The
+tasks below land in close succession (one short PR series, or a single
+PR if the agent prefers) because the connected experience is broken
+between the first and last item — there are no users to shield.
+
+- [x] **v2 types in `src/types.ts`** — `WidgetKind` (union of
+  `'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror'`), `Tile`
+  (`{ id, kind, x, y, w, h, barsHidden? }`), `LayoutState`. Don't
+  widen existing types.
+- [x] **ADB transport context** — `src/lib/adbContext.ts` (the
+  context + `useAdb()` hook) plus `src/lib/AdbProvider.tsx` (the
+  provider). Split into two files so the hook+constant export
+  doesn't trip the fast-refresh lint. Wraps the existing
+  `connectDevice` from `lib/adb.ts` so widgets share one `Adb`
+  handle.
+- [x] **v2 CSS originals into `src/styles/`** —
+  `src/styles/dashboard.css` is a verbatim copy of
+  `design/v2/source/dashboard.css`. Diff against v1:
+  `design/v2/source/styles.css` is identical to v1 except for two
+  new tokens (`--shadow-3` and `--glass-line`); those were merged
+  into `tokens.css` to keep the design originals tight. File
+  table in `docs/ARCHITECTURE.md` updated.
+- [x] **`Dashboard` shell + topbar** —
+  `src/components/Dashboard.tsx` (`DashTopbar` inlined). The brand
+  + device picker + theme toggle moved out of Toolbar.tsx, which
+  is now deleted.
+- [x] **`TileGrid` + drag / resize / persist** —
+  `src/components/TileGrid.tsx` + `src/lib/layout.ts`. 12-col,
+  56px rows, 10px gap, persisted under `weblogcat-dashboard-v1`.
+  Plain pointer events with rAF coalescing; no `react-grid-layout`.
+- [x] **Tile chrome** — `src/components/Tile.tsx`. Header (grip,
+  icon, title, eye, maximize, remove), maximize-fills-viewport
+  positioning, `bars-hidden` class flip. CSS rule lives in
+  `src/styles/dashboard.css` (verbatim from the design original).
+- [x] **Widget registry** — `src/lib/widgets.ts`. Maps
+  `WidgetKind → { name, icon, desc, comp, defaultSize, enabled,
+  maxInstances? }`. Logcat is the only `enabled: true` entry in
+  Phase 5; Mirror has `maxInstances: 1`.
+- [x] **`WidgetPalette` modal** — `src/components/WidgetPalette.tsx`.
+  Renders all 5 cards; disabled cards grey out with a "Coming soon"
+  tooltip. Mirror's card additionally greys with "Only one mirror
+  at a time" if a Mirror tile already exists.
+- [x] **Extract `LogcatWidget`** —
+  `src/components/widgets/LogcatWidget.tsx`. Filter bar + level row
+  + log area + heatmap + search overlay all per-instance.
+  Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) gated on focus
+  inside the widget root. Per-tile filters persisted under
+  `weblogcat:filters:<serial>:<tileId>`.
+- [x] **Shared logcat stream** — `src/lib/logStream.ts` +
+  `src/lib/logStreamContext.ts`. `LogStreamHub` keeps a single
+  ring buffer (cap `MAX_LOGS = 5000`) and fans out to N
+  `LogcatWidget` subscribers.
+- [x] **Phase 5 smoke** — `npm run typecheck`, `npm run lint`,
+  `npm run build`, `npm test` all green. Manual walk-through
+  (empty → connect → default layout → add second Logcat → drag /
+  resize / eye / maximize / remove / Reset layout → reload) done
+  against the simulator.
+
+## Phase 6 — Shell widget
+
+**Prerequisite from Phase 5 — must be the first commit.** Phase 5
+established `AdbContext` but its `adb` field is currently `null`
+because `connectDevice` returns `{ device, stream }`, not the
+underlying `Adb` handle. Shell needs the handle for
+`subprocess.shell.spawn()`.
+
+- [x] **Thread the `Adb` handle through `connectDevice`** — refactor
+  `src/lib/adb.ts` so `connectDevice` returns
+  `{ device, stream, adb }`. Update `App.tsx` (or wherever the
+  result is consumed) to push the handle into `AdbProvider` so
+  `useAdb().adb` is non-null while connected. Surface
+  disconnect-on-cable-pull cleanly (clear the handle alongside the
+  stream). No behavior change for Logcat.
+- [x] **`ShellWidget`** —
+  `src/components/widgets/ShellWidget.tsx` ports
+  `design/v2/source/widget-shell.jsx`. **No toolbar**, no split
+  panes (HANDOFF §Shell Widget — multiple shells = multiple
+  widget instances). Scrollback area + live prompt; ↑/↓ history;
+  Ctrl+L clears. Line-based render — no `xterm.js`.
+- [x] **Real shell channel** —
+  `adb.subprocess.shellProtocol?.spawn([])` per widget instance
+  via `useAdb()`. Pipe stdin from the input; append stdout /
+  stderr to scrollback; ANSI-strip in the renderer (small inline
+  helper in `lib/shellSim.ts`). On widget unmount or device
+  disconnect the channel is killed. Devices that don't speak
+  shell-v2 surface an inline notice.
+- [x] **Simulator fallback** — when `usingFake` is true, run the
+  built-in command list from `widget-shell.jsx` (`cd / ls / pwd /
+  echo / cat / ps / getprop / whoami / id / uname / date / uptime
+  / clear / exit / help`). Lives in `src/lib/shellSim.ts` with
+  pure-logic Vitest coverage (`shellSim.test.ts`).
+- [x] **Enable Shell in `WidgetPalette`** — flipped `enabled: true`
+  in `src/lib/widgets.ts`; default size dropped to 5w × 4h to
+  match the eventual HANDOFF arrangement.
+- [x] **Update default layout** — `PHASE_5_DEFAULT_LAYOUT` is now
+  an alias for `PHASE_6_DEFAULT_LAYOUT`, which places Logcat (12w
+  × 6h on top) + Shell (5w × 4h directly below). Each subsequent
+  phase extends this further.
+
+## Phase 7 — Dumpsys widget
+
+- [x] **`DumpsysWidget` shell** —
+  `src/components/widgets/DumpsysWidget.tsx` ports
+  `design/v2/source/widget-dumpsys.jsx`. Toolbar
+  (`ds-toolbar widget-bar`): preset pills (Battery / Memory / CPU
+  / GFX / Wi-Fi), Run, Refresh, Copy raw, parsed↔raw toggle. Body
+  switches between parsed card grid and raw monospace dump or an
+  inline error / loading state.
+- [x] **Runner** — `src/lib/dumpsys.ts`:
+  `runDumpsys(adb, preset) → { raw, parsed }` via
+  `adb.subprocess.shellProtocol?.spawnWaitText('dumpsys <args>')`.
+  Devices without shell-v2 surface a typed
+  `DumpsysUnsupportedError` so the widget shows the friendly
+  inline notice that matches the Phase 6 Shell pattern.
+- [x] **Parsers** — `src/lib/dumpsys/parsers/{battery,memory,cpu,gfx,wifi}.ts`.
+  Pure text → typed shape, regex-based, every field independently
+  nullable. Vitest fixtures captured under
+  `src/lib/dumpsys/__fixtures__/<preset>.txt`; 17 parser cases
+  cover the captured shapes plus the missing-field paths.
+- [x] **Cards** — five files under
+  `src/components/widgets/dumpsys/`: `BatteryCard` (level glyph
+  + charge / state + health row card), `MemoryCard` (RAM stack
+  bar + App Summary Java/Native split + top-procs PSS bars),
+  `CpuCard` (load avgs + TOTAL row + per-core bars + top-procs
+  CPU% bars), `GfxCard` (frame summary + percentile cards +
+  16ms/32ms/>32ms distribution + per-bucket histogram + HWUI
+  stalls), `WifiCard` (connected network rows + scan-results
+  table).
+- [x] **Simulator fallback** — `src/lib/dumpsys/sim.ts` returns
+  the captured fixtures via Vite's `?raw` import so the
+  no-phone path renders real-shape data through the same
+  `parsePreset()` pipeline as a real device.
+- [x] **Enable Dumpsys in `WidgetPalette`** — flipped
+  `enabled: true` in `src/lib/widgets.ts`; comp wired to
+  `DumpsysWidget`.
+- [x] **Default layout** — _no change in this PR_; Phase 9
+  (Mirror) overwrites `DEFAULT_LAYOUT` with the canonical
+  HANDOFF arrangement, which already includes a Dumpsys slot.
+  Avoiding a duplicate edit here keeps the Phase 9 merge
+  conflict surface minimal.
+
+## Phase 8 — Files widget
+
+- [x] **Sync wrapper** — `src/lib/sync.ts` over `adb.sync()`:
+  `list(path)`, `read(path) → ReadableStream`,
+  `write(path, stream, onProgress)`. Progress events fire for
+  files >1MB. Simulator backend lives in `src/lib/syncSim.ts`
+  with Vitest coverage in `src/lib/sync.test.ts`.
+- [x] **`FilesWidget`** —
+  `src/components/widgets/FilesWidget.tsx` ports
+  `design/v2/source/widget-files.jsx`. Toolbar
+  (`fx-toolbar widget-bar`): back / forward / up / refresh /
+  new-folder / Push / Pull / breadcrumb. Tree pane (220px,
+  rooted at `/`) + list pane (sortable: name / size / modified /
+  perms; multi-select with Shift/Ctrl).
+- [x] **Push / Pull** — drag-out → Pull: stream `sync.read`
+  into a Blob, trigger download. Drag-in → Push: read the
+  dropped `File` via `.stream()` into `sync.write`. Progress
+  bar shows for files ≥1MB. New-folder via `mkdir -p` over the
+  shell channel (sync protocol doesn't expose mkdir directly).
+  Push/Pull no-op with a toast in fake mode — the simulator
+  doesn't persist a writable filesystem.
+- [x] **Enable Files in `WidgetPalette`** — flipped its `enabled`
+  flag to `true` in `src/lib/widgets.ts`. Files is not in the
+  HANDOFF default layout, so the default layout doesn't change
+  in this phase.
+
+## Phase 9 — Screen Mirror widget
+
+Highest-risk, highest-reward. Tasks split fine-grained because each is
+its own PR-sized milestone with a verifiable demo.
+
+- [x] **Vendor scrcpy server + add deps** — pinned
+  `scrcpy-server-v2.7.jar` under `public/scrcpy/` (Apache-2.0
+  attribution at `public/scrcpy/LICENSE`). Added
+  `@yume-chan/scrcpy@^2.3.0`, `@yume-chan/adb-scrcpy@^2.3.2`,
+  `@yume-chan/scrcpy-decoder-webcodecs@^2.5.3`, and
+  `mp4-muxer@^5.2.2` to `package.json` and to CLAUDE.md's
+  "Acceptable additions" list. The chosen pair (jar 2.7 + ya-
+  webadb 2.3.x) is documented at the top of `src/lib/scrcpy.ts`.
+- [x] **Static `MirrorWidget` skeleton** —
+  `src/components/widgets/MirrorWidget.tsx` ports
+  `design/v2/source/widget-mirror.jsx` pixel-perfectly: SVG
+  bezel, `mr-toolbar widget-bar` with the three button groups
+  and `mr-sep` dividers, tap-ripple effect on the screen
+  surface. The canned `MirrorAppFrame` SVG lives at
+  `src/components/widgets/mirror/MirrorAppFrame.tsx` and is
+  rendered on the simulator path; in real mode a `<canvas>`
+  takes its place.
+- [x] **scrcpy session lib** — `src/lib/scrcpy.ts`. Pushes the
+  jar via `AdbScrcpyClient.pushServer`, starts the server
+  through `AdbScrcpyClient.start`, and exposes
+  `{ metadata, video, packets, control, dispose }`. `video`
+  is the raw NAL Uint8Array stream (for muxing); `packets` is
+  the typed-packet stream ready for the WebCodecs decoder.
+- [x] **WebCodecs decode → canvas** — `MirrorWidget` lazy-loads
+  `@yume-chan/scrcpy-decoder-webcodecs` and pipes
+  `session.packets` into a `WebCodecsVideoDecoder` with a
+  `BitmapVideoFrameRenderer` over the inline `<canvas>`. Canvas
+  lives outside React's render tree (refs only). Falls back to
+  an inline notice ("Mirror requires Chromium 94+ with
+  WebCodecs") when `'VideoDecoder' in window` is false.
+- [x] **Touch injection** — `injectTouch` wired with
+  `videoWidth`/`videoHeight` from the decoder's `sizeChanged`
+  event; coordinate scaling uses `getBoundingClientRect()` on
+  the `mr-screen` element. Rotation lands as a `sizeChanged`
+  event and the canvas reflows without remounting.
+- [x] **Hardware buttons** — Back / Home / Menu / Vol± / Power
+  wired to scrcpy keycodes (`AndroidKeyCode` 4 / 3 / 187 / 24 /
+  25 / 26). Power additionally calls `setScreenPowerMode(0)` to
+  keep the device-side display dark while the mirror is live.
+- [x] **Recording** — `mp4-muxer` dep added; the Recorder tees
+  the raw NAL stream into `Muxer.addVideoChunkRaw` (key/delta
+  classified by AnnexB NAL-type sniff) and on Stop downloads
+  `weblogcat-mirror-<serial>-<timestamp>.mp4`.
+- [x] **Screenshot** — current canvas blitted into a 2D canvas
+  → `toBlob('image/png')` → download as
+  `weblogcat-mirror-<serial>-<timestamp>.png`.
+- [x] **Hard-cap concurrent Mirror tiles at 1** — registry
+  entry already had `maxInstances: 1` from Phase 5; verified
+  `WidgetPalette.blockingReason` greys the card with "Only one
+  mirror at a time" while a Mirror tile exists, and
+  `TileGrid.addTile` defends the cap a second time. Smoke test
+  in `tests/smoke.spec.ts` exercises both.
+- [ ] **Latency / jank pass** — Pixel 8 Pro, USB-2 and USB-3,
+  measure end-to-end latency with a stopwatch + tap-flash
+  test app. Target ≤150ms USB-2, ≤80ms USB-3. Document the
+  measured number in this entry.
+- [x] **Enable Mirror in `WidgetPalette`** — flipped
+  `enabled: true` on `mirror` in `src/lib/widgets.ts`. Updated
+  `src/lib/layout.ts → DEFAULT_LAYOUT` to the full HANDOFF
+  arrangement (Mirror 3w × 10h on the left | Logcat 9w × 6h
+  top-right | Shell 5w × 4h + Dumpsys 4w × 4h bottom-right).
+
+## Phase 10 — Polish
+
+- [x] **Lazy-load widget chunks** — every non-Logcat widget kind is
+  wrapped in `React.lazy(() => import('…/<Kind>Widget'))` in
+  `src/lib/widgets.ts`; `<Tile/>` renders the result inside
+  `<Suspense fallback={<div className="tile-loading">Loading
+  widget…</div>}/>`. Logcat stays in the initial bundle (default
+  tile, always rendered). `npm run build` shows the four chunks as
+  separate files in `dist/assets/`; the biggest wins are Mirror
+  (scrcpy + mp4-muxer ~17 KB gzip together) and Dumpsys (parser
+  pack + fixtures, 9 KB).
+- [x] **CSS originals re-split** — per-widget design CSS moved out of
+  `components.css` (which dropped from 1577 → 638 lines) into
+  `src/styles/widgets/{logcat,shell,dumpsys,files,mirror}.css`.
+  Each widget imports its own CSS at the top of the file so the
+  rules ride along in the lazy chunk. Cross-cutting additions
+  (palette, tile loading, heatmap, help dialog, …) stay in
+  `components.css`. Total CSS shipped is identical to pre-split
+  (~50.5 KB across the 5 outputs).
+- [x] **Playwright smoke for the dashboard** — `tests/smoke.spec.ts`
+  gained six new cases under the `dashboard` describe: drag a
+  tile by its grip, resize from the bottom-right corner, hide /
+  show the widget bar via the eye toggle, maximize and restore,
+  Reset layout after adding an extra tile, and palette
+  open/close via Esc + scrim click + close button.
+- [x] **README + screenshot refresh** — README rewritten around the
+  v2 dashboard: the tagline now reads "Android device inspector",
+  every widget gets a one-liner in the new Widgets table, and the
+  Logcat-specific filter / shortcut sections are nested under a
+  "Logcat widget" heading. The bundle/dependency note now cites
+  the lazy-chunk sizes. The screenshot at `docs/screenshot.png`
+  is still v1 — to be regenerated manually after a `npm run dev`
+  walk-through (headless screenshotting blocked in this
+  environment because `playwright install chromium` couldn't
+  reach Google's CDN).
+- [x] **Migration purge** — landed in Phase 5: `Toolbar.tsx`
+  deleted, its brand / device-picker / theme bits moved into
+  `DashTopbar`.
+- [x] **Resolve `SettingsPanel` orphan** — deleted
+  `src/components/SettingsPanel.tsx` and the matching `.settings*`,
+  `.seg*`, `.accent-swatch*`, `.toggle*` rules from
+  `components.css`. Theme + accent live in `DashTopbar`; density
+  is a Logcat-internal control; heatmap is per-widget; scrubber
+  was already removed in Phase 1. No global drawer remains to
+  host.

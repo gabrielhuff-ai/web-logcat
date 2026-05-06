@@ -1,5 +1,5 @@
 // Chip filter input with autocomplete + transport + display toggles.
-// Ported from design/source/filter-bar.jsx.
+// Ported from design/v1/source/filter-bar.jsx.
 //
 // Critical UX: focusing the empty input shows ALL 5 filter types as
 // starters under "FILTER BY" — this is the only discoverability for the

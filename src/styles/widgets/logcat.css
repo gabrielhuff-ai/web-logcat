@@ -1,0 +1,32 @@
+/* ===== v2: LogcatWidget shell =====
+ * Mirrors the inline <style> block in design/v2/source/widget-logcat.jsx.
+ * The widget fills its tile body and stacks filter-bar / level-row /
+ * log-area vertically. `position: relative` anchors the resume-tail
+ * pill (`.lc-resume`) to the widget rather than the viewport. */
+.lc-widget {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  outline: none;
+}
+.lc-widget .filter-bar {
+  /* Inside a tile the filter bar shouldn't paint a redundant border on
+   * top — the tile header already provides separation. */
+  border-top: 0;
+}
+.lc-widget .log-area {
+  flex: 1;
+  min-height: 0;
+}
+/* Override the v1 `.scroll-to-bottom` viewport-anchored positioning when
+ * the button lives inside a Logcat widget tile. Same pill, but anchored
+ * to the widget instead of the page. */
+.lc-resume {
+  position: absolute !important;
+  bottom: 12px !important;
+  right: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+}

@@ -3,7 +3,7 @@
 // Used in dev / for the "Use simulated data" affordance on the empty state.
 // Replace with the real ADB stream (see ./adb.ts) for production.
 //
-// Ported from design/source/log-generator.jsx with TypeScript types.
+// Ported from design/v1/source/log-generator.jsx with TypeScript types.
 
 import type { LogEntry, LogLevel } from '../types';
 

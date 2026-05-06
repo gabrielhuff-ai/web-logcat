@@ -8,7 +8,7 @@
 // Filters do NOT hide rows by default — they highlight matching parts.
 // "Show only matches" mode hides rows that match no filter.
 //
-// Ported 1:1 from design/source/filters.jsx with TypeScript types.
+// Ported 1:1 from design/v1/source/filters.jsx with TypeScript types.
 
 import type { Filter, FilterType, HighlightRange, LogEntry } from '../types';
 
