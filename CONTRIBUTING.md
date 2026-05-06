@@ -50,6 +50,14 @@ Notes:
 - The simulated stream is enabled via the **Use simulated data** button on
   the empty state.
 
+## Operational learnings
+
+`docs/LEARNINGS.md` collects lessons from running this repo under
+agent-driven development — auto-merge prerequisites, parallel-agent
+file-ownership patterns, sub-agent stall recovery, and so on. Skim the
+index before kicking off a multi-PR series; append a new entry when
+something generalisable bites you.
+
 ## Code style
 
 - TypeScript strict mode.
