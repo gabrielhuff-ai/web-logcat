@@ -352,7 +352,6 @@ export function TileGrid({
           focused={layout.focusId === tile.id}
           style={style}
           onMoveStart={onMoveStart(tile.id)}
-          onFocus={() => focusTile(tile.id)}
           onToggleBars={() => toggleBars(tile.id)}
           onToggleMax={() => toggleMax(tile.id)}
           onRemove={() => removeTile(tile.id)}

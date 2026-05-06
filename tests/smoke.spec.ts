@@ -406,11 +406,14 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    // Files isn't in the default layout — palette adds it.
+    // Files isn't in the default layout — palette adds it. The dwindle
+    // layout splits the focused leaf, so the new Files tile's index in
+    // the rendered list depends on the focus order — locate by the
+    // widget class instead.
     await page.getByRole('button', { name: /add widget/i }).click();
     await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
     await expect(page.locator('.tile')).toHaveCount(5);
-    const fxTile = page.locator('.tile').nth(4);
+    const fxTile = page.locator('.tile').filter({ has: page.locator('.fx-widget') });
     await fxTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Files · settings/i });
     await expect(dialog).toBeVisible();

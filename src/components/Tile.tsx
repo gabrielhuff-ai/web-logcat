@@ -37,7 +37,6 @@ export interface TileProps {
   /** Inline style — set by `<TileGrid/>` (flex sizing, or absolute when maximised). */
   style: CSSProperties;
   onMoveStart: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onFocus: () => void;
   onToggleBars: () => void;
   onToggleMax: () => void;
   onRemove: () => void;
@@ -53,7 +52,6 @@ export function Tile({
   focused,
   style,
   onMoveStart,
-  onFocus,
   onToggleBars,
   onToggleMax,
   onRemove,
@@ -79,7 +77,6 @@ export function Tile({
       className={className}
       style={style}
       data-tile-id={tile.id}
-      onPointerDownCapture={() => onFocus()}
     >
       <div
         className="tile-head"
