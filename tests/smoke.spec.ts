@@ -448,6 +448,9 @@ test.describe('dashboard', () => {
 
     // Toggle from the bar — re-open the modal and confirm the switch flipped back.
     await barWrap.click();
+    // Wait for the on-bar state to reflect the toggle before reopening the
+    // modal, so the modal hydrates from the just-written localStorage entry.
+    await expect(barWrap).not.toHaveClass(/active/);
     await logcatTile.getByRole('button', { name: /widget settings/i }).click();
     await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).toBeVisible();
     await expect(
