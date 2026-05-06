@@ -101,15 +101,41 @@ test.describe('dashboard', () => {
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
-    // Phase 8 ships Logcat + Shell + Files; Dumpsys + Mirror are
-    // still disabled stubs.
+    // Phase 7+8 ships Logcat + Shell + Dumpsys + Files; Mirror is still
+    // a disabled stub.
     const cards = page.locator('.palette-card');
     await expect(cards).toHaveCount(5);
     await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
     await expect(cards.filter({ hasText: 'Shell' })).not.toBeDisabled();
+    await expect(cards.filter({ hasText: 'Dumpsys' })).not.toBeDisabled();
     await expect(cards.filter({ hasText: 'Files' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Dumpsys' })).toBeDisabled();
     await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
+  });
+
+  test('adding a Dumpsys widget runs a preset against the simulator', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(2);
+
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Dumpsys' }).click();
+    await expect(page.locator('.tile')).toHaveCount(3);
+
+    const dsTile = page.locator('.ds-widget').first();
+    await expect(dsTile).toBeVisible();
+    // Default preset (Battery) should resolve via the captured fixture
+    // and the Charge card renders.
+    await expect(dsTile.locator('.ds-card-head').first()).toContainText(/charge/i);
+
+    // Switch to Wi-Fi and confirm the SSID from the fixture appears.
+    await dsTile.locator('.ds-pill').filter({ hasText: 'Wi-Fi' }).click();
+    await expect(dsTile).toContainText('HomeWifi-5G');
+
+    // Raw view shows the captured monospace dump.
+    await dsTile.locator('.ds-view-seg button').filter({ hasText: 'Raw' }).click();
+    await expect(dsTile.locator('.ds-raw')).toContainText(/ConnectedSSID/);
   });
 
   test('adding a Files widget renders the toolbar + sdcard tree', async ({
