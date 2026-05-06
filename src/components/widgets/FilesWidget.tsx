@@ -18,6 +18,7 @@
 //   `weblogcat:files:<serial>:<tileId>:cwd`
 // matching the WIDGETS.md namespace convention.
 
+import '../../styles/widgets/files.css';
 import {
   useCallback,
   useEffect,
