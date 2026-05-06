@@ -123,7 +123,6 @@ function DashTopbar({
           <span className="dash-brand-square s3" />
         </span>
         <span className="dash-brand-name">WebLogcat</span>
-        <span className="dash-brand-sub">Dashboard</span>
       </button>
 
       <div className="dash-device" onClick={() => setDevOpen((o) => !o)}>
@@ -210,6 +209,16 @@ function DashTopbar({
           open={appearanceOpen}
           setOpen={setAppearanceOpen}
         />
+        <a
+          className="icon-btn tt"
+          data-tt="View source on GitHub"
+          href="https://github.com/gabrielhuff-ai/web-logcat"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View source on GitHub"
+        >
+          <Icons.Github size={14} />
+        </a>
       </div>
     </div>
   );
