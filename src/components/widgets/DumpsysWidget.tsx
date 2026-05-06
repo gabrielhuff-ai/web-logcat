@@ -20,13 +20,14 @@ import '../../styles/widgets/dumpsys.css';
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
+import { useTileSettings } from '../../lib/tileSettings';
 import {
   DUMPSYS_PRESETS,
   DumpsysUnsupportedError,
@@ -34,6 +35,11 @@ import {
   type DumpsysPresetId,
   type DumpsysResult,
 } from '../../lib/dumpsys';
+import {
+  DUMPSYS_DEFAULTS,
+  type DumpsysSettings,
+  type DumpsysView,
+} from './dumpsys/dumpsysSettings';
 import { runDumpsysSim } from '../../lib/dumpsys/sim';
 import * as Icons from '../Icons';
 import { BatteryCard } from './dumpsys/BatteryCard';
@@ -47,50 +53,35 @@ export interface DumpsysWidgetProps {
   tileId: string;
 }
 
-type View = 'cards' | 'raw';
-
 /** Min spinner display so even a fast result reads as a "run", not a flash. */
 const MIN_SPIN_MS = 220;
 
 export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
-  const { device, adb, usingFake } = useAdb();
+  const { adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
-
-  // Selected preset id — persisted per (serial, tile).
-  const presetKey = useMemo(
-    () => (device ? `weblogcat:dumpsys:${device.serial}:${tileId}:preset` : null),
-    [device, tileId],
+  const [settings, setSettings] = useTileSettings<DumpsysSettings>(
+    tileId,
+    'dumpsys',
+    DUMPSYS_DEFAULTS,
   );
-  const [selected, setSelected] = useState<DumpsysPresetId>(() => {
-    if (typeof window === 'undefined') return 'battery';
-    const fallback: DumpsysPresetId = 'battery';
-    if (!presetKey) return fallback;
-    try {
-      const raw = localStorage.getItem(presetKey);
-      if (raw && DUMPSYS_PRESETS.some((p) => p.id === raw)) {
-        return raw as DumpsysPresetId;
-      }
-    } catch {
-      /* ignore */
-    }
-    return fallback;
-  });
+
+  // Selected preset and view both flow through the per-tile settings —
+  // changes from the bar OR the modal write the same key.
+  const selected = settings.defaultPreset;
+  const setSelected = useCallback(
+    (id: DumpsysPresetId) => setSettings({ defaultPreset: id }),
+    [setSettings],
+  );
+  const view = settings.defaultView;
+  const setView = useCallback(
+    (v: DumpsysView) => setSettings({ defaultView: v }),
+    [setSettings],
+  );
 
   const [result, setResult] = useState<DumpsysResult | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>('cards');
   const runIdRef = useRef(0);
-
-  // Persist preset selection.
-  useEffect(() => {
-    if (!presetKey) return;
-    try {
-      localStorage.setItem(presetKey, selected);
-    } catch {
-      /* ignore */
-    }
-  }, [presetKey, selected]);
 
   const run = useCallback(
     async (id: DumpsysPresetId) => {
@@ -136,9 +127,12 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, usingFake, adb]);
 
-  const onPresetClick = useCallback((id: DumpsysPresetId) => {
-    setSelected(id);
-  }, []);
+  const onPresetClick = useCallback(
+    (id: DumpsysPresetId) => {
+      setSelected(id);
+    },
+    [setSelected],
+  );
 
   const onRefresh = useCallback(() => {
     void run(selected);
@@ -152,8 +146,12 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
       .catch(() => showToast('Copy failed'));
   }, [result, showToast]);
 
+  const widgetStyle: CSSProperties = {
+    ['--widget-font-size' as string]: `${settings.fontSize}px`,
+  } as CSSProperties;
+
   return (
-    <div className="ds-widget">
+    <div className="ds-widget" style={widgetStyle}>
       <div className="ds-toolbar widget-bar">
         <div className="ds-presets">
           {DUMPSYS_PRESETS.map((p) => (

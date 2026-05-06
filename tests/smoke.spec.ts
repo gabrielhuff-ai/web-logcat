@@ -337,6 +337,114 @@ test.describe('dashboard', () => {
     await expect(page.locator('.tile')).toHaveCount(4);
   });
 
+  // === Phase 11: per-widget settings modal ===============================
+  // The cog button on every tile opens a per-widget settings modal whose
+  // controls are backed by the same `useTileSettings` state that the on-
+  // bar controls already write to. Per docs/LEARNINGS.md#10 these
+  // assertions intentionally pin to the canonical 4-tile default
+  // arrangement (Mirror, Logcat, Shell, Dumpsys at indexes 0..3).
+
+  test('cog opens a per-widget settings modal on the Logcat tile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const logcatTile = page.locator('.tile').nth(1);
+    await logcatTile.getByRole('button', { name: /widget settings/i }).click();
+    await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).toBeVisible();
+    // Esc dismisses.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).not.toBeVisible();
+  });
+
+  test('cog on the Shell tile shows the home directory field', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const shellTile = page.locator('.tile').nth(2);
+    await shellTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Shell · settings/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel(/home directory/i)).toBeVisible();
+    await dialog.getByRole('button', { name: /close/i }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('cog on the Dumpsys tile shows the default-preset segmented control', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const dsTile = page.locator('.tile').nth(3);
+    await dsTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Dumpsys · settings/i });
+    await expect(dialog).toBeVisible();
+    // Two segmented controls expected (preset + view) plus the slider.
+    await expect(dialog.locator('.ws-seg').first()).toBeVisible();
+    await dialog.getByRole('button', { name: /close/i }).click();
+  });
+
+  test('cog on the Mirror tile shows the overlay font-size slider', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const mirrorTile = page.locator('.tile').nth(0);
+    await mirrorTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Screen Mirror · settings/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('input[type="range"]')).toBeVisible();
+    await dialog.getByRole('button', { name: /close/i }).click();
+  });
+
+  test('Files tile cog opens a settings modal with the starting-path field', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    // Files isn't in the default layout — palette adds it.
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
+    await expect(page.locator('.tile')).toHaveCount(5);
+    const fxTile = page.locator('.tile').nth(4);
+    await fxTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Files · settings/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel(/starting path/i)).toBeVisible();
+  });
+
+  test('Logcat modal "Wrap" toggle and on-bar wrap button stay in sync', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    const logcatTile = page.locator('.tile').nth(1);
+    // Open the modal.
+    await logcatTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Logcat · settings/i });
+    await expect(dialog).toBeVisible();
+
+    const modalWrap = dialog.getByRole('switch', { name: /^Wrap$/ });
+    await expect(modalWrap).toHaveAttribute('aria-checked', 'false');
+
+    // Flip via the modal — the on-bar wrap button should reflect it.
+    await modalWrap.click();
+    await expect(modalWrap).toHaveAttribute('aria-checked', 'true');
+
+    // Close the modal so we can interact with the bar button.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+
+    const barWrap = logcatTile.locator('button.tb-mini').filter({ hasText: 'wrap' });
+    await expect(barWrap).toHaveClass(/active/);
+
+    // Toggle from the bar — re-open the modal and confirm the switch flipped back.
+    await barWrap.click();
+    await logcatTile.getByRole('button', { name: /widget settings/i }).click();
+    await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).toBeVisible();
+    await expect(
+      page
+        .getByRole('dialog', { name: /Logcat · settings/i })
+        .getByRole('switch', { name: /^Wrap$/ }),
+    ).toHaveAttribute('aria-checked', 'false');
+  });
+
   test('the +Add palette closes via Esc, scrim click, and the close button', async ({
     page,
   }) => {

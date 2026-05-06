@@ -27,9 +27,11 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react';
+import type { CSSProperties } from 'react';
 import * as Icons from '../Icons';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
+import { useTileSettings } from '../../lib/tileSettings';
 import {
   createSync,
   PROGRESS_THRESHOLD,
@@ -37,6 +39,7 @@ import {
   type SyncFs,
   type WriteProgress,
 } from '../../lib/sync';
+import { FILES_DEFAULTS, type FilesSettings } from './files/filesSettings';
 
 export interface FilesWidgetProps {
   /** Stable id of the host tile — used to namespace per-instance state. */
@@ -57,8 +60,13 @@ interface Transfer {
 const ROOT = '/';
 
 export function FilesWidget({ tileId }: FilesWidgetProps) {
-  const { device, adb, usingFake } = useAdb();
+  const { adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
+  const [settings, setSettings] = useTileSettings<FilesSettings>(
+    tileId,
+    'files',
+    FILES_DEFAULTS,
+  );
 
   // One SyncFs per widget instance — created lazily on first render and
   // disposed on unmount. The simulator path is synchronous; the real
@@ -71,22 +79,10 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   // re-mounts the dashboard, so this widget unmounts cleanly. We don't
   // try to swap backends in-place.
 
-  const cwdKey = useMemo(
-    () => (device ? `weblogcat:files:${device.serial}:${tileId}:cwd` : null),
-    [device, tileId],
-  );
-
-  const [path, setPath] = useState<string>(() => {
-    if (cwdKey) {
-      try {
-        const raw = localStorage.getItem(cwdKey);
-        if (raw && raw.startsWith('/')) return raw;
-      } catch {
-        /* ignore */
-      }
-    }
-    return '/sdcard/Download';
-  });
+  // Live cwd seeds from the configured starting path. The widget keeps
+  // the persisted starting path in sync with the live cwd as the user
+  // navigates so a reload returns them where they left off.
+  const [path, setPath] = useState<string>(() => settings.startingPath);
   // Back/forward stacks. The current path is the top of `back`; when
   // the user clicks back we pop into `forward` and vice versa.
   const [back, setBack] = useState<string[]>([]);
@@ -139,15 +135,24 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
     void reload();
   }, [reload]);
 
-  // Persist cwd.
+  // Persist current cwd back into settings so reload restores the
+  // last-visited directory. We track the last-pushed value in a ref to
+  // tell apart "user navigated" (write back to settings) from "modal
+  // changed startingPath" (navigate to it). Without that distinction
+  // we'd ping-pong between the two writes on every keystroke in the
+  // modal's text input.
+  const lastPushedPathRef = useRef(path);
   useEffect(() => {
-    if (!cwdKey) return;
-    try {
-      localStorage.setItem(cwdKey, path);
-    } catch {
-      /* ignore */
+    if (path !== lastPushedPathRef.current) {
+      lastPushedPathRef.current = path;
+      if (path !== settings.startingPath) {
+        setSettings({ startingPath: path });
+      }
+    } else if (settings.startingPath !== path && settings.startingPath.startsWith('/')) {
+      lastPushedPathRef.current = settings.startingPath;
+      setPath(settings.startingPath);
     }
-  }, [cwdKey, path]);
+  }, [path, settings.startingPath, setSettings]);
 
   // ---- Tree pane lazy-load ------------------------------------------------
   const loadTreeChildren = useCallback(async (dirPath: string) => {
@@ -526,12 +531,17 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const onPushClick = () => fileInputRef.current?.click();
 
   // ---- Render ------------------------------------------------------------
+  const widgetStyle: CSSProperties = {
+    ['--widget-font-size' as string]: `${settings.fontSize}px`,
+  } as CSSProperties;
+
   return (
     <div
       className={`fx-widget ${dropping ? 'fx-dropping' : ''}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      style={widgetStyle}
     >
       <div className="fx-toolbar widget-bar">
         <div className="fx-nav">

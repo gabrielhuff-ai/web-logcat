@@ -21,21 +21,23 @@ import '../../styles/widgets/shell.css';
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { WritableStream } from '@yume-chan/stream-extra';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
+import { useTileSettings } from '../../lib/tileSettings';
 import {
   execShellSim,
   initialShellSimState,
   stripAnsi,
   type ShellSimState,
 } from '../../lib/shellSim';
+import { SHELL_DEFAULTS, type ShellSettings } from './shell/shellSettings';
 
 /** Host segment shown in the prompt — matches the design reference. */
 const SHELL_HOST = 'shiba';
@@ -65,16 +67,22 @@ interface ShellChannel {
 export function ShellWidget({ tileId }: ShellWidgetProps) {
   const { device, adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
+  const [settings] = useTileSettings<ShellSettings>(tileId, 'shell', SHELL_DEFAULTS);
 
   const [history, setHistory] = useState<ShellLine[]>(() => initialBanner(device?.model));
   const [input, setInput] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState(-1);
-  const [simState, setSimState] = useState<ShellSimState>(() => initialShellSimState());
+  // Sim state seeds from the configured home dir so a freshly mounted
+  // shell on the simulator starts where the user expects.
+  const [simState, setSimState] = useState<ShellSimState>(() => ({
+    ...initialShellSimState(),
+    cwd: settings.homeDir,
+  }));
   // Live cwd shown in the prompt. Driven by the simulator state on the
   // fake path, and tracked client-side via `pwd` on the real path
   // (no clean way to read the device-side cwd without parsing PS1).
-  const [cwd, setCwd] = useState<string>(() => initialShellSimState().cwd);
+  const [cwd, setCwd] = useState<string>(() => settings.homeDir);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -347,31 +355,27 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
   // input — but we don't currently have any global shell shortcuts.
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // ---- Per-tile cwd persistence (real path only) -------------------------
-  // Honours the WIDGETS.md persistence convention. We avoid persisting
-  // the simulator state because reloading the page resets the sim
-  // backend wholesale — the scrollback can't be restored anyway.
-  const cwdKey = useMemo(
-    () => (device && !usingFake ? `weblogcat:shell:${device.serial}:${tileId}:cwd` : null),
-    [device, usingFake, tileId],
-  );
+  // ---- Send `cd <homeDir>` on real-channel spawn -----------------------
+  // The legacy `weblogcat:shell:<serial>:<tileId>:cwd` key is migrated
+  // into `settings.homeDir` by the registered migration. On real
+  // devices we send a `cd <homeDir>` once the channel is up so the
+  // remote shell starts where the user wants it.
+  const homeDirRef = useRef(settings.homeDir);
   useEffect(() => {
-    if (!cwdKey) return;
-    try {
-      const raw = localStorage.getItem(cwdKey);
-      if (raw) setCwd(raw);
-    } catch {
-      /* ignore */
-    }
-  }, [cwdKey]);
+    homeDirRef.current = settings.homeDir;
+  }, [settings.homeDir]);
   useEffect(() => {
-    if (!cwdKey) return;
-    try {
-      localStorage.setItem(cwdKey, cwd);
-    } catch {
-      /* ignore */
-    }
-  }, [cwdKey, cwd]);
+    if (usingFake || !adb) return;
+    const ch = channelRef.current;
+    if (!ch) return;
+    void ch.write(`cd ${homeDirRef.current}\n`);
+    setCwd(homeDirRef.current);
+    // Re-send when the user changes the home dir mid-session.
+  }, [adb, usingFake, settings.homeDir]);
+
+  const widgetStyle: CSSProperties = {
+    ['--widget-font-size' as string]: `${settings.fontSize}px`,
+  } as CSSProperties;
 
   return (
     <div
@@ -379,6 +383,7 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
       ref={rootRef}
       tabIndex={-1}
       onClick={onWidgetClick}
+      style={widgetStyle}
     >
       <div className="sh-scroll" ref={scrollRef}>
         {history.map((line, i) => {

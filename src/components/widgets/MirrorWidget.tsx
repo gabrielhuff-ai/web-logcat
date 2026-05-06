@@ -31,9 +31,12 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import type { CSSProperties } from 'react';
 import * as Icons from '../Icons';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
+import { useTileSettings } from '../../lib/tileSettings';
+import { MIRROR_DEFAULTS, type MirrorSettings } from './mirror/mirrorSettings';
 import {
   formatRecordTime,
   formatStatusClock,
@@ -74,6 +77,7 @@ const POWER_MODE_NORMAL = 2;
 export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   const { device, adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
+  const [settings] = useTileSettings<MirrorSettings>(tileId, 'mirror', MIRROR_DEFAULTS);
 
   // ---- Toolbar / pill state (rerenders when changed) -------------------
   const [recording, setRecording] = useState(false);
@@ -477,8 +481,12 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     return null;
   }, [usingFake, connState, connErr]);
 
+  const widgetStyle: CSSProperties = {
+    ['--widget-font-size' as string]: `${settings.fontSize}px`,
+  } as CSSProperties;
+
   return (
-    <div className="mr-widget" data-tile-id={tileId}>
+    <div className="mr-widget" data-tile-id={tileId} style={widgetStyle}>
       <div className="mr-toolbar widget-bar">
         <div className="mr-hwgroup">
           <button

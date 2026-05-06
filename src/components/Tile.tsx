@@ -1,14 +1,23 @@
-// Tile chrome — header (grip / icon / title / eye / maximize / remove) +
-// body slot + bottom-right resize grip.
+// Tile chrome — header (grip / icon / title / settings cog / eye /
+// maximize / remove) + body slot + bottom-right resize grip.
 //
 // The "body slot" is filled by the widget component pulled from the
 // registry. State for drag/resize/maximize lives in `<TileGrid/>`; this
 // component is purely presentational + dispatches user intents back up
-// via callbacks.
+// via callbacks. The settings modal, however, is a tile-local concern
+// (modal is per-tile so multiple tiles' settings don't conflict) and is
+// owned here.
 
-import { Suspense, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import {
+  Suspense,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
+import { WidgetSettingsModal } from './WidgetSettingsModal';
 import type { Tile as TileT } from '../types';
 
 export interface TileProps {
@@ -42,6 +51,7 @@ export function Tile({
 }: TileProps) {
   const def = WIDGETS[tile.kind];
   const Icon = def.icon;
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const className = [
     'tile',
@@ -69,6 +79,14 @@ export function Tile({
         </span>
         <span className="tile-title">{def.name}</span>
         <span style={{ flex: 1 }} />
+        <button
+          className="tile-btn tt"
+          data-tt="Widget settings"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Widget settings"
+        >
+          <Icons.Settings size={11} />
+        </button>
         <button
           className="tile-btn tt"
           data-tt={tile.barsHidden ? 'Show widget bar' : 'Hide widget bar'}
@@ -116,6 +134,14 @@ export function Tile({
             />
           </svg>
         </div>
+      )}
+
+      {settingsOpen && (
+        <WidgetSettingsModal
+          tileId={tile.id}
+          kind={tile.kind}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
     </div>
   );
