@@ -17,10 +17,12 @@
 // we don't blow ~60 frames/sec of work through reconciliation. Only the
 // toolbar + REC pill rerender when state changes.
 //
-// Bezel + toolbar styling is in `src/styles/components.css` at the
-// bottom of the file (verbatim from `design/v2/source/widget-mirror.jsx`'s
-// inline `<style>` block).
+// Bezel + toolbar styling lives in `src/styles/widgets/mirror.css`
+// (verbatim from `design/v2/source/widget-mirror.jsx`'s inline `<style>`
+// block) and is imported at the top of this file so it co-loads with
+// the lazy chunk.
 
+import '../../styles/widgets/mirror.css';
 import {
   useCallback,
   useEffect,

@@ -23,6 +23,7 @@
 // §Interactions Cheat Sheet calls this out explicitly: with multiple
 // Logcat tiles the global shortcut would otherwise toggle every tile.
 
+import '../../styles/widgets/logcat.css';
 import {
   useCallback,
   useEffect,

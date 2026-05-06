@@ -16,6 +16,7 @@
 // output is intentionally not persisted — re-running on remount gives
 // fresher data.
 
+import '../../styles/widgets/dumpsys.css';
 import {
   useCallback,
   useEffect,

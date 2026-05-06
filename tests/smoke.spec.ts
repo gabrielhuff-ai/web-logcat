@@ -227,4 +227,140 @@ test.describe('dashboard', () => {
     await input.press('Control+l');
     await expect(shellTile.locator('.sh-line')).toHaveCount(1);
   });
+
+  // === Phase 10 polish: tile chrome interactions =========================
+  // The default layout has 4 tiles. The Logcat tile (index 1) is the most
+  // convenient drag target — wide grid-row span gives us room to move
+  // without bumping into the canvas-heavy Mirror tile.
+
+  test('dragging a tile by the grip moves it to a new grid cell', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(4);
+
+    // The Logcat tile sits at columns 4–12 (canonical HANDOFF default),
+    // so it's pinned to the right edge — only room is leftward.
+    const logcatTile = page.locator('.tile').nth(1);
+    const beforeStyle = (await logcatTile.getAttribute('style')) ?? '';
+
+    const grip = logcatTile.locator('.tile-head');
+    const box = await grip.boundingBox();
+    if (!box) throw new Error('grip has no bounding box');
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    // Drag a couple of grid cells to the LEFT; rAF + snapMove should
+    // produce an integer-cell delta on grid-column.
+    await page.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    const afterStyle = (await logcatTile.getAttribute('style')) ?? '';
+    expect(afterStyle).not.toEqual(beforeStyle);
+  });
+
+  test('resizing a tile by the bottom-right grip enlarges it', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    // Use the Shell tile (index 2 — order is Mirror, Logcat, Shell,
+    // Dumpsys). At x=3 w=5 it has room to grow horizontally; Logcat
+    // and Mirror are pinned against edges.
+    const shellTile = page.locator('.tile').nth(2);
+    const before = await shellTile.boundingBox();
+    if (!before) throw new Error('tile has no bounding box');
+
+    const handle = shellTile.locator('.tile-resize');
+    const handleBox = await handle.boundingBox();
+    if (!handleBox) throw new Error('resize handle has no bounding box');
+
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2 + 120,
+      handleBox.y + handleBox.height / 2 + 120,
+      { steps: 10 },
+    );
+    await page.mouse.up();
+
+    const after = await shellTile.boundingBox();
+    if (!after) throw new Error('resized tile has no bounding box');
+    expect(after.width).toBeGreaterThan(before.width);
+  });
+
+  test('the eye toggle hides the widget bar', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    const logcatTile = page.locator('.tile').nth(1);
+    await expect(logcatTile.locator('.filter-bar')).toBeVisible();
+
+    await logcatTile.getByRole('button', { name: /hide widget bar/i }).click();
+    await expect(logcatTile).toHaveClass(/bars-hidden/);
+    await expect(logcatTile.locator('.filter-bar')).toBeHidden();
+
+    // And toggle back.
+    await logcatTile.getByRole('button', { name: /show widget bar/i }).click();
+    await expect(logcatTile).not.toHaveClass(/bars-hidden/);
+    await expect(logcatTile.locator('.filter-bar')).toBeVisible();
+  });
+
+  test('maximize fills the viewport; restore returns to grid', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    const logcatTile = page.locator('.tile').nth(1);
+    await logcatTile.getByRole('button', { name: /maximize tile/i }).click();
+    await expect(logcatTile).toHaveClass(/\bmax\b/);
+    await expect(page.locator('.dash-grid')).toHaveClass(/has-max/);
+
+    await logcatTile.getByRole('button', { name: /restore tile/i }).click();
+    await expect(logcatTile).not.toHaveClass(/\bmax\b/);
+    await expect(page.locator('.dash-grid')).not.toHaveClass(/has-max/);
+  });
+
+  test('Reset layout returns to the 4-tile default after adding extras', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(4);
+
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
+    await expect(page.locator('.tile')).toHaveCount(5);
+
+    await page.getByRole('button', { name: /reset layout/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(4);
+  });
+
+  test('the +Add palette closes via Esc, scrim click, and the close button', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    // Esc closes.
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: /add widget/i })).not.toBeVisible();
+
+    // Scrim click closes. The dialog sits centered on top of the
+    // backdrop, so click a corner of the scrim explicitly — clicking
+    // the centre would land on a palette card.
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
+    await page.locator('.palette-back').click({ position: { x: 4, y: 4 } });
+    await expect(page.getByRole('dialog', { name: /add widget/i })).not.toBeVisible();
+
+    // Close button (×) closes.
+    await page.getByRole('button', { name: /add widget/i }).click();
+    const dialog = page.getByRole('dialog', { name: /add widget/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: /close/i }).click();
+    await expect(dialog).not.toBeVisible();
+  });
 });

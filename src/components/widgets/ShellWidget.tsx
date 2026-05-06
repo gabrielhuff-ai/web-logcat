@@ -17,6 +17,7 @@
 // a flat scrollback matches the design reference at
 // `design/v2/source/widget-shell.jsx` pixel-for-pixel.
 
+import '../../styles/widgets/shell.css';
 import {
   useCallback,
   useEffect,
