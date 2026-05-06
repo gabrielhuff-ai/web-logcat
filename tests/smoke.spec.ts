@@ -238,6 +238,8 @@ test.describe('dashboard', () => {
     await page.getByRole('button', { name: /fake data/i }).click();
     await expect(page.locator('.tile')).toHaveCount(4);
 
+    // The Logcat tile sits at columns 4–12 (canonical HANDOFF default),
+    // so it's pinned to the right edge — only room is leftward.
     const logcatTile = page.locator('.tile').nth(1);
     const beforeStyle = (await logcatTile.getAttribute('style')) ?? '';
 
@@ -247,9 +249,9 @@ test.describe('dashboard', () => {
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    // Drag a couple of grid cells to the right; rAF + snapMove should
+    // Drag a couple of grid cells to the LEFT; rAF + snapMove should
     // produce an integer-cell delta on grid-column.
-    await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2, { steps: 10 });
     await page.mouse.up();
 
     const afterStyle = (await logcatTile.getAttribute('style')) ?? '';
@@ -260,11 +262,14 @@ test.describe('dashboard', () => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    const logcatTile = page.locator('.tile').nth(1);
-    const before = await logcatTile.boundingBox();
+    // Use the Shell tile (index 2 — order is Mirror, Logcat, Shell,
+    // Dumpsys). At x=3 w=5 it has room to grow horizontally; Logcat
+    // and Mirror are pinned against edges.
+    const shellTile = page.locator('.tile').nth(2);
+    const before = await shellTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
 
-    const handle = logcatTile.locator('.tile-resize');
+    const handle = shellTile.locator('.tile-resize');
     const handleBox = await handle.boundingBox();
     if (!handleBox) throw new Error('resize handle has no bounding box');
 
@@ -280,7 +285,7 @@ test.describe('dashboard', () => {
     );
     await page.mouse.up();
 
-    const after = await logcatTile.boundingBox();
+    const after = await shellTile.boundingBox();
     if (!after) throw new Error('resized tile has no bounding box');
     expect(after.width).toBeGreaterThan(before.width);
   });
@@ -343,10 +348,12 @@ test.describe('dashboard', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: /add widget/i })).not.toBeVisible();
 
-    // Scrim click closes.
+    // Scrim click closes. The dialog sits centered on top of the
+    // backdrop, so click a corner of the scrim explicitly — clicking
+    // the centre would land on a palette card.
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
-    await page.locator('.palette-back').click();
+    await page.locator('.palette-back').click({ position: { x: 4, y: 4 } });
     await expect(page.getByRole('dialog', { name: /add widget/i })).not.toBeVisible();
 
     // Close button (×) closes.
