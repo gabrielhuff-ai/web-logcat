@@ -285,6 +285,25 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     showToast('Logs cleared');
   }, [showToast]);
 
+  // Export the currently-visible (filter-applied) buffer to a `.log`
+  // file. Format mirrors `logcat -v threadtime` — see `formatExportLine`.
+  // Ported from v1 `app.jsx` `onExport`; the v2 filename uses the
+  // `weblogcat-<serial>-<timestamp>.log` shape so multiple exports from
+  // the same device sort by capture time.
+  const onExport = useCallback(() => {
+    const lines = filtered.map(formatExportLine).join('\n');
+    const blob = new Blob([lines + (lines ? '\n' : '')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weblogcat-${device?.serial ?? 'unknown'}-${formatExportStamp(new Date())}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${filtered.length.toLocaleString()} lines`);
+  }, [filtered, device, showToast]);
+
   // ---- Per-widget keyboard shortcuts -------------------------------------
   // Only fire when focus is inside this widget. We don't want global
   // ⌘F to toggle search on every Logcat tile at once.
@@ -369,6 +388,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         setAutoScroll={setAutoScroll}
         wrapLines={tweaks.wrapLines}
         setWrapLines={(v) => setTweaks({ wrapLines: v })}
+        onExport={onExport}
         registerFocusHandler={(fn) => {
           focusFilterRef.current = fn;
         }}
@@ -464,4 +484,25 @@ function closestCrashHead(entry: LogEntry, logs: LogEntry[], heads: Set<number>)
     if (heads.has(logs[i].id)) return logs[i].id;
   }
   return -1;
+}
+
+/** `logcat -v threadtime` shape: `MM-DD HH:MM:SS.mmm  PID  TID L tag: msg`. */
+function formatExportLine(e: LogEntry): string {
+  const d = new Date(e.ts);
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  const ts =
+    `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  const pid = String(e.pid).padStart(5, ' ');
+  const tid = String(e.tid).padStart(5, ' ');
+  return `${ts} ${pid} ${tid} ${e.level} ${e.tag}: ${e.message}`;
+}
+
+/** Filename stamp, `YYYY-MM-DD-HHMMSS` in local time. */
+function formatExportStamp(d: Date): string {
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-` +
+    `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  );
 }

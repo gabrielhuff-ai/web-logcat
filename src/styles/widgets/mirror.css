@@ -1,8 +1,9 @@
 /* ===== v2: Mirror widget =====
- * Verbatim from `design/v2/source/widget-mirror.jsx`'s inline <style>
- * block. The widget renders a phone bezel (pure CSS) wrapping either
- * the simulated SVG app frame or a `<canvas>` driven by WebCodecs.
- * Bezel dimensions match the design's 360 / 760 aspect ratio. */
+ * Originally ported from `design/v2/source/widget-mirror.jsx` with a
+ * decorative phone bezel. The bezel + radial-gradient stage were dropped
+ * so the screen content (canvas in real mode, simulated SVG in fake
+ * mode) fills the tile body edge-to-edge. The tile's own border /
+ * rounded corners are now the only frame. */
 .mr-widget {
   display: flex;
   flex-direction: column;
@@ -55,46 +56,10 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.mr-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(
-    ellipse at center,
-    oklch(from var(--bg-0) calc(l + 0.02) c h) 0%,
-    var(--bg-0) 60%
-  );
-  padding: 18px;
-  overflow: hidden;
-}
-.mr-frame-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  max-height: 100%;
-}
-.mr-bezel {
-  background: oklch(0.08 0.005 270);
-  border: 1px solid oklch(0.18 0.005 270);
-  border-radius: 28px;
-  padding: 10px;
-  box-shadow:
-    0 0 0 1px oklch(0.25 0.005 270 / 0.6),
-    0 14px 32px oklch(0 0 0 / 0.45),
-    inset 0 0 0 1px oklch(0 0 0 / 0.5);
-  height: 100%;
-  aspect-ratio: 360 / 760;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-}
 .mr-screen {
   flex: 1;
+  min-height: 0;
   background: black;
-  border-radius: 20px;
   overflow: hidden;
   position: relative;
   cursor: crosshair;

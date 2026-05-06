@@ -26,6 +26,8 @@ export interface FilterBarProps {
   setAutoScroll: (v: boolean) => void;
   wrapLines: boolean;
   setWrapLines: (v: boolean) => void;
+  /** Save / export currently-visible (filter-applied) buffer to a `.log` file. */
+  onExport: () => void;
   /** Called when the user presses `/` outside an input — focuses the chip input. */
   registerFocusHandler?: (focus: () => void) => void;
 }
@@ -66,6 +68,7 @@ export function FilterBar({
   setAutoScroll,
   wrapLines,
   setWrapLines,
+  onExport,
   registerFocusHandler,
 }: FilterBarProps) {
   const [draft, setDraft] = useState('');
@@ -183,6 +186,14 @@ export function FilterBar({
           onClick={() => setAutoScroll(!autoScroll)}
         >
           {autoScroll ? <Icons.Down /> : <Icons.Lock />}
+        </button>
+        <button
+          className="icon-btn tt"
+          data-tt="Save / export logs"
+          aria-label="Save logs"
+          onClick={onExport}
+        >
+          <Icons.Save />
         </button>
       </div>
 

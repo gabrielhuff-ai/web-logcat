@@ -68,7 +68,7 @@ export function LevelRow({
     setEnabled(next);
   };
   return (
-    <div className="lvl-bar">
+    <div className="lvl-bar widget-bar">
       <div className="lvl-filter">
         {LEVELS.map(({ l, label }) => (
           <button
