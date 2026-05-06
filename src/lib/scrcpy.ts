@@ -66,7 +66,10 @@ export interface ScrcpySession {
  * keep it as a parameter so the widget can drop to 4 Mb/s if WebUSB
  * latency goes south, without changing this lib's API.
  */
-export async function startScrcpy(adb: Adb, opts: { bitRate?: number } = {}): Promise<ScrcpySession> {
+export async function startScrcpy(
+  adb: Adb,
+  opts: { bitRate?: number; maxFps?: number } = {},
+): Promise<ScrcpySession> {
   // 1. Fetch the vendored jar from the static asset path. `fetch` is
   //    fine here — Vite serves `public/` at the deploy root.
   const res = await fetch(import.meta.env.BASE_URL + SCRCPY_SERVER_URL);
@@ -96,6 +99,10 @@ export async function startScrcpy(adb: Adb, opts: { bitRate?: number } = {}): Pr
     control: true,
     videoCodec: 'h264',
     videoBitRate: opts.bitRate ?? 8_000_000,
+    // 0 means "no cap" — scrcpy passes through whatever the encoder
+    // produces. We hand a non-zero value to the server when the widget
+    // wants to spare an Intel iGPU from decoding 60fps screens.
+    maxFps: opts.maxFps ?? 0,
     sendFrameMeta: true,
     cleanup: true,
     // We don't care what scrcpy does with the screen on close.

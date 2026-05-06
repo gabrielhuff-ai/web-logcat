@@ -475,3 +475,47 @@
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* === Performance mode ====================================================
+ * `<html data-perf="on">` (set by `lib/tweaks.ts`) drops the visual effects
+ * that dominate the frame budget on Intel iGPU laptops:
+ *
+ *   - `backdrop-filter: blur(...)` is the single biggest offender — applied
+ *     to every tile, the topbar, the appearance / device pop, the palette,
+ *     and the settings modal. Replace with a flat opaque background so the
+ *     compositor doesn't have to re-blur the area behind each surface every
+ *     frame.
+ *   - The fractal-noise SVG overlay (`.dash::before` under `data-glass=on`)
+ *     is a 140×140 SVG re-tiled across the viewport; harmless on dGPU but
+ *     visible cost on iGPU. Hide unconditionally in perf mode.
+ *   - Infinite "always on" pulse animations on the brand glyph + the
+ *     device-status dot keep a render thread alive even when the app is
+ *     idle. The recording dot (`.mr-rec-dot`) animates only while
+ *     recording, so it stays untouched.
+ *
+ * Each rule scopes its background fallback so the surface stays visually
+ * coherent (no transparency without the blur, otherwise the topbar would
+ * become fully see-through).
+ */
+[data-perf="on"] .dash::before { display: none; }
+[data-perf="on"] .dash-top { backdrop-filter: none; background: var(--bg-0); }
+[data-perf="on"] .dash-device-pop {
+  backdrop-filter: none;
+  background: var(--bg-1);
+}
+[data-perf="on"] .tile {
+  backdrop-filter: none;
+  background: var(--bg-1);
+}
+[data-perf="on"] .tile-head {
+  backdrop-filter: none;
+  background: var(--bg-0);
+}
+[data-perf="on"] .palette-back { backdrop-filter: none; }
+[data-perf="on"] .palette {
+  backdrop-filter: none;
+  background: var(--bg-1);
+}
+[data-perf="on"] .dash-brand-square.s2,
+[data-perf="on"] .dash-brand-square.s3 { animation: none; }
+[data-perf="on"] .dash-device-status .dash-device-dot { animation: none; }

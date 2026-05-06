@@ -59,6 +59,17 @@ export interface Tweaks {
    * compact mode looks identical to a maximised tile.
    */
   compactMode: boolean;
+  /**
+   * Performance mode — drops expensive visual effects (backdrop-filter blur,
+   * animated decorations, the noise overlay) and clamps the Mirror widget's
+   * decoder budget so the dashboard stays smooth on Intel iGPU laptops.
+   *
+   * `'auto'` resolves at runtime via `lib/tweaks.ts → detectAutoPerf()` —
+   * `prefers-reduced-motion`, low device-memory, and an Intel-iGPU sniff via
+   * WEBGL_debug_renderer_info all flip the resolution to "on". The explicit
+   * `'on'` / `'off'` values bypass the auto-detect.
+   */
+  performanceMode: 'auto' | 'on' | 'off';
 }
 
 export type LevelEnabled = Record<LogLevel, boolean>;

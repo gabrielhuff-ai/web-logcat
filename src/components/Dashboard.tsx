@@ -266,7 +266,7 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
     };
   }, [open, setOpen]);
 
-  const { theme, accent, compactMode } = tweaks;
+  const { theme, accent, compactMode, performanceMode } = tweaks;
   return (
     <div className="dash-appearance" ref={wrapRef}>
       <button
@@ -337,6 +337,37 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
                 </span>
               </span>
             </button>
+          </div>
+          <div className="dash-appearance-section">
+            <div className="dash-appearance-label">Performance</div>
+            <div className="seg seg-3">
+              <button
+                className={performanceMode === 'auto' ? 'active' : ''}
+                onClick={() => setTweaks({ performanceMode: 'auto' })}
+                aria-pressed={performanceMode === 'auto'}
+              >
+                Auto
+              </button>
+              <button
+                className={performanceMode === 'on' ? 'active' : ''}
+                onClick={() => setTweaks({ performanceMode: 'on' })}
+                aria-pressed={performanceMode === 'on'}
+              >
+                On
+              </button>
+              <button
+                className={performanceMode === 'off' ? 'active' : ''}
+                onClick={() => setTweaks({ performanceMode: 'off' })}
+                aria-pressed={performanceMode === 'off'}
+              >
+                Off
+              </button>
+            </div>
+            <div className="dash-perf-hint">
+              Drops blur, animated decorations, and caps the Mirror widget
+              at 30 fps. Auto enables this on Intel iGPU laptops and when
+              the system requests reduced motion.
+            </div>
           </div>
         </div>
       )}

@@ -166,7 +166,10 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         if (arr[i].ts < cutoff) break;
         n++;
       }
-      setRate(n);
+      // Skip the commit when the count hasn't changed — common on idle
+      // streams. Each setRate forces LevelRow to re-render, which is
+      // wasted work when the value is the same.
+      setRate((prev) => (prev === n ? prev : n));
     }, 500);
     return () => window.clearInterval(t);
   }, []);
@@ -233,7 +236,13 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     [logs, pinned],
   );
 
+  // The bucket scan is O(60 × |logs|) — at MAX_LOGS = 5000 that's 300k
+  // comparisons every time the stream batches in new entries (i.e. several
+  // times a second). Skip the whole compute when the heatmap is hidden;
+  // <Heatmap/> below is also gated on the same flag, so the empty array
+  // is never read.
   const buckets = useMemo<HeatmapBucket[]>(() => {
+    if (!settings.heatmap) return [];
     const now = Date.now();
     const out: HeatmapBucket[] = [];
     for (let i = 59; i >= 0; i--) {
@@ -262,7 +271,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
       out.push({ count: total, dominant, secondsAgo: i });
     }
     return out;
-  }, [logs]);
+  }, [logs, settings.heatmap]);
 
   // ---- Handlers ----------------------------------------------------------
   const togglePin = useCallback((id: number) => {
