@@ -6,7 +6,7 @@
 // component is purely presentational + dispatches user intents back up
 // via callbacks.
 
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { Suspense, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
 import type { Tile as TileT } from '../types';
@@ -95,7 +95,11 @@ export function Tile({
         </button>
       </div>
 
-      <div className="tile-body">{children}</div>
+      <div className="tile-body">
+        <Suspense fallback={<div className="tile-loading">Loading widget…</div>}>
+          {children}
+        </Suspense>
+      </div>
 
       {!maximized && (
         <div

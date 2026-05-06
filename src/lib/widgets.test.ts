@@ -41,7 +41,12 @@ describe('widgets registry', () => {
       expect(def.name.length).toBeGreaterThan(0);
       expect(def.desc.length).toBeGreaterThan(0);
       expect(def.icon).toBeTypeOf('function');
-      expect(def.comp).toBeTypeOf('function');
+      // `def.comp` is either a function component (Logcat — eagerly
+      // imported, default tile) or a `React.lazy` exotic ($$typeof =
+      // react.lazy, an object). Both are valid renderables.
+      const comp = def.comp as unknown;
+      expect(typeof comp === 'function' || typeof comp === 'object').toBe(true);
+      expect(comp).not.toBeNull();
     }
   });
 });

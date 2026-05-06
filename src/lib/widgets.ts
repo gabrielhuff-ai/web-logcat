@@ -11,14 +11,18 @@
 //      itself.
 // That's the entire registration step — `WidgetPalette` and `TileGrid`
 // both consult this registry without further changes.
+//
+// Phase 10: every non-Logcat widget is wrapped in `React.lazy` so its
+// chunk only loads on first add. Logcat stays in the initial bundle —
+// it's the default tile and is always rendered the moment the dashboard
+// mounts. The biggest win is the Mirror chunk (scrcpy decoder + mp4-
+// muxer); Files (Tango sync wrapper) and Dumpsys (parser pack +
+// fixtures) come along for the ride. `<Tile/>` wraps the rendered
+// `def.comp` in `<Suspense/>` with a small "Loading widget…" fallback.
 
-import type { ComponentType } from 'react';
+import { lazy, type ComponentType } from 'react';
 import * as Icons from '../components/Icons';
-import { DumpsysWidget } from '../components/widgets/DumpsysWidget';
-import { FilesWidget } from '../components/widgets/FilesWidget';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
-import { MirrorWidget } from '../components/widgets/MirrorWidget';
-import { ShellWidget } from '../components/widgets/ShellWidget';
 import type { WidgetKind } from '../types';
 
 export interface WidgetProps {
@@ -43,6 +47,26 @@ export interface WidgetDef {
   maxInstances?: number;
 }
 
+// `React.lazy` requires a default export. The widget files use named
+// exports, so re-shape each promise into `{ default: Component }` as the
+// dynamic import resolves. The chunk filenames (`shell-widget`,
+// `dumpsys-widget`, etc.) come from Vite's filename hash; verify with
+// `npm run build` — each kind shows up as its own file in `dist/assets/`.
+const ShellWidgetLazy = lazy(() =>
+  import('../components/widgets/ShellWidget').then((m) => ({ default: m.ShellWidget })),
+);
+const DumpsysWidgetLazy = lazy(() =>
+  import('../components/widgets/DumpsysWidget').then((m) => ({
+    default: m.DumpsysWidget,
+  })),
+);
+const FilesWidgetLazy = lazy(() =>
+  import('../components/widgets/FilesWidget').then((m) => ({ default: m.FilesWidget })),
+);
+const MirrorWidgetLazy = lazy(() =>
+  import('../components/widgets/MirrorWidget').then((m) => ({ default: m.MirrorWidget })),
+);
+
 export const WIDGETS: Record<WidgetKind, WidgetDef> = {
   logcat: {
     name: 'Logcat',
@@ -56,7 +80,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Shell',
     icon: Icons.Terminal,
     desc: 'Interactive ADB shell',
-    comp: ShellWidget,
+    comp: ShellWidgetLazy,
     defaultSize: { w: 5, h: 4 },
     enabled: true,
   },
@@ -64,7 +88,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Dumpsys',
     icon: Icons.Dumpsys,
     desc: 'Run preset dumpsys commands',
-    comp: DumpsysWidget,
+    comp: DumpsysWidgetLazy,
     defaultSize: { w: 6, h: 6 },
     enabled: true,
   },
@@ -72,7 +96,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Files',
     icon: Icons.Folder,
     desc: 'Browse, push & pull device files',
-    comp: FilesWidget,
+    comp: FilesWidgetLazy,
     defaultSize: { w: 8, h: 6 },
     enabled: true,
   },
@@ -80,7 +104,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Screen Mirror',
     icon: Icons.Mirror,
     desc: 'scrcpy-style live device screen',
-    comp: MirrorWidget,
+    comp: MirrorWidgetLazy,
     defaultSize: { w: 3, h: 10 },
     enabled: true,
     maxInstances: 1,
