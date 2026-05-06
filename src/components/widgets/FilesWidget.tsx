@@ -908,20 +908,21 @@ function PhoneIcon({ size = 11 }: InlineIconProps) {
   );
 }
 function FolderIcon({ open }: { open: boolean }) {
-  // Filled folder mirroring the design's accent-tinted glyph.
+  // Filled folder tinted with the dashboard accent (theme primary).
+  const color = 'var(--accent)';
   return (
-    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
       <path
         d={
           open
             ? 'M 1.5 5 L 1.5 13 Q 1.5 14 2.5 14 L 13 14 L 14.5 7 L 5.5 7 L 4 5 Z'
             : 'M 1.5 4 L 1.5 13 Q 1.5 14 2.5 14 L 13.5 14 Q 14.5 14 14.5 13 L 14.5 6 Q 14.5 5 13.5 5 L 7 5 L 5.5 3 L 2.5 3 Q 1.5 3 1.5 4 Z'
         }
-        fill="oklch(0.78 0.1 80)"
+        fill="currentColor"
         fillOpacity="0.85"
-        stroke="oklch(0.4 0.05 80)"
+        stroke="currentColor"
         strokeWidth="0.5"
-        strokeOpacity="0.4"
+        strokeOpacity="0.6"
       />
     </svg>
   );
@@ -929,42 +930,27 @@ function FolderIcon({ open }: { open: boolean }) {
 
 function FileIcon({ entry }: { entry: SyncEntry }) {
   if (entry.type === 'dir') return <FolderIcon open={false} />;
+  // Both link and file glyphs use the theme accent so the file column
+  // reads as a coherent column of primary-tinted icons.
+  const color = 'var(--accent)';
   if (entry.type === 'link') {
     return (
-      <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
-        <path d="M 6 9 L 4 11 Q 2 13 4 15 Q 6 17 8 15 L 10 13" fill="none" stroke="oklch(0.78 0.13 220)" strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M 10 7 L 12 5 Q 14 3 12 1 Q 10 -1 8 1 L 6 3" fill="none" stroke="oklch(0.78 0.13 220)" strokeWidth="1.4" strokeLinecap="round" />
+      <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
+        <path d="M 6 9 L 4 11 Q 2 13 4 15 Q 6 17 8 15 L 10 13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M 10 7 L 12 5 Q 14 3 12 1 Q 10 -1 8 1 L 6 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
     );
   }
-  const ext = entry.name.split('.').pop()?.toLowerCase() ?? '';
-  const colorMap: Record<string, string> = {
-    apk: 'oklch(0.7 0.13 150)',
-    jpg: 'oklch(0.78 0.13 30)',
-    jpeg: 'oklch(0.78 0.13 30)',
-    png: 'oklch(0.78 0.13 30)',
-    pdf: 'oklch(0.7 0.16 25)',
-    json: 'oklch(0.78 0.13 80)',
-    md: 'oklch(0.78 0.13 220)',
-    txt: 'oklch(0.78 0.13 220)',
-    zip: 'oklch(0.78 0.13 80)',
-    perfetto: 'oklch(0.78 0.16 320)',
-    mp3: 'oklch(0.78 0.16 320)',
-    bin: 'oklch(0.7 0.05 280)',
-    dat: 'oklch(0.7 0.05 280)',
-    tmp: 'oklch(0.7 0.05 280)',
-  };
-  const color = colorMap[ext] ?? 'oklch(0.65 0.02 280)';
   return (
-    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
       <path
         d="M 3 1.5 L 3 14.5 Q 3 15 3.5 15 L 12.5 15 Q 13 15 13 14.5 L 13 5 L 9 1.5 Z"
-        fill={color}
+        fill="currentColor"
         fillOpacity="0.5"
-        stroke={color}
+        stroke="currentColor"
         strokeWidth="0.8"
       />
-      <path d="M 9 1.5 L 9 5 L 13 5" fill="none" stroke={color} strokeWidth="0.8" />
+      <path d="M 9 1.5 L 9 5 L 13 5" fill="none" stroke="currentColor" strokeWidth="0.8" />
     </svg>
   );
 }
