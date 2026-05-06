@@ -198,21 +198,58 @@
  * Per-widget font size — `--widget-font-size` is set by each widget's
  * root container from its `useTileSettings` value. The bar / toolbar
  * keeps the design's fixed sizes; only the body content scales.
+ *
+ * Selectors are written with extra specificity so they beat the cell-
+ * level rules in `app.css` and the per-widget design originals (each
+ * cell has its own `font-size: var(--t-sm)` etc., which would otherwise
+ * pin the cell at the original size and make the row-level rule a
+ * no-op for everything except `.cell.tag`).
  * ========================================================================= */
 
-.lc-widget .row {
+/* Logcat — every cell in a log row reads body text. */
+.lc-widget .row,
+.lc-widget .row .cell,
+.lc-widget .row .cell.ts,
+.lc-widget .row .cell.pid,
+.lc-widget .row .cell.pkg,
+.lc-widget .row .cell.tag,
+.lc-widget .row .cell.msg,
+.lc-widget .pinned-block .row,
+.lc-widget .pinned-block .row .cell {
   font-size: var(--widget-font-size, var(--t-sm));
 }
-.sh-widget .sh-scroll {
+
+/* Shell — scrollback + the live prompt input. */
+.sh-widget .sh-scroll,
+.sh-widget .sh-line,
+.sh-widget .sh-input-line input {
   font-size: var(--widget-font-size, 12px);
 }
+
+/* Dumpsys — parsed card body text + the raw dump pre. The numeric
+ * "hero" values (e.g. percent, ms) keep their oversized headline
+ * sizes; only the labelled rows + raw text scale. */
 .ds-widget .ds-card-row,
-.ds-widget .ds-raw {
+.ds-widget .ds-card-row .k,
+.ds-widget .ds-card-row .v,
+.ds-widget .ds-raw,
+.ds-widget .ds-procs .ds-proc,
+.ds-widget .ds-bucket-row {
   font-size: var(--widget-font-size, var(--t-sm));
 }
-.fx-widget .fx-row {
+
+/* Files — list-pane rows and their cells. The 220px tree pane stays
+ * at its design size to keep the directory hierarchy compact. */
+.fx-widget .fx-row,
+.fx-widget .fx-row .fx-cell,
+.fx-widget .fx-row .fx-cell.name,
+.fx-widget .fx-row .fx-cell.num,
+.fx-widget .fx-row .fx-cell.mono,
+.fx-widget .fx-list-head .fx-cell {
   font-size: var(--widget-font-size, var(--t-sm));
 }
+
+/* Mirror — only the overlay text (REC pill, simulated-mode notices). */
 .mr-widget .mr-recording-pill,
 .mr-widget .mr-inline-notice {
   font-size: var(--widget-font-size, var(--t-sm));

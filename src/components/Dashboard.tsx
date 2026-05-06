@@ -262,7 +262,7 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
         aria-label="Appearance"
         onClick={() => setOpen(!open)}
       >
-        <Icons.Wand size={13} />
+        <AppearanceIcon size={13} />
       </button>
       {open && (
         <div className="dash-device-pop dash-appearance-pop">
@@ -308,5 +308,29 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Half-filled circle — the macOS-style "Appearance" glyph. Theme +
+ * accent both live behind this button, and a circle split between
+ * outline and fill is the most universally recognised marker for
+ * "light/dark + colour" preferences. Defined inline here rather than
+ * in `Icons.tsx` so this single-use SVG doesn't pollute the shared
+ * icon set.
+ */
+function AppearanceIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path d="M12 3 a9 9 0 0 1 0 18 Z" fill="currentColor" />
+    </svg>
   );
 }
