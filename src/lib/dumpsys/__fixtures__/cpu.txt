@@ -1,0 +1,19 @@
+Load: 1.42 / 1.18 / 0.92
+CPU usage from 32ms to 8284ms ago (2024-12-12 14:12:08.310 to 2024-12-12 14:12:16.370):
+  18% 8412/com.example.shopapp: 14% user + 4% kernel / faults: 2,310 minor 2 major
+  12% 1421/com.android.systemui: 9% user + 3% kernel
+   8% 982/system_server: 5% user + 3% kernel
+   6% 4502/com.android.chrome: 5% user + 1% kernel
+   5% 5810/com.spotify.music: 3% user + 2% kernel
+   2% 2104/com.google.android.gms: 1% user + 1% kernel
+   1% 1188/com.android.bluetooth: 0% user + 1% kernel
+
+ 56% TOTAL: 38% user + 14% kernel + 3% iowait + 1% softirq
+CPU 0:  62% usr + 18% nice +   5% sys +  10% idle +   2% iow +   2% irq +   1% sirq
+CPU 1:  48% usr +  4% nice +  10% sys +  30% idle +   4% iow +   2% irq +   2% sirq
+CPU 2:  40% usr +  2% nice +   8% sys +  44% idle +   2% iow +   2% irq +   2% sirq
+CPU 3:  22% usr +  0% nice +   6% sys +  68% idle +   2% iow +   1% irq +   1% sirq
+CPU 4:  14% usr +  0% nice +   4% sys +  78% idle +   2% iow +   1% irq +   1% sirq
+CPU 5:   8% usr +  0% nice +   2% sys +  86% idle +   2% iow +   1% irq +   1% sirq
+CPU 6:   4% usr +  0% nice +   2% sys +  90% idle +   2% iow +   1% irq +   1% sirq
+CPU 7:   2% usr +  0% nice +   1% sys +  94% idle +   1% iow +   1% irq +   1% sirq

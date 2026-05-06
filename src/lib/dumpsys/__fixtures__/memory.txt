@@ -1,0 +1,62 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 4,240,520 Realtime: 8,120,433
+
+** MEMINFO in pid 982 [system_server] **
+                   Pss  Private  Private     Swap      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    52410    52000      120     1340    66400    71680    52144    19536
+  Dalvik Heap    24180    23900       40        0    32220    49152    25800    23352
+ Dalvik Other     8120     8080        0        0     8420
+        Stack     2480     2480        0      192     2604
+       Ashmem      640      540        0        0      872
+    Other dev      120       80        0        0      136
+     .so mmap    18420     1240    13880        0    32810
+    .jar mmap     2104        0      820        0     6900
+    .apk mmap     8410      120     7240        0    18820
+    .ttf mmap      640        0      620        0     1320
+    .dex mmap     6280       40     6160        0     8410
+    .oat mmap      820        0      640        0     2100
+    .art mmap     8410     8200       40       60    18820
+   Other mmap     2120     1840        0        0     3120
+      EGL mtrack    0        0        0        0        0
+       GL mtrack    0        0        0        0        0
+          Unknown 1840     1840        0        0     1840
+          TOTAL  136994   100360    29560     1592   210804   120832    77944    42888
+
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    32140                          51040
+         Native Heap:    52000                          66400
+                Code:    30260                          71200
+               Stack:     2480                           2604
+            Graphics:        0                              0
+       Private Other:    11700
+              System:     8414
+             Unknown:                                    1840
+
+           TOTAL PSS:   136994            TOTAL RSS:   210804      TOTAL SWAP (KB):     1592
+
+Total PSS by process:
+   312,508K: system_server (pid 982 / activities)
+   284,012K: com.android.systemui (pid 1421)
+   228,140K: com.example.shopapp (pid 8412)
+   180,420K: com.android.chrome (pid 4502)
+   152,310K: com.google.android.gms (pid 2104)
+   118,480K: com.spotify.music (pid 5810)
+    72,210K: com.android.bluetooth (pid 1188)
+    61,820K: com.android.vending (pid 3201)
+
+Total PSS by OOM adjustment:
+       420,182K: Native
+       312,508K: System
+       284,012K: Persistent
+       912,440K: Foreground
+       482,880K: Visible
+       340,228K: Cached
+
+Total RAM: 11,924,000K (status normal)
+ Free RAM:  4,202,440K
+ Used RAM:  7,610,212K
+ Lost RAM:    111,348K

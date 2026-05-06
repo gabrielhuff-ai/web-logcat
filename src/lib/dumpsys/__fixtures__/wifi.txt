@@ -1,0 +1,26 @@
+Wi-Fi is enabled
+Stay-awake conditions: 3
+Mobile data state: 2
+Verbose logging is OFF
+
+Wi-Fi Connections:
+  ConnectedSSID: "HomeWifi-5G"
+  RSSI: -52 dBm
+  LinkSpeed: 866 Mbps
+  Frequency: 5180 MHz
+  IpAddress: 192.168.1.142
+  MacAddress: 04:42:1a:** (randomized)
+  Score: 60
+
+Saved networks: 3
+  HomeWifi-5G    [WPA2-PSK][ESS]
+  Office         [WPA2-EAP][ESS]
+  CoffeeShop     [WPA2-PSK][ESS]
+
+Latest scan results:
+  BSSID              SSID                 Freq    RSSI    Capabilities
+  04:42:1a:11:22:33  HomeWifi-5G          5180    -52     [WPA2-PSK-CCMP][ESS]
+  04:42:1a:11:22:34  HomeWifi             2412    -58     [WPA2-PSK-CCMP][ESS]
+  60:32:b1:ab:cd:ef  CoffeeShop           2437    -71     [WPA2-PSK-CCMP][ESS]
+  ac:84:c6:99:88:77  PrintNet             2462    -78     [WPA2-PSK-CCMP][ESS]
+  e8:de:27:00:11:22  Neighbor-2.4         2412    -82     [WPA2-PSK-CCMP][ESS]
