@@ -247,9 +247,11 @@ function replaceAt(
 
 /**
  * Add a tile to the layout. Splits the focused leaf; if no leaf is
- * focused or the focus is stale, splits the right-most leaf. The split
- * direction defaults to the wider available axis (Hyprland's dwindle
- * default), but callers can pass an explicit `dir`.
+ * focused or the focus is stale, splits the right-most leaf. Pass
+ * `splitDir` explicitly to control direction — the renderer in
+ * `<TileGrid/>` does this based on the focused tile's pixel rect
+ * (Hyprland's dwindle convention: split along the longer axis so the
+ * resulting children stay roughly square).
  */
 export function addTile(
   layout: LayoutState,
@@ -257,8 +259,6 @@ export function addTile(
   options: {
     id?: string;
     splitDir?: 'row' | 'col';
-    /** Rough viewport aspect — used to pick the default split direction. */
-    viewportAspect?: number;
   } = {},
 ): LayoutState {
   const id = options.id ?? nextTileId();
@@ -292,8 +292,7 @@ export function addTile(
       focusId: id,
     };
   }
-  const dir =
-    options.splitDir ?? ((options.viewportAspect ?? 16 / 9) >= 1 ? 'row' : 'col');
+  const dir = options.splitDir ?? 'row';
   const split: LayoutNode = {
     type: 'split',
     dir,
@@ -398,4 +397,108 @@ export function setRatio(
   if (node.ratio === clamped) return layout;
   const next = { ...node, ratio: clamped };
   return { ...layout, tree: replaceAt(layout.tree, path, next) };
+}
+
+// ---- Pixel layout ----------------------------------------------------------
+
+/**
+ * Bounding rect (in dashboard-local pixels) of either a leaf or a split
+ * node. The dashboard renderer uses these to absolute-position tiles +
+ * resize handles, which keeps every tile mounted as a direct child of
+ * `.dash-grid` (no React tree restructure on add/remove/swap, so widget
+ * components — and their internal state — survive layout changes).
+ */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface LeafLayout {
+  id: string;
+  rect: Rect;
+}
+
+export interface SplitLayout {
+  /** `path.join('') || 'root'` — stable across renders. */
+  key: string;
+  path: Array<'a' | 'b'>;
+  dir: 'row' | 'col';
+  /** The seam handle's bounding rect. */
+  handleRect: Rect;
+  /**
+   * Length available to the split's two children along the resize axis,
+   * excluding the gap consumed by the seam. `ratio = aLen / innerLen`.
+   */
+  innerLen: number;
+}
+
+export interface ComputedLayout {
+  leaves: LeafLayout[];
+  splits: SplitLayout[];
+}
+
+/**
+ * Walk the tree and produce absolute-positioned rects for every leaf +
+ * a bounding box for every split's seam handle. `outer` is the available
+ * area after the dashboard's outer-edge gap is reserved; `gap` is the
+ * inter-tile gap (also the seam handle's thickness).
+ *
+ * Returns empty arrays for `tree === null` or non-positive dimensions
+ * (i.e. before the first ResizeObserver fire).
+ */
+export function computeLayoutRects(
+  tree: LayoutNode | null,
+  outer: Rect,
+  gap: number,
+): ComputedLayout {
+  const leaves: LeafLayout[] = [];
+  const splits: SplitLayout[] = [];
+  if (!tree || outer.w <= 0 || outer.h <= 0) return { leaves, splits };
+
+  const walk = (node: LayoutNode, rect: Rect, path: Array<'a' | 'b'>) => {
+    if (node.type === 'leaf') {
+      leaves.push({ id: node.id, rect });
+      return;
+    }
+    if (node.dir === 'row') {
+      const inner = Math.max(0, rect.w - gap);
+      const aW = inner * node.ratio;
+      const bW = inner - aW;
+      walk(node.a, { x: rect.x, y: rect.y, w: aW, h: rect.h }, [...path, 'a']);
+      walk(
+        node.b,
+        { x: rect.x + aW + gap, y: rect.y, w: bW, h: rect.h },
+        [...path, 'b'],
+      );
+      splits.push({
+        key: path.join('') || 'root',
+        path,
+        dir: 'row',
+        handleRect: { x: rect.x + aW, y: rect.y, w: gap, h: rect.h },
+        innerLen: inner,
+      });
+    } else {
+      const inner = Math.max(0, rect.h - gap);
+      const aH = inner * node.ratio;
+      const bH = inner - aH;
+      walk(node.a, { x: rect.x, y: rect.y, w: rect.w, h: aH }, [...path, 'a']);
+      walk(
+        node.b,
+        { x: rect.x, y: rect.y + aH + gap, w: rect.w, h: bH },
+        [...path, 'b'],
+      );
+      splits.push({
+        key: path.join('') || 'root',
+        path,
+        dir: 'col',
+        handleRect: { x: rect.x, y: rect.y + aH, w: rect.w, h: gap },
+        innerLen: inner,
+      });
+    }
+  };
+
+  walk(tree, outer, []);
+  return { leaves, splits };
 }
