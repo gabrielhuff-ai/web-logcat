@@ -598,3 +598,65 @@
   flex-shrink: 0;
 }
 
+/* Compact-mode toggle — single switch row in the appearance popover. */
+.dash-compact-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  border: 1.5px solid transparent;
+  color: var(--fg-1);
+  text-align: left;
+  transition: all var(--dur-fast) var(--ease-out);
+  cursor: pointer;
+}
+.dash-compact-toggle:hover { background: var(--bg-3); }
+.dash-compact-toggle.active {
+  border-color: var(--accent);
+  color: var(--fg-0);
+}
+.dash-compact-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--bg-0);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.dash-compact-toggle.active .dash-compact-track {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px oklch(from var(--accent) calc(l - 0.1) c h / 0.5);
+}
+.dash-compact-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--fg-0);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.3);
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.dash-compact-toggle.active .dash-compact-thumb {
+  transform: translateX(12px);
+  background: white;
+}
+.dash-compact-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dash-compact-title {
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+.dash-compact-desc {
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  line-height: 1.4;
+}
+
