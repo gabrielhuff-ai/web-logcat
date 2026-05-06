@@ -35,9 +35,10 @@ test.describe('simulator', () => {
     // Device pill shows the simulated device.
     await expect(page.locator('.dash-device-name')).toContainText('Demo Device');
 
-    // The default layout in Phase 6 ships a Logcat tile + a Shell
-    // tile; logs land in the Logcat list.
-    await expect(page.locator('.tile')).toHaveCount(2);
+    // The Phase 9 default layout ships the full HANDOFF arrangement:
+    // Mirror + Logcat + Shell + Dumpsys (the last is a stub until
+    // Phase 7 lands). Logs land in the Logcat list.
+    await expect(page.locator('.tile')).toHaveCount(4);
     await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
   });
 });
@@ -96,13 +97,14 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(2);
+    await expect(page.locator('.tile')).toHaveCount(4);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
-    // Phase 7+8 ships Logcat + Shell + Dumpsys + Files; Mirror is still
-    // a disabled stub.
+    // After Phases 7+8+9 all five widget kinds ship; the Mirror card is
+    // blocked at the palette because the default layout already includes
+    // a Mirror tile (`maxInstances: 1`).
     const cards = page.locator('.palette-card');
     await expect(cards).toHaveCount(5);
     await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
@@ -112,16 +114,13 @@ test.describe('dashboard', () => {
     await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
   });
 
-  test('adding a Dumpsys widget runs a preset against the simulator', async ({
+  test('Dumpsys tile runs a preset against the simulator', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(2);
-
-    await page.getByRole('button', { name: /add widget/i }).click();
-    await page.locator('.palette-card').filter({ hasText: 'Dumpsys' }).click();
-    await expect(page.locator('.tile')).toHaveCount(3);
+    // The default HANDOFF layout already includes a Dumpsys tile.
+    await expect(page.locator('.tile')).toHaveCount(4);
 
     const dsTile = page.locator('.ds-widget').first();
     await expect(dsTile).toBeVisible();
@@ -143,11 +142,12 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(2);
+    // Files isn't in the HANDOFF default layout — palette adds tile #5.
+    await expect(page.locator('.tile')).toHaveCount(4);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
-    await expect(page.locator('.tile')).toHaveCount(3);
+    await expect(page.locator('.tile')).toHaveCount(5);
 
     const fxTile = page.locator('.fx-widget').first();
     await expect(fxTile).toBeVisible();
@@ -163,23 +163,46 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(2);
+    await expect(page.locator('.tile')).toHaveCount(4);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
-    await expect(page.locator('.tile')).toHaveCount(3);
+    await expect(page.locator('.tile')).toHaveCount(5);
 
-    // Add a filter to the first Logcat tile only; the second Logcat
-    // tile's chip bar should stay empty. Indices 0 and 2 are the two
-    // Logcat tiles (1 is the default Shell tile).
-    const firstTile = page.locator('.tile').nth(0);
-    await firstTile.locator('.fb-input').focus();
-    await firstTile.locator('.fb-input').fill('tag:Activity');
-    await firstTile.locator('.fb-input').press('Enter');
-    await expect(firstTile.locator('.chip')).toHaveCount(1);
+    // Add a filter to the first Logcat tile (which sits at index 1 in
+    // the HANDOFF default — Mirror at 0, Logcat at 1, Shell at 2,
+    // Dumpsys at 3, new Logcat at 4).
+    const firstLogcat = page.locator('.tile').nth(1);
+    await firstLogcat.locator('.fb-input').focus();
+    await firstLogcat.locator('.fb-input').fill('tag:Activity');
+    await firstLogcat.locator('.fb-input').press('Enter');
+    await expect(firstLogcat.locator('.chip')).toHaveCount(1);
 
-    const newTile = page.locator('.tile').nth(2);
+    const newTile = page.locator('.tile').nth(4);
     await expect(newTile.locator('.chip')).toHaveCount(0);
+  });
+
+  test('Mirror tile renders the simulated app frame and is capped at one', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    // The default layout already includes a Mirror tile.
+    await expect(page.locator('.mr-widget')).toHaveCount(1);
+    await expect(page.locator('.mr-bezel')).toBeVisible();
+    await expect(page.locator('.mirror-svg')).toBeVisible();
+
+    // The three button groups + 8 hardware buttons all rendered.
+    await expect(page.locator('.mr-hw')).toHaveCount(8);
+    await expect(page.locator('.mr-sep')).toHaveCount(2);
+
+    // maxInstances: 1 should keep the palette card disabled while a
+    // Mirror tile already exists.
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await expect(
+      page.locator('.palette-card').filter({ hasText: 'Screen Mirror' }),
+    ).toBeDisabled();
   });
 
   test('adding a Shell widget runs the simulator commands', async ({ page }) => {
