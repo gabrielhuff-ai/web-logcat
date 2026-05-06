@@ -39,19 +39,28 @@ src/
 │   ├── Heatmap.tsx               # 60-cell gutter
 │   ├── HelpDialog.tsx            # ? shortcuts dialog
 │   ├── SearchOverlay.tsx         # ⌘F floating search box
-│   ├── SettingsPanel.tsx         # legacy drawer (not currently mounted)
 │   ├── Icons.tsx                 # inline SVG icon set
 │   └── widgets/
 │       ├── LogcatWidget.tsx      # the v1 logcat experience as a widget
 │       ├── ShellWidget.tsx       # interactive ADB shell (one channel per instance)
-│       └── StubWidget.tsx        # placeholder for not-yet-shipped kinds
+│       ├── DumpsysWidget.tsx     # preset dumpsys runner + parsed cards / raw view
+│       ├── FilesWidget.tsx       # tree + list browser over adb.sync()
+│       └── MirrorWidget.tsx      # scrcpy-style mirror with WebCodecs decode
 │
 └── styles/
     ├── tokens.css                # design original — colors, spacing, motion
     │                             # (extended with v2 --shadow-3 + --glass-line)
     ├── app.css                   # design original — layout + log row + panels
     ├── dashboard.css             # design original (v2) — tile grid + chrome
-    └── components.css            # additions: heatmap, h-scroll, widget shells
+    ├── components.css            # cross-cutting additions (empty state, filter
+    │                             # bar, level pills, heatmap, help dialog,
+    │                             # palette, tile loading)
+    └── widgets/                  # per-widget design CSS (Phase 10 split);
+        ├── logcat.css            # imported by the widget itself so the
+        ├── shell.css             # rules co-load with the lazy chunk
+        ├── dumpsys.css
+        ├── files.css
+        └── mirror.css
 ```
 
 `tokens.css`, `app.css`, and `dashboard.css` are **design originals** —
@@ -60,7 +69,10 @@ copied verbatim from `design/v1/source/styles.css` (tokens + app) and
 tokens (`--shadow-3` + `--glass-line`); they're added inline at the top
 of each theme block in `tokens.css`. Everything else stays untouched so
 those files can be refreshed from the design source without merge
-conflicts. New CSS goes into `components.css`.
+conflicts. Per-widget CSS lives under `styles/widgets/<kind>.css` and
+is imported at the top of the matching widget component. Cross-cutting
+additions (palette, tile loading, help dialog, heatmap, etc.) stay in
+`components.css`.
 
 ## State
 

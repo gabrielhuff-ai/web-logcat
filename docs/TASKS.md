@@ -348,29 +348,46 @@ its own PR-sized milestone with a verifiable demo.
 
 ## Phase 10 — Polish
 
-- [ ] **Lazy-load widget chunks** — each non-Logcat widget kind
-  is dynamically imported on first add (mirrors the existing
-  `lib/adb.ts` / `lib/logGenerator.ts` lazy pattern from Phase 3).
-  Biggest win is the Mirror chunk (scrcpy decoder + muxer).
-- [ ] **CSS originals re-split** — once all widgets land, mirror
-  the v1 convention: per-widget design CSS pulled verbatim from
-  `design/v2/source/widget-<kind>.jsx`'s `<style>` block into
-  `src/styles/widgets/<kind>.css`. Deltas continue to live in
-  `components.css`. Keeps refreshes from `design/v2/source/`
-  merge-conflict-free.
-- [ ] **Playwright smoke for the dashboard** — extend
-  `e2e/`: add tile, drag, resize, eye, maximize, remove,
-  reset layout, palette open/close. WebUSB-dependent flows
-  stay manual.
-- [ ] **README + screenshot refresh** — new dashboard
-  screenshot under `docs/screenshot.png`; update the feature
-  blurb from "logcat viewer" to "Android device inspector".
+- [x] **Lazy-load widget chunks** — every non-Logcat widget kind is
+  wrapped in `React.lazy(() => import('…/<Kind>Widget'))` in
+  `src/lib/widgets.ts`; `<Tile/>` renders the result inside
+  `<Suspense fallback={<div className="tile-loading">Loading
+  widget…</div>}/>`. Logcat stays in the initial bundle (default
+  tile, always rendered). `npm run build` shows the four chunks as
+  separate files in `dist/assets/`; the biggest wins are Mirror
+  (scrcpy + mp4-muxer ~17 KB gzip together) and Dumpsys (parser
+  pack + fixtures, 9 KB).
+- [x] **CSS originals re-split** — per-widget design CSS moved out of
+  `components.css` (which dropped from 1577 → 638 lines) into
+  `src/styles/widgets/{logcat,shell,dumpsys,files,mirror}.css`.
+  Each widget imports its own CSS at the top of the file so the
+  rules ride along in the lazy chunk. Cross-cutting additions
+  (palette, tile loading, heatmap, help dialog, …) stay in
+  `components.css`. Total CSS shipped is identical to pre-split
+  (~50.5 KB across the 5 outputs).
+- [x] **Playwright smoke for the dashboard** — `tests/smoke.spec.ts`
+  gained six new cases under the `dashboard` describe: drag a
+  tile by its grip, resize from the bottom-right corner, hide /
+  show the widget bar via the eye toggle, maximize and restore,
+  Reset layout after adding an extra tile, and palette
+  open/close via Esc + scrim click + close button.
+- [x] **README + screenshot refresh** — README rewritten around the
+  v2 dashboard: the tagline now reads "Android device inspector",
+  every widget gets a one-liner in the new Widgets table, and the
+  Logcat-specific filter / shortcut sections are nested under a
+  "Logcat widget" heading. The bundle/dependency note now cites
+  the lazy-chunk sizes. The screenshot at `docs/screenshot.png`
+  is still v1 — to be regenerated manually after a `npm run dev`
+  walk-through (headless screenshotting blocked in this
+  environment because `playwright install chromium` couldn't
+  reach Google's CDN).
 - [x] **Migration purge** — landed in Phase 5: `Toolbar.tsx`
   deleted, its brand / device-picker / theme bits moved into
   `DashTopbar`.
-- [ ] **Resolve `SettingsPanel` orphan** — Phase 5 deleted
-  `Toolbar.tsx`, which was the only mount point. Theme + accent
-  already moved to the dashboard topbar. Either remount the
-  panel from a topbar button (for density / heatmap / scrubber
-  toggles that didn't move) or delete `SettingsPanel.tsx` and
-  its CSS. Pick whichever matches the v2 hand-off best.
+- [x] **Resolve `SettingsPanel` orphan** — deleted
+  `src/components/SettingsPanel.tsx` and the matching `.settings*`,
+  `.seg*`, `.accent-swatch*`, `.toggle*` rules from
+  `components.css`. Theme + accent live in `DashTopbar`; density
+  is a Logcat-internal control; heatmap is per-widget; scrubber
+  was already removed in Phase 1. No global drawer remains to
+  host.
