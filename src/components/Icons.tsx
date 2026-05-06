@@ -44,8 +44,8 @@ export const Clear = make('M6 6h12l-1.2 12.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8
 export const Search = make('M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm5.2 12.2L21 21', 1.7);
 export const Save = make('M5 4h11l3 3v13H5zM8 4v6h8V4M8 14h8v6H8z', 1.6);
 export const Settings = make(
-  'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm9 3.5l-2.1-.5-.6-1.5 1.1-1.8-1.6-1.6-1.8 1.1-1.5-.6L13.5 3h-3l-.5 2.1-1.5.6-1.8-1.1-1.6 1.6 1.1 1.8-.6 1.5L3 10.5v3l2.1.5.6 1.5-1.1 1.8 1.6 1.6 1.8-1.1 1.5.6.5 2.1h3l.5-2.1 1.5-.6 1.8 1.1 1.6-1.6-1.1-1.8.6-1.5L21 13.5z',
-  1.4,
+  'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 4v2 M12 18v2 M4 12h2 M18 12h2 M6.34 6.34l1.42 1.42 M16.24 16.24l1.42 1.42 M6.34 17.66l1.42-1.42 M16.24 7.76l1.42-1.42',
+  1.6,
 );
 export const Filter = make('M3 5h18l-7 9v5l-4-2v-3z', 1.6);
 export const FilterFilled = make('M3 5h18l-7 9v5l-4-2v-3z');
@@ -70,7 +70,10 @@ export const Wrap = make('M3 6h18M3 12h13a4 4 0 1 1 0 8h-2m0 0l3-3m-3 3l3 3M3 18
 export const Time = make('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2', 1.6);
 export const Hash = make('M9 3l-2 18M17 3l-2 18M3 9h18M3 15h18', 1.6);
 export const More = make('M5 12a1.4 1.4 0 1 0 0-.01M12 12a1.4 1.4 0 1 0 0-.01M19 12a1.4 1.4 0 1 0 0-.01', 2.2);
-export const Refresh = make('M4 12a8 8 0 0 1 14-5.3L20 4v6h-6M20 12a8 8 0 0 1-14 5.3L4 20v-6h6', 1.6);
+export const Refresh = make(
+  'M3 12a9 9 0 0 1 9-9 9.7 9.7 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.7 9.7 0 0 1-6.74-2.74L3 16 M3 21v-5h5',
+  1.6,
+);
 export const Sun = make(
   'M12 5V2M12 22v-3M5 12H2M22 12h-3M6.3 6.3l-2-2M19.7 19.7l-2-2M6.3 17.7l-2 2M19.7 4.3l-2 2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   1.6,

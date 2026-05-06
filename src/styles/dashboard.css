@@ -34,15 +34,34 @@
 }
 
 .dash-brand {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 8px 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
+.dash-brand:hover {
+  background: oklch(from var(--accent) l c h / 0.06);
+  border-color: oklch(from var(--accent) l c h / 0.15);
+}
+.dash-brand:active { transform: translateY(1px); }
 .dash-brand-glyph {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: oklch(from var(--accent) l c h / 0.14);
-  border: 1px solid oklch(from var(--accent) l c h / 0.3);
-  border-radius: 7px;
+  width: 22px; height: 22px;
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
 }
+.dash-brand-square {
+  position: absolute;
+  width: 8px; height: 8px;
+  border-radius: 1.5px;
+  background: var(--accent);
+}
+.dash-brand-square.s1 { top: 0; left: 0; }
+.dash-brand-square.s2 { top: 0; left: 12px; opacity: 0.7; animation: pulse 2s infinite; }
+.dash-brand-square.s3 { top: 12px; left: 6px; opacity: 0.4; animation: pulse 2.4s infinite; }
 .dash-brand-name {
   font-weight: 700;
   font-size: 14px;
