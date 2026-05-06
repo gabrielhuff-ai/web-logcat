@@ -67,7 +67,7 @@ export function WidgetPalette({ layout, onClose, onPick }: WidgetPaletteProps) {
           })}
         </div>
         <div className="palette-foot">
-          Drag widget headers to rearrange · Drag bottom-right corner to resize
+          Drag widget headers to swap · Drag the seam between widgets to resize
         </div>
       </div>
     </>
@@ -82,7 +82,10 @@ export function WidgetPalette({ layout, onClose, onPick }: WidgetPaletteProps) {
 function blockingReason(kind: WidgetKind, layout: LayoutState): string | null {
   const def = WIDGETS[kind];
   if (def.maxInstances != null) {
-    const count = layout.filter((t) => t.kind === kind).length;
+    let count = 0;
+    for (const t of Object.values(layout.tiles)) {
+      if (t.kind === kind) count += 1;
+    }
     if (count >= def.maxInstances) {
       return def.maxInstances === 1
         ? 'Only one mirror at a time'

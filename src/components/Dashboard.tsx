@@ -39,7 +39,11 @@ export function Dashboard({
   // simpler than threading callbacks through every drag/resize tick.
   const [resetSignal, setResetSignal] = useState(0);
   const [addSignal, setAddSignal] = useState<{ kind: WidgetKind; n: number } | null>(null);
-  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutState>([]);
+  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutState>({
+    tiles: {},
+    tree: null,
+    focusId: null,
+  });
 
   const onAddPick = useCallback((kind: WidgetKind) => {
     setAddSignal((p) => ({ kind, n: (p?.n ?? 0) + 1 }));
@@ -262,7 +266,7 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
     };
   }, [open, setOpen]);
 
-  const { theme, accent } = tweaks;
+  const { theme, accent, compactMode } = tweaks;
   return (
     <div className="dash-appearance" ref={wrapRef}>
       <button
@@ -313,6 +317,26 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
                 );
               })}
             </div>
+          </div>
+          <div className="dash-appearance-section">
+            <div className="dash-appearance-label">Layout</div>
+            <button
+              type="button"
+              className={`dash-compact-toggle ${compactMode ? 'active' : ''}`}
+              role="switch"
+              aria-checked={compactMode}
+              onClick={() => setTweaks({ compactMode: !compactMode })}
+            >
+              <span className="dash-compact-track">
+                <span className="dash-compact-thumb" />
+              </span>
+              <span className="dash-compact-text">
+                <span className="dash-compact-title">Compact mode</span>
+                <span className="dash-compact-desc">
+                  Drop the gap and rounded corners so widgets cover every pixel.
+                </span>
+              </span>
+            </button>
           </div>
         </div>
       )}

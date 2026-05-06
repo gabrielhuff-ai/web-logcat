@@ -1,12 +1,16 @@
 // Tile chrome — header (grip / icon / title / settings cog / eye /
-// maximize / remove) + body slot + bottom-right resize grip.
+// maximize / remove) + body slot.
 //
-// The "body slot" is filled by the widget component pulled from the
-// registry. State for drag/resize/maximize lives in `<TileGrid/>`; this
+// State for swap-drag, focus, and maximize lives in `<TileGrid/>`; this
 // component is purely presentational + dispatches user intents back up
 // via callbacks. The settings modal, however, is a tile-local concern
 // (modal is per-tile so multiple tiles' settings don't conflict) and is
 // owned here.
+//
+// In the dwindle layout there is no per-tile resize grip — every tile's
+// bounds are dictated by the binary tree, and resizing happens at the
+// seam between two siblings (rendered by `<TileGrid/>` as
+// `.dash-split-handle`).
 
 import {
   Suspense,
@@ -24,12 +28,16 @@ export interface TileProps {
   tile: TileT;
   /** Whether this tile is the current full-viewport one. */
   maximized: boolean;
-  /** Whether this tile is currently being dragged or resized. */
+  /** Whether this tile is currently being dragged (swap source). */
   dragging: boolean;
-  /** Inline style — set by `<TileGrid/>` (grid-column / row, or absolute). */
+  /** Whether this tile is the live drop target during a swap drag. */
+  dropTarget: boolean;
+  /** Whether this tile is the focused leaf (next "+ Add" splits here). */
+  focused: boolean;
+  /** Inline style — set by `<TileGrid/>` (flex sizing, or absolute when maximised). */
   style: CSSProperties;
   onMoveStart: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onResizeStart: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  onFocus: () => void;
   onToggleBars: () => void;
   onToggleMax: () => void;
   onRemove: () => void;
@@ -41,9 +49,11 @@ export function Tile({
   tile,
   maximized,
   dragging,
+  dropTarget,
+  focused,
   style,
   onMoveStart,
-  onResizeStart,
+  onFocus,
   onToggleBars,
   onToggleMax,
   onRemove,
@@ -56,6 +66,8 @@ export function Tile({
   const className = [
     'tile',
     dragging && 'dragging',
+    dropTarget && 'drop-target',
+    focused && 'focused',
     maximized && 'max',
     tile.barsHidden && 'bars-hidden',
   ]
@@ -63,7 +75,12 @@ export function Tile({
     .join(' ');
 
   return (
-    <div className={className} style={style} data-tile-id={tile.id}>
+    <div
+      className={className}
+      style={style}
+      data-tile-id={tile.id}
+      onPointerDownCapture={() => onFocus()}
+    >
       <div
         className="tile-head"
         onPointerDown={(e) => {
@@ -118,23 +135,6 @@ export function Tile({
           {children}
         </Suspense>
       </div>
-
-      {!maximized && (
-        <div
-          className="tile-resize"
-          onPointerDown={onResizeStart}
-          aria-label="Resize tile"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <path
-              d="M 11 5 L 5 11 M 11 9 L 9 11 M 11 1 L 1 11"
-              stroke="currentColor"
-              strokeWidth="1"
-              fill="none"
-            />
-          </svg>
-        </div>
-      )}
 
       {settingsOpen && (
         <WidgetSettingsModal

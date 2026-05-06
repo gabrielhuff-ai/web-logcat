@@ -19,7 +19,7 @@ src/
 │   ├── logStreamContext.ts       # context + useLogStream()
 │   ├── dashboardChrome.ts        # tweaks + showToast for widgets
 │   ├── widgets.ts                # widget registry (kind → def)
-│   ├── layout.ts                 # tile-grid snap math + persistence
+│   ├── layout.ts                 # dwindle binary-tree layout + persistence
 │   ├── shellSim.ts               # in-memory ADB-shell built-ins (sim path)
 │   ├── format.ts                 # formatTs, rowHeightFor
 │   └── knownNames.ts             # static tag/process pools for autocomplete
@@ -29,8 +29,8 @@ src/
 │   │                             # <EmptyState/> or <Dashboard/>
 │   ├── EmptyState.tsx            # pre-connection screen
 │   ├── Dashboard.tsx             # connected shell + DashTopbar
-│   ├── TileGrid.tsx              # 12-col grid, drag/resize/maximize
-│   ├── Tile.tsx                  # tile chrome (header + body + resize)
+│   ├── TileGrid.tsx              # dwindle tree renderer; split-handle resize, swap-drag
+│   ├── Tile.tsx                  # tile chrome (header + body)
 │   ├── WidgetPalette.tsx         # +Add widget modal
 │   ├── FilterBar.tsx             # chip input + transport
 │   ├── LevelRow.tsx              # V/D/I/W/E pills + rate
@@ -92,9 +92,16 @@ expanded — moved from `<App/>` to `<LogcatWidget/>`. Two Logcat tiles
 on the same device get independent chip bars (persisted under
 `weblogcat:filters:<serial>:<tileId>`).
 
-Tile-grid state lives in `<TileGrid/>`: the layout array, the maximized
-tile id, and the in-flight drag/resize state. Persisted to
-`localStorage` under `weblogcat-dashboard-v1`.
+Tile-grid state lives in `<TileGrid/>`: the layout tree, the maximized
+tile id, and the in-flight resize / swap-drag state. Persisted to
+`localStorage` under `weblogcat-dashboard-v2`. The tree is a binary
+"dwindle" layout (Hyprland-style) — each split node carves its parent
+area along one axis at a configurable ratio; leaves host tiles. Adding a
+tile splits the focused leaf in two; removing collapses the parent
+split into the surviving sibling. Resizing happens at the seam between
+two siblings (`.dash-split-handle`); rearrangement is drag-to-swap on
+tile headers. The dashboard is a fixed-size, non-scrolling viewport —
+tiles share every pixel of available space.
 
 ## The stream
 
@@ -112,9 +119,9 @@ widget memory is just whatever the widget keeps for its filter view.
 
 - `<LogRow/>` is wrapped in `memo`; `<LogList/>` virtualises past 800
   visible rows via `@tanstack/react-virtual`.
-- The drag/resize loop in `<TileGrid/>` coalesces pointer-move events
-  into the next animation frame — protects against >120Hz pointer
-  devices flooding React with state updates.
+- The resize / swap-drag loop in `<TileGrid/>` coalesces pointer-move
+  events into the next animation frame — protects against >120Hz
+  pointer devices flooding React with state updates.
 
 ## Theming
 

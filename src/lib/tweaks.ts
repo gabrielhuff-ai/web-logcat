@@ -21,6 +21,7 @@ export const DEFAULT_TWEAKS: Tweaks = {
   wrapLines: false,
   showHeatmap: false,
   streamingSpeed: 1,
+  compactMode: false,
 };
 
 function readTweaks(): Tweaks {
@@ -49,6 +50,7 @@ function applyToDocument(t: Tweaks): void {
   html.dataset.theme = t.theme;
   html.dataset.accent = t.accent;
   html.dataset.density = t.density;
+  html.dataset.compact = t.compactMode ? 'on' : 'off';
 }
 
 export function useTweaks() {

@@ -391,3 +391,33 @@ its own PR-sized milestone with a verifiable demo.
   is a Logcat-internal control; heatmap is per-widget; scrubber
   was already removed in Phase 1. No global drawer remains to
   host.
+
+## Phase 11 — Tiling layout rework (Hyprland-style)
+
+Replaces the v1 12-column grid + per-tile resize grip + downward
+overflow with a fixed-viewport binary-tree (dwindle) layout, plus a
+"compact mode" that drops the gap and rounded corners so widgets
+cover every pixel.
+
+- [x] **Tree-based layout state** — `Tile` drops `x/y/w/h`;
+  `LayoutState` becomes `{ tiles, tree: LayoutNode | null, focusId }`
+  where each split node carves its parent area along one axis with a
+  configurable ratio. Persisted under
+  `weblogcat-dashboard-v2`. New ops in `src/lib/layout.ts`:
+  `defaultLayout`, `addTile` (splits the focused leaf), `removeTile`
+  (collapses parent into sibling), `setRatio`, `swapTiles`,
+  `setFocus`, plus tree helpers (`leafIds`, `rightmostLeafId`,
+  `findPath`, `countByKind`).
+- [x] **Renderer + drag UX** — `TileGrid` renders the tree as nested
+  flex containers with a `.dash-split-handle` between every pair of
+  siblings; dragging a handle changes that split's ratio. Tiles are
+  rearranged by drag-to-swap: pick up a header, drop on another tile.
+  Per-tile resize grip removed (no longer meaningful — bounds are
+  implied by the tree). The grid is fixed to the dashboard viewport,
+  no scroll.
+- [x] **Compact mode** — `tweaks.compactMode` (default `false`)
+  toggles `<html data-compact="on">`. CSS rules drop
+  `--dash-gap` and `--tile-radius` to `0`, collapse padding, and
+  share hairline borders between neighbours. A single tile in
+  compact mode looks identical to the maximised state. UI lives in
+  the existing AppearanceButton popover next to Theme + Accent.

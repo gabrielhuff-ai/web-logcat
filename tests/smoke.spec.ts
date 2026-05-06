@@ -230,49 +230,58 @@ test.describe('dashboard', () => {
   });
 
   // === Phase 10 polish: tile chrome interactions =========================
-  // The default layout has 4 tiles. The Logcat tile (index 1) is the most
-  // convenient drag target — wide grid-row span gives us room to move
-  // without bumping into the canvas-heavy Mirror tile.
+  // The default layout has 4 tiles arranged via a binary-tree (dwindle)
+  // layout: Mirror on the left of a row split, with Logcat / Shell /
+  // Dumpsys laid out in the right pane.
 
-  test('dragging a tile by the grip moves it to a new grid cell', async ({ page }) => {
+  test('dragging a tile by the grip onto another tile swaps them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
     await expect(page.locator('.tile')).toHaveCount(4);
 
-    // The Logcat tile sits at columns 4–12 (canonical HANDOFF default),
-    // so it's pinned to the right edge — only room is leftward.
-    const logcatTile = page.locator('.tile').nth(1);
-    const beforeStyle = (await logcatTile.getAttribute('style')) ?? '';
+    // Capture each tile's kind by id before the swap. The Mirror tile
+    // sits at index 0 and the Logcat tile at index 1 in the default
+    // layout, so swapping them flips the order.
+    const before0 = await page.locator('.tile').nth(0).getAttribute('data-tile-id');
+    const before1 = await page.locator('.tile').nth(1).getAttribute('data-tile-id');
+    expect(before0).toBeTruthy();
+    expect(before1).toBeTruthy();
 
-    const grip = logcatTile.locator('.tile-head');
-    const box = await grip.boundingBox();
-    if (!box) throw new Error('grip has no bounding box');
+    const fromHead = page.locator('.tile').nth(0).locator('.tile-head');
+    const toHead = page.locator('.tile').nth(1).locator('.tile-head');
+    const fromBox = await fromHead.boundingBox();
+    const toBox = await toHead.boundingBox();
+    if (!fromBox || !toBox) throw new Error('header bounding boxes missing');
 
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
     await page.mouse.down();
-    // Drag a couple of grid cells to the LEFT; rAF + snapMove should
-    // produce an integer-cell delta on grid-column.
-    await page.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2, { steps: 10 });
+    // Walk the cursor in steps so the swap-drag activation threshold trips.
+    await page.mouse.move(
+      toBox.x + toBox.width / 2,
+      toBox.y + toBox.height / 2,
+      { steps: 12 },
+    );
     await page.mouse.up();
 
-    const afterStyle = (await logcatTile.getAttribute('style')) ?? '';
-    expect(afterStyle).not.toEqual(beforeStyle);
+    const after0 = await page.locator('.tile').nth(0).getAttribute('data-tile-id');
+    const after1 = await page.locator('.tile').nth(1).getAttribute('data-tile-id');
+    expect(after0).toBe(before1);
+    expect(after1).toBe(before0);
   });
 
-  test('resizing a tile by the bottom-right grip enlarges it', async ({ page }) => {
+  test('dragging the seam between two tiles resizes them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    // Use the Shell tile (index 2 — order is Mirror, Logcat, Shell,
-    // Dumpsys). At x=3 w=5 it has room to grow horizontally; Logcat
-    // and Mirror are pinned against edges.
-    const shellTile = page.locator('.tile').nth(2);
-    const before = await shellTile.boundingBox();
-    if (!before) throw new Error('tile has no bounding box');
+    // Capture the Mirror tile width before; the outer-most seam controls
+    // its share of the dashboard.
+    const mirrorTile = page.locator('.tile').nth(0);
+    const before = await mirrorTile.boundingBox();
+    if (!before) throw new Error('mirror tile has no bounding box');
 
-    const handle = shellTile.locator('.tile-resize');
+    const handle = page.locator('.dash-split-handle.row').first();
     const handleBox = await handle.boundingBox();
-    if (!handleBox) throw new Error('resize handle has no bounding box');
+    if (!handleBox) throw new Error('split handle has no bounding box');
 
     await page.mouse.move(
       handleBox.x + handleBox.width / 2,
@@ -281,13 +290,13 @@ test.describe('dashboard', () => {
     await page.mouse.down();
     await page.mouse.move(
       handleBox.x + handleBox.width / 2 + 120,
-      handleBox.y + handleBox.height / 2 + 120,
+      handleBox.y + handleBox.height / 2,
       { steps: 10 },
     );
     await page.mouse.up();
 
-    const after = await shellTile.boundingBox();
-    if (!after) throw new Error('resized tile has no bounding box');
+    const after = await mirrorTile.boundingBox();
+    if (!after) throw new Error('resized mirror tile has no bounding box');
     expect(after.width).toBeGreaterThan(before.width);
   });
 

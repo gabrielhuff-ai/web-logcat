@@ -1,153 +1,179 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COLS,
-  DEFAULT_LAYOUT,
-  GAP,
-  MIN_H,
-  MIN_W,
-  ROW_PX,
-  colWidth,
-  placeBelow,
-  snapMove,
-  snapResize,
-  totalRows,
+  MIN_RATIO,
+  MAX_RATIO,
+  addTile,
+  countByKind,
+  defaultLayout,
+  emptyLayout,
+  findPath,
+  leafIds,
+  patchTile,
+  removeTile,
+  rightmostLeafId,
+  setFocus,
+  setRatio,
+  swapTiles,
 } from './layout';
+import type { LayoutNode, LayoutState } from '../types';
 
-describe('layout: colWidth', () => {
-  it('subtracts gaps before dividing', () => {
-    // 12 cols, 11 gaps × 10px = 110px of gap
-    const total = 12 * 100 + 11 * GAP;
-    expect(colWidth(total)).toBeCloseTo(100, 5);
-  });
-});
-
-describe('layout: snapMove', () => {
-  const cw = 100;
-  const origin = { x: 2, y: 1, w: 4 };
-
-  it('snaps a one-column move', () => {
-    // dx of one (cw + gap) → dCol = 1
-    const r = snapMove(origin, cw + GAP, 0, cw);
-    expect(r).toEqual({ x: 3, y: 1 });
-  });
-
-  it('snaps a one-row move', () => {
-    const r = snapMove(origin, 0, ROW_PX + GAP, cw);
-    expect(r).toEqual({ x: 2, y: 2 });
+describe('layout: defaultLayout', () => {
+  it('returns four leaves wired through three nested splits', () => {
+    const l = defaultLayout();
+    expect(Object.keys(l.tiles).sort()).toEqual([
+      'w_dumpsys',
+      'w_logcat',
+      'w_mirror',
+      'w_shell',
+    ]);
+    expect(leafIds(l.tree)).toEqual([
+      'w_mirror',
+      'w_logcat',
+      'w_shell',
+      'w_dumpsys',
+    ]);
   });
 
-  it('clamps the right edge to keep the tile in-bounds', () => {
-    // Try to move 50 columns to the right — must clamp at COLS - w
-    const r = snapMove(origin, 5000, 0, cw);
-    expect(r.x).toBe(COLS - origin.w);
-  });
-
-  it('clamps the left edge at 0', () => {
-    const r = snapMove(origin, -5000, 0, cw);
-    expect(r.x).toBe(0);
-  });
-
-  it('clamps the top edge at 0 (no negative rows)', () => {
-    const r = snapMove(origin, 0, -5000, cw);
-    expect(r.y).toBe(0);
-  });
-
-  it('does not cap the bottom edge — grid grows downward', () => {
-    const r = snapMove(origin, 0, (ROW_PX + GAP) * 50, cw);
-    expect(r.y).toBe(origin.y + 50);
-  });
-});
-
-describe('layout: snapResize', () => {
-  const cw = 100;
-  const origin = { x: 2, w: 4, h: 4 };
-
-  it('grows the tile right by one column', () => {
-    const r = snapResize(origin, cw + GAP, 0, cw);
-    expect(r).toEqual({ w: 5, h: 4 });
-  });
-
-  it('clamps width at MIN_W', () => {
-    const r = snapResize(origin, -(cw + GAP) * 50, 0, cw);
-    expect(r.w).toBe(MIN_W);
-  });
-
-  it('clamps width to the right edge of the grid', () => {
-    const r = snapResize(origin, (cw + GAP) * 50, 0, cw);
-    expect(r.w).toBe(COLS - origin.x);
-  });
-
-  it('clamps height at MIN_H', () => {
-    const r = snapResize(origin, 0, -(ROW_PX + GAP) * 50, cw);
-    expect(r.h).toBe(MIN_H);
-  });
-});
-
-describe('layout: placeBelow', () => {
-  it('returns the next y after the lowest tile bottom', () => {
-    const layout = [
-      { id: 'a', kind: 'logcat' as const, x: 0, y: 0, w: 6, h: 4 },
-      { id: 'b', kind: 'logcat' as const, x: 6, y: 0, w: 6, h: 6 },
-    ];
-    const r = placeBelow(layout, 4);
-    expect(r).toEqual({ x: 0, y: 6 });
-  });
-
-  it('returns y=0 for an empty layout', () => {
-    expect(placeBelow([], 4)).toEqual({ x: 0, y: 0 });
-  });
-});
-
-describe('layout: totalRows', () => {
-  it('honours the minimum', () => {
-    expect(totalRows([], 12)).toBe(12);
-  });
-  it('grows past the minimum to fit a tall tile', () => {
-    expect(
-      totalRows(
-        [{ id: 'a', kind: 'logcat', x: 0, y: 0, w: 12, h: 20 }],
-        12,
-      ),
-    ).toBe(20);
-  });
-});
-
-describe('layout: DEFAULT_LAYOUT', () => {
-  it('anchors Mirror in the left column, full height', () => {
-    const mirror = DEFAULT_LAYOUT.find((t) => t.kind === 'mirror');
-    expect(mirror).toBeDefined();
-    expect(mirror!.x).toBe(0);
-    expect(mirror!.y).toBe(0);
-    expect(mirror!.w).toBe(3);
-    expect(mirror!.h).toBe(10);
-  });
-
-  it('places Logcat top-right of Mirror, 9 cols wide', () => {
-    const logcat = DEFAULT_LAYOUT.find((t) => t.kind === 'logcat');
-    expect(logcat).toBeDefined();
-    expect(logcat!.x).toBe(3);
-    expect(logcat!.y).toBe(0);
-    expect(logcat!.w).toBe(9);
-    expect(logcat!.h).toBe(6);
-  });
-
-  it('places Shell + Dumpsys in the bottom-right cluster', () => {
-    const shell = DEFAULT_LAYOUT.find((t) => t.kind === 'shell');
-    const dumpsys = DEFAULT_LAYOUT.find((t) => t.kind === 'dumpsys');
-    expect(shell).toBeDefined();
-    expect(dumpsys).toBeDefined();
-    expect(shell!.x).toBe(3);
-    expect(shell!.y).toBe(6);
-    expect(shell!.w).toBe(5);
-    expect(shell!.h).toBe(4);
-    expect(dumpsys!.x).toBe(8);
-    expect(dumpsys!.y).toBe(6);
-    expect(dumpsys!.w).toBe(4);
-    expect(dumpsys!.h).toBe(4);
+  it('focuses the Logcat tile so the next +Add lands next to it', () => {
+    expect(defaultLayout().focusId).toBe('w_logcat');
   });
 
   it('does not include Files (palette-only per HANDOFF)', () => {
-    const kinds = DEFAULT_LAYOUT.map((t) => t.kind);
+    const kinds = Object.values(defaultLayout().tiles).map((t) => t.kind);
     expect(kinds).not.toContain('files');
+  });
+});
+
+describe('layout: addTile', () => {
+  it('seeds the tree from an empty layout', () => {
+    const l = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    expect(l.tree).toEqual({ type: 'leaf', id: 'a' });
+    expect(l.focusId).toBe('a');
+    expect(l.tiles.a.kind).toBe('logcat');
+  });
+
+  it('splits the focused leaf and re-focuses on the new tile', () => {
+    const seed = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    const next = addTile(seed, 'shell', { id: 'b', splitDir: 'row' });
+    expect(next.focusId).toBe('b');
+    expect(next.tree).toEqual({
+      type: 'split',
+      dir: 'row',
+      ratio: 0.5,
+      a: { type: 'leaf', id: 'a' },
+      b: { type: 'leaf', id: 'b' },
+    });
+  });
+
+  it('falls back to the rightmost leaf when focus is stale', () => {
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b', splitDir: 'row' });
+    // Wipe the focus.
+    l = setFocus(l, null);
+    const next = addTile(l, 'dumpsys', { id: 'c', splitDir: 'col' });
+    // Rightmost leaf is `b`, so the new split nests under the right child.
+    if (next.tree?.type !== 'split' || next.tree.b.type !== 'split') {
+      throw new Error('expected b to become a split');
+    }
+    expect(next.tree.b).toMatchObject({
+      type: 'split',
+      dir: 'col',
+      a: { type: 'leaf', id: 'b' },
+      b: { type: 'leaf', id: 'c' },
+    });
+  });
+
+  it('picks split direction from the viewport aspect ratio', () => {
+    const seed = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    const wide = addTile(seed, 'shell', { id: 'b', viewportAspect: 2 });
+    const tall = addTile(seed, 'shell', { id: 'b', viewportAspect: 0.5 });
+    expect(wide.tree?.type === 'split' && wide.tree.dir).toBe('row');
+    expect(tall.tree?.type === 'split' && tall.tree.dir).toBe('col');
+  });
+});
+
+describe('layout: removeTile', () => {
+  it('drops the tile entry and collapses the parent split into the sibling', () => {
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b' });
+    const next = removeTile(l, 'a');
+    expect(next.tree).toEqual({ type: 'leaf', id: 'b' });
+    expect(next.tiles.a).toBeUndefined();
+  });
+
+  it('returns to the empty state when the last tile is removed', () => {
+    const l = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    const next = removeTile(l, 'a');
+    expect(next.tree).toBeNull();
+    expect(next.focusId).toBeNull();
+    expect(Object.keys(next.tiles)).toHaveLength(0);
+  });
+
+  it('moves focus to the rightmost leaf when the focused tile is removed', () => {
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b' });
+    l = setFocus(l, 'a');
+    const next = removeTile(l, 'a');
+    expect(next.focusId).toBe('b');
+  });
+});
+
+describe('layout: setRatio', () => {
+  it('clamps to MIN_RATIO / MAX_RATIO', () => {
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b' });
+    const lo = setRatio(l, [], -1);
+    const hi = setRatio(l, [], 5);
+    expect((lo.tree as Extract<LayoutNode, { type: 'split' }>).ratio).toBe(MIN_RATIO);
+    expect((hi.tree as Extract<LayoutNode, { type: 'split' }>).ratio).toBe(MAX_RATIO);
+  });
+
+  it('updates a nested split addressed by path', () => {
+    const l = defaultLayout();
+    // root.b.b is the row split holding shell + dumpsys.
+    const next = setRatio(l, ['b', 'b'], 0.3);
+    const root = next.tree as Extract<LayoutNode, { type: 'split' }>;
+    const mid = root.b as Extract<LayoutNode, { type: 'split' }>;
+    const inner = mid.b as Extract<LayoutNode, { type: 'split' }>;
+    expect(inner.ratio).toBeCloseTo(0.3, 5);
+  });
+});
+
+describe('layout: swapTiles', () => {
+  it('exchanges two leaf ids in place', () => {
+    const l = defaultLayout();
+    const next = swapTiles(l, 'w_mirror', 'w_dumpsys');
+    expect(leafIds(next.tree)).toEqual([
+      'w_dumpsys',
+      'w_logcat',
+      'w_shell',
+      'w_mirror',
+    ]);
+  });
+});
+
+describe('layout: helpers', () => {
+  it('findPath traverses through nested splits', () => {
+    const l = defaultLayout();
+    expect(findPath(l.tree, 'w_mirror')).toEqual(['a']);
+    expect(findPath(l.tree, 'w_logcat')).toEqual(['b', 'a']);
+    expect(findPath(l.tree, 'w_dumpsys')).toEqual(['b', 'b', 'b']);
+  });
+
+  it('rightmostLeafId follows .b to the deepest leaf', () => {
+    expect(rightmostLeafId(defaultLayout().tree)).toBe('w_dumpsys');
+  });
+
+  it('countByKind tallies tiles by their kind discriminator', () => {
+    const l = defaultLayout();
+    expect(countByKind(l, 'mirror')).toBe(1);
+    expect(countByKind(l, 'files')).toBe(0);
+  });
+
+  it('patchTile applies a partial update to one tile', () => {
+    const l = defaultLayout();
+    const next = patchTile(l, 'w_logcat', { barsHidden: true });
+    expect(next.tiles.w_logcat.barsHidden).toBe(true);
+    expect(next.tiles.w_mirror.barsHidden).toBeUndefined();
   });
 });
