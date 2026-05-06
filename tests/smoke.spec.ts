@@ -447,7 +447,14 @@ test.describe('dashboard', () => {
     await expect(barWrap).toHaveClass(/active/);
 
     // Toggle from the bar — re-open the modal and confirm the switch flipped back.
-    await barWrap.click();
+    // Use a direct DOM click rather than Playwright's mouse simulation: the
+    // FilterBar's tooltip pseudo-element (`.tt::after`) appears on hover and
+    // can race with the click in the dwindle layout where the bar sits a
+    // few pixels from a split seam. The DOM-level click fires React's
+    // onClick deterministically.
+    await barWrap.evaluate((el) => {
+      if (el instanceof HTMLButtonElement) el.click();
+    });
     // Wait for the on-bar state to reflect the toggle before reopening the
     // modal, so the modal hydrates from the just-written localStorage entry.
     await expect(barWrap).not.toHaveClass(/active/);
