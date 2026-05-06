@@ -512,3 +512,89 @@
   margin-top: 1px;
 }
 
+/* ===== v2: Dashboard topbar — Appearance popover =====
+ * Reuses `.dash-device-pop` glass / shadow base from dashboard.css; the
+ * trigger lives at the right edge of the topbar, so we anchor the
+ * popover to the right of its wrapper rather than flush left.
+ * The seg + accents grid markup is ported from `design/v1/source/settings.jsx`
+ * (the original SettingsPanel, deleted in Phase 10). */
+.dash-appearance {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.dash-appearance-pop {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dash-appearance-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dash-appearance-label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.dash-appearance-pop .seg {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg-2);
+  border-radius: var(--r-md);
+  gap: 2px;
+}
+.dash-appearance-pop .seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+  flex: 1;
+  justify-content: center;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.dash-appearance-pop .seg button.active {
+  background: var(--bg-0);
+  color: var(--fg-0);
+  box-shadow: var(--shadow-1);
+}
+.dash-appearance-pop .accents {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.dash-appearance-pop .accent-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  font-size: var(--t-sm);
+  color: var(--fg-1);
+  border: 1.5px solid transparent;
+  transition: all var(--dur-fast) var(--ease-out);
+  text-align: left;
+}
+.dash-appearance-pop .accent-swatch:hover { background: var(--bg-3); }
+.dash-appearance-pop .accent-swatch.active {
+  border-color: var(--accent);
+  color: var(--fg-0);
+}
+.dash-appearance-pop .accent-swatch .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-2);
+  flex-shrink: 0;
+}
+

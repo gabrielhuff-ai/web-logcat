@@ -222,11 +222,8 @@ export function App() {
             device={device}
             devices={devices.length ? devices : [device]}
             usingFake={usingFake}
-            theme={tweaks.theme}
-            onSetTheme={(t) => {
-              setTweaks({ theme: t });
-              showToast(t === 'dark' ? 'Dark mode' : 'Light mode');
-            }}
+            tweaks={tweaks}
+            setTweaks={setTweaks}
             onSwitchDevice={switchDevice}
             onDisconnect={onDisconnect}
             onPairNew={onPairNew}

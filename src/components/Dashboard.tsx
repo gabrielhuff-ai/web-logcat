@@ -6,18 +6,18 @@
 // `DashTopbar` here; everything else (filter bar, level row, log area,
 // search overlay) is now per-`<LogcatWidget/>`.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import * as Icons from './Icons';
 import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
-import type { DeviceInfo, LayoutState, Theme, WidgetKind } from '../types';
+import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
 export interface DashboardProps {
   device: DeviceInfo;
   devices: DeviceInfo[];
   usingFake: boolean;
-  theme: Theme;
-  onSetTheme: (t: Theme) => void;
+  tweaks: Tweaks;
+  setTweaks: (patch: Partial<Tweaks>) => void;
   onSwitchDevice: (d: DeviceInfo) => void;
   onDisconnect: () => void;
   onPairNew: () => void;
@@ -27,8 +27,8 @@ export function Dashboard({
   device,
   devices,
   usingFake,
-  theme,
-  onSetTheme,
+  tweaks,
+  setTweaks,
   onSwitchDevice,
   onDisconnect,
   onPairNew,
@@ -52,8 +52,8 @@ export function Dashboard({
         device={device}
         devices={devices}
         usingFake={usingFake}
-        theme={theme}
-        onSetTheme={onSetTheme}
+        tweaks={tweaks}
+        setTweaks={setTweaks}
         onSwitchDevice={onSwitchDevice}
         onDisconnect={onDisconnect}
         onPairNew={onPairNew}
@@ -85,8 +85,8 @@ interface DashTopbarProps {
   device: DeviceInfo;
   devices: DeviceInfo[];
   usingFake: boolean;
-  theme: Theme;
-  onSetTheme: (t: Theme) => void;
+  tweaks: Tweaks;
+  setTweaks: (patch: Partial<Tweaks>) => void;
   onSwitchDevice: (d: DeviceInfo) => void;
   onDisconnect: () => void;
   onPairNew: () => void;
@@ -98,8 +98,8 @@ function DashTopbar({
   device,
   devices,
   usingFake,
-  theme,
-  onSetTheme,
+  tweaks,
+  setTweaks,
   onSwitchDevice,
   onDisconnect,
   onPairNew,
@@ -107,6 +107,7 @@ function DashTopbar({
   onResetLayout,
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
 
   return (
     <div className="dash-top">
@@ -203,15 +204,109 @@ function DashTopbar({
           <Icons.Refresh size={13} />
         </button>
         <div className="dash-divider" />
-        <button
-          className="icon-btn tt"
-          data-tt={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-          onClick={() => onSetTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <Icons.Sun size={13} /> : <Icons.Moon size={13} />}
-        </button>
+        <AppearanceButton
+          tweaks={tweaks}
+          setTweaks={setTweaks}
+          open={appearanceOpen}
+          setOpen={setAppearanceOpen}
+        />
       </div>
+    </div>
+  );
+}
+
+// ---- Appearance popover ----------------------------------------------------
+
+interface AppearanceButtonProps {
+  tweaks: Tweaks;
+  setTweaks: (patch: Partial<Tweaks>) => void;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+}
+
+const ACCENTS: ReadonlyArray<{ k: Accent; label: string; hue: number }> = [
+  { k: 'indigo', label: 'Indigo', hue: 268 },
+  { k: 'teal', label: 'Teal', hue: 190 },
+  { k: 'amber', label: 'Amber', hue: 60 },
+  { k: 'rose', label: 'Rose', hue: 12 },
+];
+
+function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButtonProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape close. Modeled on the device-picker popover.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const root = wrapRef.current;
+      if (!root) return;
+      if (!root.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, setOpen]);
+
+  const { theme, accent } = tweaks;
+  return (
+    <div className="dash-appearance" ref={wrapRef}>
+      <button
+        className="icon-btn tt"
+        data-tt="Appearance"
+        aria-label="Appearance"
+        onClick={() => setOpen(!open)}
+      >
+        <Icons.Wand size={13} />
+      </button>
+      {open && (
+        <div className="dash-device-pop dash-appearance-pop">
+          <div className="dash-appearance-section">
+            <div className="dash-appearance-label">Theme</div>
+            <div className="seg">
+              <button
+                className={theme === 'light' ? 'active' : ''}
+                onClick={() => setTweaks({ theme: 'light' })}
+              >
+                <Icons.Sun size={13} /> Light
+              </button>
+              <button
+                className={theme === 'dark' ? 'active' : ''}
+                onClick={() => setTweaks({ theme: 'dark' })}
+              >
+                <Icons.Moon size={13} /> Dark
+              </button>
+            </div>
+          </div>
+          <div className="dash-appearance-section">
+            <div className="dash-appearance-label">Color scheme</div>
+            <div className="accents">
+              {ACCENTS.map((a) => {
+                const swatchStyle: CSSProperties = {
+                  background: `oklch(${theme === 'dark' ? '0.74' : '0.50'} 0.16 ${a.hue})`,
+                };
+                return (
+                  <button
+                    key={a.k}
+                    className={`accent-swatch ${accent === a.k ? 'active' : ''}`}
+                    onClick={() => setTweaks({ accent: a.k })}
+                    aria-label={`Accent: ${a.label}`}
+                    aria-pressed={accent === a.k}
+                  >
+                    <span className="sw" style={swatchStyle} />
+                    <span>{a.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

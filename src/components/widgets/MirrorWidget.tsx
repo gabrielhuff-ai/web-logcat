@@ -589,25 +589,19 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         <span style={{ flex: 1 }} />
       </div>
 
-      <div className="mr-stage">
-        <div className="mr-frame-wrap">
-          <div className="mr-bezel">
-            <div className="mr-screen" onClick={handleTap}>
-              {usingFake ? (
-                <MirrorAppFrame time={time} taps={taps} />
-              ) : (
-                <canvas ref={canvasRef} className="mirror-canvas" />
-              )}
-              {inlineNotice && <div className="mr-inline-notice">{inlineNotice}</div>}
-              {recording && (
-                <div className="mr-recording-pill">
-                  <span className="mr-rec-dot" />
-                  REC · {formatRecordTime(recordTime)}
-                </div>
-              )}
-            </div>
+      <div className="mr-screen" onClick={handleTap}>
+        {usingFake ? (
+          <MirrorAppFrame time={time} taps={taps} />
+        ) : (
+          <canvas ref={canvasRef} className="mirror-canvas" />
+        )}
+        {inlineNotice && <div className="mr-inline-notice">{inlineNotice}</div>}
+        {recording && (
+          <div className="mr-recording-pill">
+            <span className="mr-rec-dot" />
+            REC · {formatRecordTime(recordTime)}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
