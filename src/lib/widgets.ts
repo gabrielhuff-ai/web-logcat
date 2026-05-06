@@ -14,6 +14,7 @@
 
 import type { ComponentType } from 'react';
 import * as Icons from '../components/Icons';
+import { DumpsysWidget } from '../components/widgets/DumpsysWidget';
 import { FilesWidget } from '../components/widgets/FilesWidget';
 import { LogcatWidget } from '../components/widgets/LogcatWidget';
 import { ShellWidget } from '../components/widgets/ShellWidget';
@@ -63,9 +64,9 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     name: 'Dumpsys',
     icon: Icons.Dumpsys,
     desc: 'Run preset dumpsys commands',
-    comp: StubWidget,
+    comp: DumpsysWidget,
     defaultSize: { w: 6, h: 6 },
-    enabled: false,
+    enabled: true,
   },
   files: {
     name: 'Files',

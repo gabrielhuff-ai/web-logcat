@@ -213,33 +213,45 @@ underlying `Adb` handle. Shell needs the handle for
 
 ## Phase 7 — Dumpsys widget
 
-- [ ] **`DumpsysWidget` shell** —
+- [x] **`DumpsysWidget` shell** —
   `src/components/widgets/DumpsysWidget.tsx` ports
   `design/v2/source/widget-dumpsys.jsx`. Toolbar
   (`ds-toolbar widget-bar`): preset pills (Battery / Memory / CPU
   / GFX / Wi-Fi), Run, Refresh, Copy raw, parsed↔raw toggle. Body
-  switches between parsed card grid and raw monospace.
-- [ ] **Runner** — `src/lib/dumpsys.ts`:
+  switches between parsed card grid and raw monospace dump or an
+  inline error / loading state.
+- [x] **Runner** — `src/lib/dumpsys.ts`:
   `runDumpsys(adb, preset) → { raw, parsed }` via
-  `adb.subprocess.shell.spawnAndWait('dumpsys <service>')`.
-- [ ] **Parsers** — one file per preset under
-  `src/lib/dumpsys/parsers/`: `battery.ts`, `memory.ts`
-  (`meminfo system_server`), `cpu.ts` (`cpuinfo`), `gfx.ts`
-  (`gfxinfo`), `wifi.ts`. Pure text → typed shape. Vitest
-  fixtures under `src/lib/dumpsys/__fixtures__/<preset>.txt`
-  captured from a real Pixel — same testing convention as
-  `lib/filters.ts`.
-- [ ] **Cards** — one component each under
-  `src/components/widgets/dumpsys/`: `BatteryCard` (level ring,
-  charge, temp, voltage, current, health), `MemoryCard` (Pss /
-  Private Dirty stack, Java/Native donut, top-procs table),
-  `CpuCard` (per-core bars, top by CPU%, load avgs),
-  `GfxCard` (frame-time histogram, HWUI metrics),
-  `WifiCard` (SSID + RSSI + link speed, scan results table).
-- [ ] **Enable Dumpsys in `WidgetPalette`** — flip its `enabled`
-  flag to `true` in `src/lib/widgets.ts`.
-- [ ] **Update default layout** — extend the Phase 6 default to
-  add a Dumpsys tile (4w × 4h) next to Shell.
+  `adb.subprocess.shellProtocol?.spawnWaitText('dumpsys <args>')`.
+  Devices without shell-v2 surface a typed
+  `DumpsysUnsupportedError` so the widget shows the friendly
+  inline notice that matches the Phase 6 Shell pattern.
+- [x] **Parsers** — `src/lib/dumpsys/parsers/{battery,memory,cpu,gfx,wifi}.ts`.
+  Pure text → typed shape, regex-based, every field independently
+  nullable. Vitest fixtures captured under
+  `src/lib/dumpsys/__fixtures__/<preset>.txt`; 17 parser cases
+  cover the captured shapes plus the missing-field paths.
+- [x] **Cards** — five files under
+  `src/components/widgets/dumpsys/`: `BatteryCard` (level glyph
+  + charge / state + health row card), `MemoryCard` (RAM stack
+  bar + App Summary Java/Native split + top-procs PSS bars),
+  `CpuCard` (load avgs + TOTAL row + per-core bars + top-procs
+  CPU% bars), `GfxCard` (frame summary + percentile cards +
+  16ms/32ms/>32ms distribution + per-bucket histogram + HWUI
+  stalls), `WifiCard` (connected network rows + scan-results
+  table).
+- [x] **Simulator fallback** — `src/lib/dumpsys/sim.ts` returns
+  the captured fixtures via Vite's `?raw` import so the
+  no-phone path renders real-shape data through the same
+  `parsePreset()` pipeline as a real device.
+- [x] **Enable Dumpsys in `WidgetPalette`** — flipped
+  `enabled: true` in `src/lib/widgets.ts`; comp wired to
+  `DumpsysWidget`.
+- [x] **Default layout** — _no change in this PR_; Phase 9
+  (Mirror) overwrites `DEFAULT_LAYOUT` with the canonical
+  HANDOFF arrangement, which already includes a Dumpsys slot.
+  Avoiding a duplicate edit here keeps the Phase 9 merge
+  conflict surface minimal.
 
 ## Phase 8 — Files widget
 
