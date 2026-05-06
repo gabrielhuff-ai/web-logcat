@@ -31,6 +31,10 @@ The design hand-off is versioned:
 - **Production code:** `src/`. See `docs/ARCHITECTURE.md` for the map.
 - **Pending work:** `docs/TASKS.md`. Pick the top unchecked task; do not
   invent new top-level work without checking with the user.
+- **Operational learnings:** `docs/LEARNINGS.md`. Read the index before
+  starting orchestration work (multi-PR series, parallel sub-agents,
+  hardware-gated tests). Append new entries as you hit generalisable
+  lessons.
 
 ## How to port a component
 
