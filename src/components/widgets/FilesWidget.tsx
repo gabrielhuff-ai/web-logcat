@@ -930,8 +930,9 @@ function FolderIcon({ open }: { open: boolean }) {
 
 function FileIcon({ entry }: { entry: SyncEntry }) {
   if (entry.type === 'dir') return <FolderIcon open={false} />;
-  // Both link and file glyphs use the theme accent so the file column
-  // reads as a coherent column of primary-tinted icons.
+  // Outline-only files vs. filled folders — gives the column a clear
+  // "container vs. leaf" rhythm at 14px without leaning on color alone
+  // (folders are already accent-tinted).
   const color = 'var(--accent)';
   if (entry.type === 'link') {
     return (
@@ -945,12 +946,18 @@ function FileIcon({ entry }: { entry: SyncEntry }) {
     <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
       <path
         d="M 3 1.5 L 3 14.5 Q 3 15 3.5 15 L 12.5 15 Q 13 15 13 14.5 L 13 5 L 9 1.5 Z"
-        fill="currentColor"
-        fillOpacity="0.5"
+        fill="none"
         stroke="currentColor"
-        strokeWidth="0.8"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
       />
-      <path d="M 9 1.5 L 9 5 L 13 5" fill="none" stroke="currentColor" strokeWidth="0.8" />
+      <path
+        d="M 9 1.5 L 9 5 L 13 5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
