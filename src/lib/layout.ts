@@ -462,16 +462,14 @@ export function computeLayoutRects(
       leaves.push({ id: node.id, rect });
       return;
     }
+    // Pre-order push: outer splits land first in `splits[]` so they
+    // render earlier in the DOM. Tests + manual selectors that pick
+    // `.dash-split-handle.first()` consistently target the outer-most
+    // seam regardless of how deep the tree gets.
     if (node.dir === 'row') {
       const inner = Math.max(0, rect.w - gap);
       const aW = inner * node.ratio;
       const bW = inner - aW;
-      walk(node.a, { x: rect.x, y: rect.y, w: aW, h: rect.h }, [...path, 'a']);
-      walk(
-        node.b,
-        { x: rect.x + aW + gap, y: rect.y, w: bW, h: rect.h },
-        [...path, 'b'],
-      );
       splits.push({
         key: path.join('') || 'root',
         path,
@@ -479,16 +477,16 @@ export function computeLayoutRects(
         handleRect: { x: rect.x + aW, y: rect.y, w: gap, h: rect.h },
         innerLen: inner,
       });
+      walk(node.a, { x: rect.x, y: rect.y, w: aW, h: rect.h }, [...path, 'a']);
+      walk(
+        node.b,
+        { x: rect.x + aW + gap, y: rect.y, w: bW, h: rect.h },
+        [...path, 'b'],
+      );
     } else {
       const inner = Math.max(0, rect.h - gap);
       const aH = inner * node.ratio;
       const bH = inner - aH;
-      walk(node.a, { x: rect.x, y: rect.y, w: rect.w, h: aH }, [...path, 'a']);
-      walk(
-        node.b,
-        { x: rect.x, y: rect.y + aH + gap, w: rect.w, h: bH },
-        [...path, 'b'],
-      );
       splits.push({
         key: path.join('') || 'root',
         path,
@@ -496,6 +494,12 @@ export function computeLayoutRects(
         handleRect: { x: rect.x, y: rect.y + aH, w: rect.w, h: gap },
         innerLen: inner,
       });
+      walk(node.a, { x: rect.x, y: rect.y, w: rect.w, h: aH }, [...path, 'a']);
+      walk(
+        node.b,
+        { x: rect.x, y: rect.y + aH + gap, w: rect.w, h: bH },
+        [...path, 'b'],
+      );
     }
   };
 
