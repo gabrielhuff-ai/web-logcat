@@ -335,7 +335,17 @@
   min-width: 0; min-height: 0;
   overflow: hidden;
   position: relative;
-  transition: box-shadow 160ms;
+  /* Position + size transition so live drag-previews and any
+   * structural change (add / remove / swap / restructure / split
+   * resize end) animate cleanly. The dragged source tile and its
+   * neighbours all reposition through this same rule, which gives
+   * the IDE-style "panes glide into place" feel during a drag. */
+  transition:
+    left 220ms var(--ease-out),
+    top 220ms var(--ease-out),
+    width 220ms var(--ease-out),
+    height 220ms var(--ease-out),
+    box-shadow 160ms;
 }
 .tile.dragging {
   opacity: 0.55;
@@ -386,13 +396,17 @@
 }
 /* Compact mode — tiles abut with no gap, so the drop shadows on
  * adjacent tiles overlap and stack in random z-order, which reads as
- * inconsistent "elevation" between neighbours (see github issue
- * thread). Drop the elevation entirely and rely on a single 1px
- * border for separation. The `box-shadow: none !important` covers
- * every tile state (default, focused, drop-target, dragging,
- * maximised) without having to enumerate each one. */
+ * inconsistent "elevation" between neighbours. Drop the elevation
+ * entirely and lean on a slightly stronger 1px border for separation.
+ *   - Border colour matches `--glass-line` (same line the topbar
+ *     uses below itself), so the dashboard reads as one continuous
+ *     surface with horizontal/vertical rules between regions —
+ *     consistent with the topbar/body boundary.
+ *   - `box-shadow: none !important` covers every tile state (focused,
+ *     drop-target, dragging, maximised) without enumerating each
+ *     one. */
 [data-compact="on"] .tile {
-  border: 1px solid oklch(from var(--bg-0) l c h / 0.6);
+  border: 1px solid var(--glass-line);
   box-shadow: none !important;
 }
 
@@ -682,6 +696,19 @@
 [data-perf="on"] .tile {
   backdrop-filter: none;
   background: var(--bg-1);
+  /* Performance mode also drops the position transition — large
+   * dashboards can otherwise re-paint every tile each frame during
+   * a drag. The fallback keeps just the box-shadow transition, which
+   * is the only visual cue that's purely cosmetic. */
+  transition: box-shadow 160ms;
+}
+/* Resize-in-progress (`.dash-grid.dragging` is set by the seam-
+ * handle drag) wants the affected tiles to track the cursor 1:1,
+ * not chase it through a 220ms easing. Swap drag, conversely,
+ * benefits from the easing so neighbours visibly slide into their
+ * new positions as the drag preview shifts. */
+.dash-grid.dragging .tile {
+  transition: box-shadow 160ms;
 }
 [data-perf="on"] .tile-head {
   backdrop-filter: none;

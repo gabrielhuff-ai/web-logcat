@@ -41,6 +41,7 @@ import {
   nextBarMode,
   patchTile,
   removeTile as removeTileFromLayout,
+  restructureTile,
   rightmostLeafId,
   saveLayout,
   setRatio,
@@ -49,6 +50,7 @@ import {
   countByKind,
   MIN_RATIO,
   MAX_RATIO,
+  type SplitEdge,
 } from '../lib/layout';
 import { useDashboardChrome } from '../lib/dashboardChrome';
 import { scheduleUrlUpdate } from '../lib/urlState';
@@ -83,6 +85,10 @@ interface SwapDrag {
   curY: number;
   /** Tile id under the cursor right now (or null). */
   hoverId: string | null;
+  /** Edge of the hovered tile the cursor is over, or null when in the
+   *  centre (swap zone). Drives the edge-highlight overlay and the
+   *  swap-vs-restructure branch on drop. */
+  hoverEdge: SplitEdge | null;
   /** True once the cursor has moved more than a few px from the start. */
   active: boolean;
 }
@@ -137,6 +143,25 @@ export function TileGrid({
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+
+  // Snapshot of the layout at the moment a swap-drag begins. Each
+  // pointermove during the drag computes its preview by re-running
+  // `restructureTile` / `swapTiles` against this origin, so the
+  // restructures don't compound — drag onto the right edge of A,
+  // then onto the bottom edge of B, then back over A — the final
+  // layout matches whichever target the cursor settles on, not the
+  // path the user traced through.
+  const dragOriginLayoutRef = useRef<LayoutState | null>(null);
+
+  // Mirror of the latest `layout` so callbacks that need the current
+  // value (drag start, ratio reads) can read it without going into
+  // `useCallback`'s dep list — keeping handlers stable across layout
+  // changes is what lets the tile elements avoid full prop-flipping
+  // re-renders on every nudge of a split ratio.
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
 
   /**
    * Set the layout AND push the previous one onto the undo stack.
@@ -339,6 +364,11 @@ export function TileGrid({
         (l) => (l.focusId === id ? l : { ...l, focusId: id }),
         { transient: true },
       );
+      // Stash the layout we're starting from so each pointermove can
+      // recompute the live preview against a known origin (otherwise
+      // successive restructures would compound on top of each other).
+      // The drop step keeps whatever the latest preview produced.
+      dragOriginLayoutRef.current = layoutRef.current;
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -347,6 +377,7 @@ export function TileGrid({
         curX: e.clientX,
         curY: e.clientY,
         hoverId: null,
+        hoverEdge: null,
         active: false,
       });
     },
@@ -390,16 +421,52 @@ export function TileGrid({
       }
     };
 
-    const hitTest = (x: number, y: number): string | null => {
+    /** Edge band as a fraction of the tile dimension. The four edge
+     *  bands surround a centre swap zone (width × height of `1 -
+     *  2*EDGE` on each axis). 0.25 = a quarter on each side, with a
+     *  50% × 50% centre square reserved for swap. */
+    const EDGE = 0.25;
+    const hitTest = (
+      x: number,
+      y: number,
+    ): { id: string | null; edge: SplitEdge | null } => {
       const grid = gridRef.current;
-      if (!grid) return null;
+      if (!grid) return { id: null, edge: null };
       const els = document.elementsFromPoint(x, y);
+      let tileEl: HTMLElement | null = null;
       for (const el of els) {
         if (!grid.contains(el)) continue;
-        const tileEl = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
-        if (tileEl) return tileEl.dataset.tileId ?? null;
+        const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
+        if (candidate) {
+          tileEl = candidate;
+          break;
+        }
       }
-      return null;
+      if (!tileEl) return { id: null, edge: null };
+      const id = tileEl.dataset.tileId ?? null;
+      if (!id) return { id: null, edge: null };
+
+      const rect = tileEl.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return { id, edge: null };
+      const relX = (x - rect.left) / rect.width;
+      const relY = (y - rect.top) / rect.height;
+
+      // Distance to each edge as a fraction. Smallest distance picks
+      // the edge band; ties (corners) resolve by axis priority left
+      // / right / top / bottom in declaration order.
+      const distLeft = relX;
+      const distRight = 1 - relX;
+      const distTop = relY;
+      const distBottom = 1 - relY;
+      const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+      let edge: SplitEdge | null = null;
+      if (minDist < EDGE) {
+        if (minDist === distLeft) edge = 'left';
+        else if (minDist === distRight) edge = 'right';
+        else if (minDist === distTop) edge = 'top';
+        else edge = 'bottom';
+      }
+      return { id, edge };
     };
 
     const onMove = (e: PointerEvent) => {
@@ -417,17 +484,51 @@ export function TileGrid({
         );
         return;
       }
-      // swap drag
+      // swap drag — live-preview semantics: every pointermove
+      // computes the layout the user *would* end up with if they
+      // released right now, and applies it transiently. Tiles
+      // animate to those positions via the CSS transition on
+      // `.tile { left/top/width/height }`. The drop step then just
+      // clears the drag state — whatever the last preview produced
+      // is committed.
       const dx = e.clientX - drag.startX;
       const dy = e.clientY - drag.startY;
       const active = drag.active || Math.hypot(dx, dy) > 5;
-      const hoverId = active ? hitTest(e.clientX, e.clientY) : null;
+      const probe = active
+        ? hitTest(e.clientX, e.clientY)
+        : { id: null as string | null, edge: null as SplitEdge | null };
+      const targetId = probe.id;
+      const edge = targetId && targetId !== drag.fromId ? probe.edge : null;
+      const origin = dragOriginLayoutRef.current;
       schedule(() => {
         setDrag((d) =>
           d && d.kind === 'swap'
-            ? { ...d, curX: e.clientX, curY: e.clientY, hoverId, active }
+            ? {
+                ...d,
+                curX: e.clientX,
+                curY: e.clientY,
+                hoverId: targetId,
+                hoverEdge: edge,
+                active,
+              }
             : d,
         );
+        if (!origin || !active) return;
+        // Recompute against the stashed origin so successive moves
+        // don't compound. Branches:
+        //   - hovering the source itself or empty space → keep the
+        //     origin layout (preview = no-op).
+        //   - hovering the centre of another tile → preview swap.
+        //   - hovering an edge of another tile → preview restructure.
+        let next = origin;
+        if (targetId && targetId !== drag.fromId) {
+          if (edge) {
+            next = restructureTile(origin, drag.fromId, targetId, edge);
+          } else {
+            next = swapTiles(origin, drag.fromId, targetId);
+          }
+        }
+        applyLayout(() => next, { transient: true });
       });
     };
 
@@ -439,12 +540,31 @@ export function TileGrid({
         pendingRef.current = null;
       }
       if (drag.kind === 'swap') {
+        const origin = dragOriginLayoutRef.current;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
-        if (Math.hypot(dx, dy) > 5) {
-          const target = hitTest(e.clientX, e.clientY);
+        if (origin && Math.hypot(dx, dy) > 5) {
+          const probe = hitTest(e.clientX, e.clientY);
+          const target = probe.id;
+          const edge = probe.edge;
+          // Recompute the final layout from the stashed origin (so
+          // the drop matches whatever was visible under the cursor)
+          // and commit it as a *non-transient* edit so it shows up
+          // in the undo stack.
+          let finalLayout = origin;
           if (target && target !== drag.fromId) {
-            applyLayout((l) => swapTiles(l, drag.fromId, target));
+            if (edge) {
+              finalLayout = restructureTile(origin, drag.fromId, target, edge);
+            } else {
+              finalLayout = swapTiles(origin, drag.fromId, target);
+            }
+          }
+          if (finalLayout !== origin) {
+            applyLayout(() => finalLayout);
+          } else {
+            // Cancelled drop (back over self / out of grid). Restore
+            // the origin so the transient previews don't leak.
+            applyLayout(() => origin, { transient: true });
           }
         }
       }
