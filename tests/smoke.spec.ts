@@ -11,18 +11,24 @@
 
 import { test, expect } from '@playwright/test';
 
-// CI runs `workers: 1` and `fullyParallel: true` shares the same browser
-// context across tests in a worker, which means localStorage carries
-// over from one test to the next. The first test in a worker run
-// would write a layout; the next test's `page.goto('/')` would
-// rehydrate that layout and the assertions about "default = single
-// Logcat tile" or "addWidget brings count from 1 to 2" would fail
-// non-deterministically depending on file order. Clear localStorage
-// on every navigation so each test starts from the empty default.
+// Pre-seed every page with a clean slate + forced performance mode.
+//   - localStorage.clear() — keeps each test booting from in-code
+//     defaults (the dwindle layout etc.) regardless of what the
+//     previous test left behind.
+//   - `weblogcat:tweaks:v1` with `performanceMode: 'on'` — pins
+//     `[data-perf="on"]` on the document so `.tile`'s position
+//     transitions are off for bbox probes. Belt-and-braces against
+//     Playwright's `reducedMotion: 'reduce'` not always reaching
+//     the page's `matchMedia` (CI was reporting `dataPerf: 'off'`
+//     even with the config flag set).
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     try {
       localStorage.clear();
+      localStorage.setItem(
+        'weblogcat:tweaks:v1',
+        JSON.stringify({ performanceMode: 'on' }),
+      );
     } catch {
       /* SecurityError in some sandbox configs — ignore */
     }
@@ -302,54 +308,6 @@ test.describe('dashboard', () => {
     const before = await logcatTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
 
-    // TEMP DEBUG: capture layout state + tile rects + dashboard size
-    // so the failure surfaces in the assertion annotation (the only
-    // place the github-actions reporter reliably renders in the
-    // run page summary).
-    const debug = await page.evaluate(() => {
-      const grid = document.querySelector('.dash-grid');
-      const gridRect = grid ? grid.getBoundingClientRect() : null;
-      const tiles = Array.from(document.querySelectorAll('.tile')).map((t) => {
-        const r = t.getBoundingClientRect();
-        const el = t instanceof HTMLElement ? t : null;
-        return {
-          id: el ? el.dataset.tileId : null,
-          x: r.x,
-          y: r.y,
-          w: r.width,
-          h: r.height,
-          hasLogcat: !!t.querySelector('.lc-widget'),
-          hasShell: !!t.querySelector('.sh-widget'),
-        };
-      });
-      const layout = localStorage.getItem('weblogcat-dashboard-v2');
-      const dataPerf = document.documentElement.getAttribute('data-perf');
-      const handles = Array.from(
-        document.querySelectorAll('.dash-split-handle'),
-      ).map((h) => {
-        const r = h.getBoundingClientRect();
-        const el = h instanceof HTMLElement ? h : null;
-        return {
-          dir: el ? el.className : null,
-          x: r.x,
-          y: r.y,
-          w: r.width,
-          h: r.height,
-        };
-      });
-      return {
-        grid: gridRect ? { w: gridRect.width, h: gridRect.height } : null,
-        viewport: { w: window.innerWidth, h: window.innerHeight },
-        tiles,
-        handles,
-        layout,
-        dataPerf,
-      };
-    });
-    // Force this through the assertion so the debug payload lands in
-    // the annotation. This *intentionally* fails — remove once the
-    // root cause is identified.
-    expect(JSON.stringify(debug)).toBe('__debug_payload__');
 
     const handle = page.locator('.dash-split-handle--row').first();
     const handleBox = await handle.boundingBox();
