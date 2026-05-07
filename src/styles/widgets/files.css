@@ -263,3 +263,37 @@
   white-space: nowrap;
   max-width: 60%;
 }
+
+/* Right-click context menu — anchored at the click position via
+ * inline `left` / `top`. Lives at viewport scope (z-index over the
+ * tile) and dismisses on outside click + Esc. */
+.fx-ctx {
+  position: fixed;
+  z-index: 70;
+  min-width: 200px;
+  background: oklch(from var(--bg-1) l c h / 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 100ms var(--ease-out);
+}
+.fx-ctx button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-1);
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.fx-ctx button:hover { background: var(--bg-2); color: var(--fg-0); }
+.fx-ctx svg { color: var(--fg-3); flex-shrink: 0; }
+.fx-ctx button:hover svg { color: var(--accent); }

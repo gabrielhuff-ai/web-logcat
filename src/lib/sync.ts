@@ -74,8 +74,58 @@ export interface SyncFs {
    * shell channel — same workaround the upstream Tango demo uses.
    */
   mkdir(path: string): Promise<void>;
+  /**
+   * Ask the device to open a file with its default app. Runs
+   * `am start -a android.intent.action.VIEW -d "file://<path>" -t
+   * "<mime>"` over a shell channel. The MIME is guessed from the
+   * extension (`mimeForExtension`). Modern Android (>=N) blocks
+   * `file://` URIs from outside an app's `FileProvider`, so this is
+   * a best-effort: it works on rooted ROMs / some OEM viewers and is
+   * a useful debugging tool, not a guarantee. The simulator just
+   * resolves a "Simulated mode" string for the toast.
+   */
+  open(path: string): Promise<{ ok: boolean; reason?: string }>;
   /** Release any held resources (sync socket on the real path, no-op on the sim). */
   dispose(): Promise<void>;
+}
+
+/**
+ * Best-effort MIME type from a file path. Used by `SyncFs.open` to
+ * pick a value for `am start -t <mime>`. The list is intentionally
+ * short — Android's resolver does its own sniff anyway, and a wildcard
+ * fallback lets the user's chooser pick.
+ */
+export function mimeForExtension(path: string): string {
+  const dot = path.lastIndexOf('.');
+  if (dot < 0) return '*/*';
+  const ext = path.slice(dot + 1).toLowerCase();
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'json': return 'application/json';
+    case 'zip': return 'application/zip';
+    case 'apk': return 'application/vnd.android.package-archive';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    case 'svg': return 'image/svg+xml';
+    case 'mp4':
+    case 'm4v': return 'video/mp4';
+    case 'webm': return 'video/webm';
+    case 'mp3': return 'audio/mpeg';
+    case 'm4a': return 'audio/mp4';
+    case 'wav': return 'audio/wav';
+    case 'ogg': return 'audio/ogg';
+    case 'txt':
+    case 'log':
+    case 'md': return 'text/plain';
+    case 'html':
+    case 'htm': return 'text/html';
+    case 'csv': return 'text/csv';
+    case 'xml': return 'text/xml';
+    default: return '*/*';
+  }
 }
 
 /**
@@ -260,6 +310,40 @@ function createRealSync(adb: Adb): SyncFs {
       await adb.subprocess.noneProtocol.spawnWaitText(cmd);
     },
 
+    async open(path) {
+      const mime = mimeForExtension(path);
+      // `am start -a VIEW -d file://… -t mime` is the canonical
+      // route. Shell-quoting the path keeps spaces + parens safe.
+      const cmd = [
+        'am',
+        'start',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        `file://${path}`,
+        '-t',
+        mime,
+      ];
+      try {
+        const sp = adb.subprocess.shellProtocol;
+        if (sp) {
+          const proc = await sp.spawn(cmd);
+          const code = await proc.exited;
+          if (code !== 0) {
+            return { ok: false, reason: `am start exit ${code}` };
+          }
+          return { ok: true };
+        }
+        await adb.subprocess.noneProtocol.spawnWaitText(cmd);
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          reason: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+
     async dispose() {
       if (!openP) return;
       try {
@@ -332,6 +416,13 @@ function createSimSync(): SyncFs {
 
     async mkdir(path) {
       simMkdir(root, path);
+    },
+
+    async open(_path) {
+      // Simulator has no real file system + no Activity Manager.
+      // Return ok:false so the widget shows a "Simulated mode" toast,
+      // mirroring how push/pull behave.
+      return { ok: false, reason: 'Simulated mode — open ignored' };
     },
 
     async dispose() {
