@@ -59,7 +59,11 @@
 .mr-screen {
   flex: 1;
   min-height: 0;
-  background: black;
+  /* Transparent background — when the SVG / canvas is letterboxed
+   * inside the tile (SVG aspect ≠ tile aspect) the widget body shows
+   * through instead of black gutters. The previous explicit black
+   * read as "padding" rather than as part of the chrome. */
+  background: transparent;
   overflow: hidden;
   position: relative;
   cursor: crosshair;

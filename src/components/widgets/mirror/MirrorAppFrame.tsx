@@ -30,19 +30,16 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
   return (
     <svg
       viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="xMidYMid meet"
       className="mirror-svg"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Black backdrop under the screenshot. The PNG is letterboxed
-          (its 9:20 aspect doesn't quite match the SVG viewbox), so
-          without a black fill the surrounding `.mr-screen` background
-          would bleed through and the edges read as colored bars
-          rather than phone bezels. */}
-      <rect width={VIEWBOX_W} height={VIEWBOX_H} fill="black" />
-
       {/* Pixel home-screen screenshot. `xlinkHref` for broader SVG-1.1
-          tooling, `href` for SVG 2; both are accepted by browsers. */}
+          tooling, `href` for SVG 2; both are accepted by browsers.
+          `slice` makes the PNG fill the entire SVG viewBox (no inner
+          letterboxing) — the outer SVG itself uses `meet`, so the
+          widget body shows through above/below when the tile is
+          taller than the SVG aspect, instead of cropping the image. */}
       <image
         href={HOME_IMG}
         xlinkHref={HOME_IMG}

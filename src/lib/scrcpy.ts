@@ -146,6 +146,12 @@ export async function startScrcpy(
   // (no per-recording stream locking; subscribers come and go freely).
   const [packetsForDecoder, packetsForRaw] = video.stream.tee();
   const rawListeners = new Set<RawChunkListener>();
+  // Cache the most-recent 'configuration' packet (SPS + PPS for H.264)
+  // so subscribers that join after session start — i.e. the recorder,
+  // which only attaches when the user clicks Record — still see it.
+  // Without this replay the muxer never gets a decoderConfig and
+  // finalize() throws "Cannot read properties of null".
+  let lastConfig: Uint8Array | null = null;
   // Drain `packetsForRaw` for the lifetime of the session so the tee
   // never stalls. Each packet's bytes are dispatched to whoever has
   // subscribed via `subscribeRaw`. Errors / EOF are swallowed — the
@@ -156,6 +162,9 @@ export async function startScrcpy(
       while (true) {
         const { done, value } = await rawReader.read();
         if (done) return;
+        if (value.type === 'configuration') {
+          lastConfig = value.data;
+        }
         if (rawListeners.size > 0) {
           for (const fn of rawListeners) {
             try {
@@ -176,6 +185,16 @@ export async function startScrcpy(
     packets: packetsForDecoder,
     subscribeRaw(fn: RawChunkListener) {
       rawListeners.add(fn);
+      // Replay the cached configuration packet so late joiners
+      // (e.g. recording started after session warm-up) still see
+      // SPS / PPS without waiting for the next keyframe.
+      if (lastConfig) {
+        try {
+          fn(lastConfig);
+        } catch {
+          /* ignore */
+        }
+      }
       return () => {
         rawListeners.delete(fn);
       };

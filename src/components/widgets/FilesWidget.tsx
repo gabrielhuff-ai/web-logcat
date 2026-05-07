@@ -110,7 +110,6 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const [showHidden, setShowHidden] = useState(false);
 
   const [transfer, setTransfer] = useState<Transfer | null>(null);
-  const [installing, setInstalling] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
 
   // Tree pane owns its own expanded set so opening a directory in the
@@ -320,20 +319,17 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           ? entry.linkTarget
           : joinPath(path, entry.name);
       const isApk = target.toLowerCase().endsWith('.apk');
-      // APK installs run `pm install` over the shell channel and
-      // commonly take 5-30s for non-trivial packages. Surface an
-      // in-progress indicator immediately so the click registers as
-      // something happening, then replace it with the outcome.
-      if (isApk) {
-        setInstalling(entry.name);
-      } else {
-        showToast(`Opening ${entry.name}…`);
-      }
+      // The intent (`am start VIEW`) is fire-and-forget — the device
+      // shows the PackageInstaller / file viewer dialog and we have
+      // no easy way to observe whether the user follows through.
+      // Toast that the request was dispatched; that's all we can
+      // honestly claim from here.
       const res = await fs.open(target);
-      if (isApk) setInstalling(null);
       if (res.ok) {
         showToast(
-          isApk ? `Installed ${entry.name}` : `Opened ${entry.name} on device`,
+          isApk
+            ? `Install requested for ${entry.name}`
+            : `Opened ${entry.name} on device`,
         );
       } else {
         showToast(res.reason ?? 'Open failed');
@@ -868,18 +864,6 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         />
       </div>
 
-      {installing && (
-        <div className="fx-xfer fx-xfer-busy" role="status" aria-live="polite">
-          <span className="fx-xfer-icon">
-            <Icons.Refresh size={12} />
-          </span>
-          <span className="fx-xfer-name">Installing · {installing}</span>
-          <div className="fx-xfer-bar">
-            <div className="fx-xfer-indeterminate" />
-          </div>
-          <span className="fx-xfer-pct">…</span>
-        </div>
-      )}
       {transfer && (
         <div className={`fx-xfer ${transfer.done ? 'done' : ''}`}>
           <span className="fx-xfer-icon">

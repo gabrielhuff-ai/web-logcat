@@ -39,6 +39,8 @@ export interface FilterBarProps {
   matchCount?: number;
   /** Advance to the next match — bound to Enter on the active chip. */
   onAdvanceMatch?: () => void;
+  /** Step backward to the previous match. */
+  onRetreatMatch?: () => void;
 }
 
 interface Suggestion {
@@ -84,6 +86,7 @@ export function FilterBar({
   currentMatch = 0,
   matchCount = 0,
   onAdvanceMatch,
+  onRetreatMatch,
 }: FilterBarProps) {
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
@@ -271,11 +274,35 @@ export function FilterBar({
       </div>
 
       {activeFilterId !== null && matchCount > 0 && (
-        <div
-          className="fb-match-counter"
-          aria-label={`Match ${currentMatch} of ${matchCount}`}
-        >
-          {currentMatch}/{matchCount}
+        <div className="fb-match-nav">
+          <button
+            type="button"
+            className="fb-match-step"
+            aria-label="Previous match"
+            title="Previous match"
+            onClick={() => onRetreatMatch?.()}
+          >
+            <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M 4 10 L 8 6 L 12 10" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="fb-match-step"
+            aria-label="Next match"
+            title="Next match"
+            onClick={() => onAdvanceMatch?.()}
+          >
+            <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M 4 6 L 8 10 L 12 6" />
+            </svg>
+          </button>
+          <div
+            className="fb-match-counter"
+            aria-label={`Match ${currentMatch} of ${matchCount}`}
+          >
+            {currentMatch}/{matchCount}
+          </div>
         </div>
       )}
 
@@ -325,6 +352,12 @@ function FilterChip({ f, active, onActivate, onAdvance, onRemove }: FilterChipPr
       onClick={(e) => {
         // Suppress when click bubbled up from the X button.
         if ((e.target as HTMLElement).closest('.chip-x')) return;
+        // Stop the parent .fb-chips onClick from yanking focus into
+        // the chip-input — that handler is for clicking the chip-bar
+        // background, not for clicking a chip itself. Without this
+        // the input receives focus on every chip click and Enter
+        // submits a draft instead of advancing the match.
+        e.stopPropagation();
         onActivate?.();
       }}
       onKeyDown={(e) => {
