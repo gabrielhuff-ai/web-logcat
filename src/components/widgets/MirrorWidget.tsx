@@ -30,6 +30,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
 } from 'react';
 import type { CSSProperties } from 'react';
 import * as Icons from '../Icons';
@@ -334,6 +335,49 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       void injectMotion(MOTION_UP, last.lastX, last.lastY);
     },
     [usingFake, injectMotion],
+  );
+
+  // ---- Wheel / two-finger scroll → scrcpy injectScroll ------------------
+  // Forwards mouse-wheel + trackpad scroll deltas to the device as
+  // `INJECT_SCROLL` control messages. scrcpy expects scroll values in
+  // wheel ticks (signed floats; positive scrollY = scroll DOWN); the
+  // browser's `WheelEvent` reports pixel deltas in `deltaY` (default
+  // mode) so we divide by `WHEEL_PX_PER_TICK` to convert. The
+  // `preventDefault()` keeps the host page from also scrolling, which
+  // is essential when the mirror tile is inside a scroll container.
+  const WHEEL_PX_PER_TICK = 100;
+  const onScreenWheel = useCallback(
+    (e: ReactWheelEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      if (usingFake) return;
+      const ctrl = sessionRef.current?.control;
+      const src = srcSizeRef.current;
+      if (!ctrl || src.width === 0 || src.height === 0) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const fracX = (e.clientX - rect.left) / rect.width;
+      const fracY = (e.clientY - rect.top) / rect.height;
+      const x = Math.round(fracX * src.width);
+      const y = Math.round(fracY * src.height);
+      // Negate Y because Android scroll convention is "scroll UP →
+      // content moves DOWN" (positive scrollY) which is the inverse of
+      // the wheel `deltaY` (positive = scroll DOWN).
+      const scrollX = -e.deltaX / WHEEL_PX_PER_TICK;
+      const scrollY = -e.deltaY / WHEEL_PX_PER_TICK;
+      void ctrl
+        .injectScroll({
+          pointerX: x,
+          pointerY: y,
+          videoWidth: src.width,
+          videoHeight: src.height,
+          scrollX,
+          scrollY,
+          buttons: 0,
+        })
+        .catch(() => {
+          /* control channel closed — ignored */
+        });
+    },
+    [usingFake],
   );
 
   // ---- Hardware-button helpers -----------------------------------------
@@ -646,6 +690,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         onPointerMove={onScreenPointerMove}
         onPointerUp={onScreenPointerUp}
         onPointerCancel={onScreenPointerUp}
+        onWheel={onScreenWheel}
       >
         {usingFake ? (
           <MirrorAppFrame time={time} taps={taps} />

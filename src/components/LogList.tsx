@@ -13,20 +13,30 @@
 //     below, so each row is a real flow child whose width contributes to
 //     the parent's `max-content` size.
 //
-// Scroll anchoring on head trim:
-//   - The parent (`App.tsx`) calls `compensateScroll(px)` synchronously
-//     inside `flushIncoming`, *before* the corresponding setLogs is
-//     queued, so the new scrollTop is in place by the time the
-//     virtualiser runs `getVirtualItems()` on the next render. This keeps
-//     the visible items aligned with the user's scroll position with no
-//     paint between the two — earlier we did it in a useLayoutEffect on
-//     [entries], which adjusted scrollTop *after* the commit; the
-//     virtualiser had already produced items for the old scroll position
-//     so the browser briefly painted the misalignment as a "blink".
-//   - The math uses the density-derived row-height estimate; in wrap mode
-//     actual heights drift slightly (documented in docs/TASKS.md).
+// Scroll anchoring (Android-Studio-style):
+//   - When `autoScroll` is on, we pin to the bottom on every entries
+//     change. Standard "tail -f" behaviour.
+//   - When the user scrolls away from the bottom, `autoScroll` flips off.
+//     From that point we capture an *anchor* — the topmost visible
+//     entry's id + its sub-pixel offset within the viewport — on every
+//     scroll event. Whenever the entries array changes (new logs
+//     streamed in, or the FIFO trim drops the head once the 50 k cap
+//     is reached) a `useLayoutEffect` looks the anchor entry up by id
+//     and restores `scrollTop` so it lands at the same screen-Y. The
+//     user's window of logs stays put; new arrivals queue invisibly
+//     past the viewport bottom; trims happen above the visible area
+//     without shifting it.
+//   - If the anchor itself was trimmed away (rare — only if the user
+//     scrolled to the very top of a 50 k buffer and waited for tens of
+//     thousands of new lines), we fall back to pinning the user at the
+//     new oldest entry instead of forcing them back to the bottom.
+//   - Anchor capture happens in the scroll handler rather than every
+//     render so it doesn't fight with auto-scroll-to-bottom or the
+//     restore loop. The "topmost visible" entry is found via the
+//     virtualiser's `getVirtualItems()` (or arithmetic on rowHeight in
+//     the non-virtualised path).
 
-import { useEffect, useMemo, useRef, type UIEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type UIEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as Icons from './Icons';
 import { entryMatches } from '../lib/filters';
@@ -51,12 +61,16 @@ export interface LogListProps {
   setAutoScroll: (v: boolean) => void;
   deviceModel: string;
   hasFilters: boolean;
-  /** Imperative API: parent registers a callback that subtracts pixels
-   *  from scrollTop. Called synchronously inside flushIncoming when the
-   *  FIFO trim evicts visible entries while scroll-locked. */
-  registerCompensate?: (fn: (px: number) => void) => void;
   /** Imperative API: parent calls this to scroll to a given timestamp. */
   registerScrollToTs?: (fn: (ts: number) => void) => void;
+}
+
+interface ScrollAnchor {
+  /** Entry id at the top of the viewport. */
+  id: number;
+  /** Sub-pixel offset of the entry's top edge above the viewport top
+   *  (negative when the entry is partially scrolled off the top). */
+  offset: number;
 }
 
 export function LogList({
@@ -74,7 +88,6 @@ export function LogList({
   setAutoScroll,
   deviceModel,
   hasFilters,
-  registerCompensate,
   registerScrollToTs,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -89,7 +102,8 @@ export function LogList({
     enabled: virtualize,
   });
 
-  // Auto-scroll to bottom on new content while autoScroll is on.
+  // Auto-scroll to bottom on new content while autoScroll is on. The
+  // anchor branch below skips this path entirely.
   useEffect(() => {
     if (!autoScroll) return;
     const el = scrollRef.current;
@@ -101,30 +115,77 @@ export function LogList({
     }
   }, [entries.length, autoScroll, virtualize, virtualizer]);
 
-  // Trim-anchor: expose an imperative `compensateScroll(rowsTrimmed)` to
-  // the parent. The parent calls it *synchronously* inside flushIncoming,
-  // before setLogs is queued, so by the time the virtualiser re-renders
-  // it reads the new scrollTop on the *same* render that produces the
-  // new entries — visible items at their paddingTop offsets line up with
-  // the user's scroll position with no flicker.
-  //
-  // We take a row count rather than a pixel delta so the multiplication
-  // by the row height happens here, where we can use the *measured*
-  // average from the virtualiser (`getTotalSize() / count`). That
-  // matters in wrap mode: rows can wrap to multiple lines, so the static
-  // density-derived estimate undershoots and the anchor drifts. The
-  // measured average reflects actual heights to within a row or two.
-  useEffect(() => {
-    registerCompensate?.((rowsTrimmed: number) => {
-      if (rowsTrimmed <= 0) return;
-      const el = scrollRef.current;
-      if (!el) return;
-      const total = virtualize ? virtualizer.getTotalSize() : el.scrollHeight;
-      const avg = entries.length > 0 && total > 0 ? total / entries.length : rowHeight;
-      const px = rowsTrimmed * avg;
-      el.scrollTop = Math.max(0, el.scrollTop - px);
-    });
-  }, [registerCompensate, virtualize, virtualizer, entries.length, rowHeight]);
+  // ---- Scroll anchor preservation ----------------------------------------
+  // While `autoScroll === false`, capture the topmost visible entry on
+  // every scroll. On entries change, restore `scrollTop` so that entry
+  // stays in the same screen position. This eliminates the "logs
+  // jump" effect when the FIFO trims the head while the user is
+  // viewing intermediate logs.
+  const anchorRef = useRef<ScrollAnchor | null>(null);
+  // Skip the anchor restore on the very first render so we don't fight
+  // the hub's snapshot replay (which lands a full buffer in one go).
+  const firstRenderRef = useRef(true);
+
+  /** Find the entry at the top of the viewport, plus its sub-pixel
+   *  offset above the viewport top. */
+  const captureAnchor = (): ScrollAnchor | null => {
+    const el = scrollRef.current;
+    if (!el || entries.length === 0) return null;
+    const scrollTop = el.scrollTop;
+    if (virtualize) {
+      // Iterate the live virtual items — the first one whose `end`
+      // exceeds scrollTop straddles the viewport top.
+      const items = virtualizer.getVirtualItems();
+      for (const it of items) {
+        if (it.end > scrollTop) {
+          const entry = entries[it.index];
+          if (!entry) return null;
+          return { id: entry.id, offset: scrollTop - it.start };
+        }
+      }
+      return null;
+    }
+    // Non-virtualised: row heights are uniform.
+    const idx = Math.min(entries.length - 1, Math.floor(scrollTop / rowHeight));
+    const entry = entries[idx];
+    if (!entry) return null;
+    return { id: entry.id, offset: scrollTop - idx * rowHeight };
+  };
+
+  useLayoutEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    if (autoScroll) return;
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    // Find the anchor entry's new index. `findIndex` is O(n); for the
+    // 50 k worst case this is 50 k pointer comparisons per render — a
+    // few hundred microseconds, well under one frame. If perf shows up
+    // we can swap for a Map<id, idx> built once per render.
+    const newIdx = entries.findIndex((e) => e.id === anchor.id);
+    if (newIdx < 0) {
+      // Anchor evicted — re-anchor on whatever's now at the top of the
+      // buffer instead of falling back to autoScroll. Picks the new
+      // first entry as the anchor with offset 0.
+      const first = entries[0];
+      if (first) {
+        anchorRef.current = { id: first.id, offset: 0 };
+        el.scrollTop = 0;
+      }
+      return;
+    }
+    const offset = virtualize
+      ? virtualizer.getOffsetForIndex(newIdx, 'start')?.[0] ?? newIdx * rowHeight
+      : newIdx * rowHeight;
+    const target = Math.max(0, offset + anchor.offset);
+    if (Math.abs(el.scrollTop - target) > 0.5) {
+      el.scrollTop = target;
+    }
+  }, [entries, autoScroll, virtualize, virtualizer, rowHeight]);
 
   // Imperative jump-to-timestamp from the heatmap.
   useEffect(() => {
@@ -147,6 +208,14 @@ export function LogList({
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (dist > 60 && autoScroll) setAutoScroll(false);
     if (dist < 4 && !autoScroll) setAutoScroll(true);
+    // Refresh the anchor on every scroll so the next entries-change
+    // restores from the user's current vantage point. Skip while
+    // autoScroll is on — we don't need an anchor in tail mode.
+    if (dist >= 4) {
+      anchorRef.current = captureAnchor();
+    } else {
+      anchorRef.current = null;
+    }
   };
 
   const matchSet = useMemo(() => {

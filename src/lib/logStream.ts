@@ -21,7 +21,17 @@
 
 import type { LogEntry } from '../types';
 
-export const MAX_LOGS = 5000;
+/**
+ * Hard ceiling on the shared ring buffer. 50 k strikes a balance:
+ * deep enough that a normal browsing session at the bottom never
+ * sees an old log evicted under foot, low enough that a 50 k array
+ * + the virtualiser's measurement cache stay comfortably under a
+ * few MB. The Logcat widget pairs this with an anchor-based scroll
+ * preservation strategy (`<LogList/>`) so trims that *do* happen
+ * never shift the user's viewport — modelled on Android Studio's
+ * Logcat tool window.
+ */
+export const MAX_LOGS = 50_000;
 
 export type LogStreamListener = (entries: ReadonlyArray<LogEntry>, kind: 'snapshot' | 'append') => void;
 

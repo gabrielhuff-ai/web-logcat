@@ -318,7 +318,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const focusFilterRef = useRef<(() => void) | null>(null);
   const scrollToTsRef = useRef<((ts: number) => void) | null>(null);
-  const compensateScrollRef = useRef<((rowsTrimmed: number) => void) | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -470,9 +469,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           setAutoScroll={setAutoScroll}
           deviceModel={device.model}
           hasFilters={filters.length > 0}
-          registerCompensate={(fn) => {
-            compensateScrollRef.current = fn;
-          }}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
           }}
@@ -504,7 +500,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
 
 /** Read the hub's effective cap. Avoids importing the constant directly. */
 function hubCap(_hub: unknown): number {
-  return 5000;
+  return 50_000;
 }
 
 function closestCrashHead(entry: LogEntry, logs: LogEntry[], heads: Set<number>): number {
