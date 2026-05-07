@@ -80,12 +80,12 @@ This is recorded for completeness; the actions are already on `main`.
 
 ### Prerequisites
 
-- [ ] Phase 0 boxes all ticked.
-- [ ] The transferred repo's GitHub side is fully wired up: `BOT_PAT`
+- [x] Phase 0 boxes all ticked.
+- [x] The transferred repo's GitHub side is fully wired up: `BOT_PAT`
   recreated, Pages re-enabled, "Allow auto-merge" ticked, ruleset
   bypass actor verified, `release` ruleset created (block force
   pushes + restrict deletions).
-- [ ] At least one end-to-end test pass on a real Android device by
+- [x] At least one end-to-end test pass on a real Android device by
   the maintainer.
 
 ### Steps
