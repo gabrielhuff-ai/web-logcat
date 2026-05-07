@@ -267,7 +267,7 @@ test.describe('dashboard', () => {
     const before = await firstTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
 
-    const handle = page.locator('.dash-split-handle.row').first();
+    const handle = page.locator('.dash-split-handle--row').first();
     const handleBox = await handle.boundingBox();
     if (!handleBox) throw new Error('split handle has no bounding box');
 

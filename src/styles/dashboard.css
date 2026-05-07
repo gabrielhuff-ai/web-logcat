@@ -266,33 +266,38 @@
    is a real child div (`.dash-split-line`) absolute-positioned with
    integer offsets — `top: 0; bottom: 0; left: 50%; margin-left: -1px;
    width: 2px;` — so the line sits exactly at the gap centre on every
-   DPR. Two earlier approaches (linear-gradient with `calc(50% ± 1px)`
-   stops, and a flex-centred `::before`) both produced visible
-   misalignment in the browser at certain split positions; the
-   absolute + integer-margin recipe is the only one that snaps
-   reliably. */
+   DPR.
+
+   The orientation modifier uses BEM-style namespacing
+   (`dash-split-handle--row` / `--col`) rather than a bare `row` /
+   `col` class, because the global `.row` selector (log-row layout
+   in `app.css`) was leaking `display: flex; padding: 0 14px 0 8px;
+   gap: 10px` onto every vertical seam handle — bloating the bbox to
+   22px wide and shifting the painted line 8px to the right of the
+   gap centre. The `--col` variant happened to work because no
+   global `.col` selector exists. */
 .dash-split-handle {
   background: transparent;
   z-index: 2;
   touch-action: none;
   pointer-events: auto;
 }
-.dash-split-handle.row { cursor: col-resize; }
-.dash-split-handle.col { cursor: row-resize; }
+.dash-split-handle--row { cursor: col-resize; }
+.dash-split-handle--col { cursor: row-resize; }
 .dash-split-line {
   position: absolute;
   background: transparent;
   pointer-events: none;
   transition: background 120ms;
 }
-.dash-split-handle.row .dash-split-line {
+.dash-split-handle--row .dash-split-line {
   top: 0;
   bottom: 0;
   left: 50%;
   width: 2px;
   margin-left: -1px;
 }
-.dash-split-handle.col .dash-split-line {
+.dash-split-handle--col .dash-split-line {
   left: 0;
   right: 0;
   top: 50%;
@@ -373,7 +378,17 @@
   border-radius: 0;
   margin: 0;
 }
-[data-compact="on"] .tile { border: 1px solid oklch(from var(--bg-0) l c h / 0.6); }
+/* Compact mode — tiles abut with no gap, so the drop shadows on
+ * adjacent tiles overlap and stack in random z-order, which reads as
+ * inconsistent "elevation" between neighbours (see github issue
+ * thread). Drop the elevation entirely and rely on a single 1px
+ * border for separation. The `box-shadow: none !important` covers
+ * every tile state (default, focused, drop-target, dragging,
+ * maximised) without having to enumerate each one. */
+[data-compact="on"] .tile {
+  border: 1px solid oklch(from var(--bg-0) l c h / 0.6);
+  box-shadow: none !important;
+}
 
 /* Floating ghost shown next to the cursor while dragging a tile head. */
 .dash-swap-ghost {
