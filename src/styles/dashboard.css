@@ -68,10 +68,28 @@
   color: var(--fg-0);
   letter-spacing: -0.01em;
 }
+/* Tile-internal tooltips — `.tile` clips with `overflow: hidden` for
+ * rounded corners, which means the default centred tooltip
+ * (`left: 50%; transform: translateX(-50%)`) gets cut off whenever a
+ * trigger sits near the tile's left edge (e.g. the Restart button in
+ * the Shell toolbar). Anchoring inside-tile tooltips to the button's
+ * left edge guarantees they extend into the body, never out the
+ * left side. Topbar tooltips (outside `.tile`) keep the centred
+ * positioning. */
+.tile .tt::after {
+  left: 0;
+  transform: translateY(-4px);
+}
+.tile .tt:hover::after {
+  transform: translateY(0);
+}
+
 /* Beta release badge — sits at the bottom-right of the brand mark.
- * Pill, accent-filled, small caps. Aligned to the baseline of the
- * brand name with a slight vertical drop so it visually anchors to
- * the descender line rather than the cap line. */
+ * Pill, accent-filled, small caps. The text is hard-coded to white
+ * (rather than using `--accent-fg`) because `--accent-fg` is a soft-
+ * tint complement designed to read on `--accent-soft`, not on the
+ * solid `--accent`. White reads cleanly on both light- and dark-mode
+ * accent fills; we mirror the same choice as `.dash-add`. */
 .dash-brand-beta {
   align-self: flex-end;
   display: inline-flex;
@@ -80,7 +98,7 @@
   margin-left: -2px;
   margin-bottom: 1px;
   background: var(--accent);
-  color: var(--accent-fg);
+  color: oklch(1 0 0);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -216,44 +234,46 @@
 [data-compact="on"] .dash-grid { --tile-radius: 0px; }
 
 /* The seam between two siblings — drag to resize. The handle's own
-   bounding box stretches across the gap (10px in normal mode, ~6px
-   hit-zone in compact mode); on hover / drag a 2px accent line paints
-   centred along the seam.
-   The line is a flex-centered `::before` child rather than a
-   positioned-with-calc box or a linear-gradient — both prior attempts
-   produced visible sub-pixel artefacts (a wider gray smear on certain
-   DPRs, or the line snapping to one edge of the bounding box). Flex
-   centering hands the centring math to the layout engine and snaps
-   cleanly at any DPR. */
+   bounding box (`.dash-split-handle`) covers the entire gap (10px in
+   normal mode, ~6px hit-zone in compact mode). The visible 2px line
+   is a real child div (`.dash-split-line`) absolute-positioned with
+   integer offsets — `top: 0; bottom: 0; left: 50%; margin-left: -1px;
+   width: 2px;` — so the line sits exactly at the gap centre on every
+   DPR. Two earlier approaches (linear-gradient with `calc(50% ± 1px)`
+   stops, and a flex-centred `::before`) both produced visible
+   misalignment in the browser at certain split positions; the
+   absolute + integer-margin recipe is the only one that snaps
+   reliably. */
 .dash-split-handle {
   background: transparent;
   z-index: 2;
   touch-action: none;
-  display: flex;
   pointer-events: auto;
 }
-.dash-split-handle.row {
-  cursor: col-resize;
-  align-items: stretch;
-  justify-content: center;
-}
-.dash-split-handle.col {
-  cursor: row-resize;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-}
-.dash-split-handle::before {
-  content: "";
-  display: block;
-  flex: 0 0 auto;
+.dash-split-handle.row { cursor: col-resize; }
+.dash-split-handle.col { cursor: row-resize; }
+.dash-split-line {
+  position: absolute;
   background: transparent;
+  pointer-events: none;
   transition: background 120ms;
 }
-.dash-split-handle.row::before { width: 2px; }
-.dash-split-handle.col::before { height: 2px; }
-.dash-split-handle:hover::before,
-.dash-grid.dragging .dash-split-handle::before {
+.dash-split-handle.row .dash-split-line {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+}
+.dash-split-handle.col .dash-split-line {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+}
+.dash-split-handle:hover .dash-split-line,
+.dash-grid.dragging .dash-split-handle .dash-split-line {
   background: var(--accent);
 }
 

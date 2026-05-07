@@ -614,7 +614,9 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
       aria-label="Resize split"
       role="separator"
       aria-orientation={dir === 'row' ? 'vertical' : 'horizontal'}
-    />
+    >
+      <div className="dash-split-line" aria-hidden />
+    </div>
   );
 }
 
