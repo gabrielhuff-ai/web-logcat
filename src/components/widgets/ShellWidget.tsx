@@ -37,6 +37,7 @@ import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
 import { useTileSettings } from '../../lib/tileSettings';
 import {
+  completeShellInput,
   execShellSim,
   initialShellSimState,
   stripAnsi,
@@ -336,15 +337,26 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
         return;
       }
       if (e.key === 'Tab') {
-        // Default browser behaviour is to move focus out of the
-        // input (and on to the address bar in Chrome's case). Always
-        // swallow it. On a real device we forward a literal tab to
-        // the channel so any shell that *does* implement completion
-        // (e.g. a custom rooted ROM with bash) sees the keystroke.
-        // The simulator currently has no completion implementation —
-        // the keystroke is dropped after `preventDefault()`.
         e.preventDefault();
-        if (!usingFake && channelRef.current) {
+        if (usingFake) {
+          // Simulator-side completion against `FAKE_FS_HINTS`. Single
+          // match extends the word (with a trailing `/` for directories);
+          // multiple matches extend to the longest common prefix and
+          // print the candidates inline as a single space-separated row.
+          const result = completeShellInput(input, simState);
+          if (result.input !== input) setInput(result.input);
+          if (result.options.length > 1) {
+            const promptLine: ShellLine = { kind: 'prompt', cwd, text: input };
+            const optionsLine: ShellLine = {
+              kind: 'out',
+              text: result.options.join('  '),
+            };
+            setHistory((prev) => prev.concat([promptLine, optionsLine]));
+          }
+        } else if (channelRef.current) {
+          // No PTY on the real channel — forwarding `\t` to a non-PTY
+          // bash is a no-op, but rooted ROMs running mksh do honour it
+          // for in-band completion. Cheap to keep.
           void channelRef.current.write('\t');
         }
         return;
@@ -375,7 +387,7 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
         return;
       }
     },
-    [cmdHistory, histIdx, input, usingFake],
+    [cmdHistory, cwd, histIdx, input, simState, usingFake],
   );
 
   // ---- Click anywhere in the body grabs focus ----------------------------
@@ -425,6 +437,11 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
           data-tt="Restart shell"
           onClick={(e) => {
             e.stopPropagation();
+            // Reset the scrollback to the banner so the user has clear
+            // visual confirmation the channel was torn down. Without
+            // this, the existing lines look identical pre/post-restart
+            // and there's no way to tell the click landed.
+            setHistory(initialBanner(device?.model));
             setRestartCounter((n) => n + 1);
           }}
           aria-label="Restart shell"
@@ -442,6 +459,11 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
           aria-pressed={settings.runAsRoot}
           onClick={(e) => {
             e.stopPropagation();
+            // Toggling root respawns the channel through `su` (or back
+            // to the user shell) — same UX guarantee as Restart, so
+            // also clear the scrollback so the new prompt line lands
+            // on a fresh banner.
+            setHistory(initialBanner(device?.model));
             setSettings({ runAsRoot: !settings.runAsRoot });
           }}
         >
@@ -464,7 +486,7 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
                 <span className="sh-prompt-host">{SHELL_HOST}</span>
                 <span className="sh-prompt-sep">:</span>
                 <span className="sh-prompt-cwd">{line.cwd}</span>
-                <span className="sh-prompt-sym"> $ </span>
+                <span className="sh-prompt-sym"> {settings.runAsRoot ? '#' : '$'} </span>
                 <span className="sh-cmd">{line.text}</span>
               </div>
             );
@@ -480,7 +502,7 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
           <span className="sh-prompt-host">{SHELL_HOST}</span>
           <span className="sh-prompt-sep">:</span>
           <span className="sh-prompt-cwd">{cwd}</span>
-          <span className="sh-prompt-sym"> $ </span>
+          <span className="sh-prompt-sym"> {settings.runAsRoot ? '#' : '$'} </span>
           <input
             ref={inputRef}
             value={input}

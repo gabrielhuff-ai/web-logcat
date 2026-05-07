@@ -240,6 +240,100 @@ function normalize(path: string): string {
   return out;
 }
 
+// ---- Tab completion --------------------------------------------------------
+
+export interface CompleteResult {
+  /**
+   * Full input line after applying the completion. When there's
+   * exactly one match we extend the current word; with multiple
+   * matches we extend by the longest common prefix. With no match
+   * the input is unchanged.
+   */
+  input: string;
+  /** Candidate names — populated when multiple matches exist. */
+  options: string[];
+}
+
+/**
+ * Produce a tab-completion for the current shell input. Splits the
+ * line on whitespace, takes the last token as the path being typed,
+ * resolves its directory + prefix against the simulated FS, and
+ * returns either an extended input or a list of candidates. Hidden
+ * entries (those starting with `.`) are skipped unless the prefix
+ * itself starts with `.`, matching bash's default behaviour.
+ */
+export function completeShellInput(
+  input: string,
+  state: ShellSimState,
+): CompleteResult {
+  // Split on the LAST whitespace run so we don't have to tokenise the
+  // whole command — preserves any quoting / arg structure ahead of
+  // the cursor exactly as typed.
+  const m = /^(.*\s)?(\S*)$/.exec(input);
+  if (!m) return { input, options: [] };
+  const prefixBeforeWord = m[1] ?? '';
+  const word = m[2] ?? '';
+
+  // Word splits into "directory part" + "filename prefix". A trailing
+  // `/` means the filename prefix is empty (list everything in that
+  // dir).
+  const lastSlash = word.lastIndexOf('/');
+  const dirPart = lastSlash >= 0 ? word.slice(0, lastSlash + 1) : '';
+  const namePrefix = lastSlash >= 0 ? word.slice(lastSlash + 1) : word;
+
+  // Resolve the directory we should list. `dirPart === ''` means the
+  // current word is a bare filename → list the current cwd.
+  const dirAbs = dirPart
+    ? resolvePath(state.cwd, dirPart === '/' ? '/' : dirPart.replace(/\/$/, ''))
+    : state.cwd;
+  const entries = FAKE_FS_HINTS[dirAbs] ?? null;
+  if (!entries) return { input, options: [] };
+
+  const showHidden = namePrefix.startsWith('.');
+  const matches = entries.filter((e) => {
+    if (!showHidden && e.startsWith('.')) return false;
+    return e.startsWith(namePrefix);
+  });
+
+  if (matches.length === 0) return { input, options: [] };
+
+  if (matches.length === 1) {
+    // Exactly one — replace with the full name. Append `/` so the
+    // user can keep tabbing into a directory subtree (matches bash
+    // behaviour for trivially-detectable directories).
+    const completion = matches[0];
+    const isDir = FAKE_FS_HINTS[(dirAbs === '/' ? '' : dirAbs) + '/' + completion] != null;
+    const tail = isDir ? '/' : ' ';
+    return {
+      input: prefixBeforeWord + dirPart + completion + tail,
+      options: [],
+    };
+  }
+
+  // Multiple matches — extend by the longest common prefix and
+  // surface the candidates so the caller can list them.
+  const lcp = longestCommonPrefix(matches);
+  return {
+    input:
+      lcp.length > namePrefix.length
+        ? prefixBeforeWord + dirPart + lcp
+        : input,
+    options: matches,
+  };
+}
+
+function longestCommonPrefix(strs: string[]): string {
+  if (strs.length === 0) return '';
+  let prefix = strs[0];
+  for (let i = 1; i < strs.length; i += 1) {
+    while (prefix.length > 0 && !strs[i].startsWith(prefix)) {
+      prefix = prefix.slice(0, -1);
+    }
+    if (prefix === '') return '';
+  }
+  return prefix;
+}
+
 /**
  * Strip a small subset of ANSI escape sequences. We only handle the
  * common SGR ("color") sequences and CSI cursor moves — enough that

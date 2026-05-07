@@ -75,3 +75,38 @@
   white-space: nowrap;
   max-width: 50%;
 }
+
+/* ===== Auto-hide scrollbars on `.log-scroll` =====
+ * The `.lc-widget` toggles `data-active="true"` while the user is
+ * moving the mouse over the widget (or scrolling), and back to
+ * `false` 1.5s after the last gesture. Default state: thumbs are
+ * transparent so the scroll track reads as part of the body. Active
+ * state: thumbs fade in to the regular `--fg-3`-ish track colour.
+ *
+ * Mirrors the macOS Chrome scrollbar idle-fade — visible while you
+ * interact, hidden when you're just reading. WebKit `::-webkit-
+ * scrollbar-thumb` covers Chrome / Safari / Edge / Electron; Firefox
+ * uses the `scrollbar-color` property. */
+.lc-widget .log-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 200ms ease-out;
+}
+.lc-widget[data-active='true'] .log-scroll::-webkit-scrollbar-thumb {
+  background: oklch(from var(--fg-3) l c h / 0.5);
+}
+.lc-widget[data-active='true'] .log-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-3);
+}
+.lc-widget .log-scroll {
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease-out;
+}
+.lc-widget[data-active='true'] .log-scroll {
+  scrollbar-color: oklch(from var(--fg-3) l c h / 0.5) transparent;
+}
+
+/* Resume-tail pill fade. The button is conditionally mounted (only
+ * when `!autoScroll && active`) but we add a quick fade-in via the
+ * existing `slideUp` keyframe in `.scroll-to-bottom` for a smoother
+ * appearance on mouse-in. No overrides needed; this comment exists
+ * so the auto-hide behaviour is documented in one place. */

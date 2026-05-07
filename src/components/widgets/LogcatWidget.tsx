@@ -104,6 +104,12 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [onlyMatches, setOnlyMatches] = useState(false);
+  // Tracks recent mouse activity over the widget body. Drives the
+  // auto-fade for the scrollbar thumbs and the Resume-tail pill so
+  // the chrome only appears while the user is actually interacting,
+  // matching the macOS Chrome scrollbar idle-fade pattern.
+  const [active, setActive] = useState(false);
+  const activeTimerRef = useRef<number | null>(null);
   const [pinned, setPinned] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [rate, setRate] = useState(0);
@@ -382,6 +388,25 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     [tweaks, settings],
   );
 
+  const bumpActive = useCallback(() => {
+    setActive(true);
+    if (activeTimerRef.current != null) {
+      window.clearTimeout(activeTimerRef.current);
+    }
+    activeTimerRef.current = window.setTimeout(() => {
+      setActive(false);
+      activeTimerRef.current = null;
+    }, 1500);
+  }, []);
+  useEffect(
+    () => () => {
+      if (activeTimerRef.current != null) {
+        window.clearTimeout(activeTimerRef.current);
+      }
+    },
+    [],
+  );
+
   if (!device) {
     return (
       <div className="lc-widget" style={{ padding: 16, color: 'var(--fg-3)' }}>
@@ -400,7 +425,12 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
       ref={rootRef}
       tabIndex={-1}
       onMouseDown={onMouseDownWidget}
+      onMouseMove={bumpActive}
+      onMouseLeave={() => setActive(false)}
+      onWheel={bumpActive}
+      onScrollCapture={bumpActive}
       data-density={settings.density}
+      data-active={active ? 'true' : 'false'}
       style={widgetStyle}
     >
       <FilterBar
@@ -475,7 +505,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         />
       </div>
 
-      {!autoScroll && (
+      {!autoScroll && active && (
         <button
           className="scroll-to-bottom lc-resume"
           onClick={() => setAutoScroll(true)}
