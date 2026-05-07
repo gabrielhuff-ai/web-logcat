@@ -97,10 +97,29 @@
   place-items: center;
 }
 .empty-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: var(--t-xs);
   letter-spacing: 0.18em;
   color: var(--accent-fg);
   margin-bottom: 12px;
+}
+/* Alpha release pill on the empty/connect screen — same look as the
+   `dash-brand-beta` pill in the topbar so the release tier reads
+   consistently across both views. */
+.empty-alpha {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: var(--accent);
+  color: var(--bg-0);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  line-height: 1.4;
 }
 .empty-title {
   font-size: var(--t-2xl);

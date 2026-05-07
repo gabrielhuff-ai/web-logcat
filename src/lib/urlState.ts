@@ -1,26 +1,31 @@
 // Dashboard state ↔ URL serialiser.
 //
 // The dashboard's "shape" (which tiles exist, where they sit on the
-// dwindle tree, every per-tile setting incl. filter chips) gets
-// flattened into a single base64url-encoded JSON blob and stamped onto
-// the URL as `?d=…`. Sharing the URL produces an identical dashboard
-// for the next visitor; copy-pasting between browsers / windows hands
-// the layout over without round-tripping through localStorage.
+// dwindle tree) gets flattened into a single base64url-encoded JSON
+// blob and stamped onto the URL as `?d=…`. Sharing the URL produces
+// an identical dashboard for the next visitor; copy-pasting between
+// browsers / windows hands the layout over without round-tripping
+// through localStorage.
 //
 // We deliberately *don't* encode:
 //   - The undo / redo history (recreated fresh on load).
 //   - Global `Tweaks` (theme, accent, performance, compact mode) —
 //     those are user preferences, not dashboard state.
 //   - The simulated stream / log buffer (per-session, transient).
+//   - Per-tile settings (filter chips, font sizes, density, …). The
+//     URL was hitting browser caps (Chrome ~8 KB; some servers / CDNs
+//     much lower) once a user had ~5+ tiles with their own settings.
+//     Per-tile state lives in localStorage and is keyed by `(serial,
+//     tileId, kind)`, so it follows the user across sessions on the
+//     same browser; the trade-off is that a shared URL transports
+//     only the layout shell and the recipient's existing per-tile
+//     localStorage (or the per-widget defaults) supplies the rest.
 //
-// Encoding choice: plain JSON + base64url. Layout + a handful of tile
-// settings round-trips at ~1-2 KB after encoding which fits well under
-// every browser's URL cap (8 KB+ in practice). Compression would shave
-// the size by ~60% but `CompressionStream` is async — that costs us a
+// Encoding choice: plain JSON + base64url. Layout-only round-trips at
+// well under 1 KB after encoding for any realistic tree. Compression
+// would shave more but `CompressionStream` is async — that costs us a
 // pre-render `await` in `main.tsx` for the initial bootstrap, which
-// isn't worth the bytes saved at this scale. If layouts ever balloon,
-// swapping the body of `encode` / `decode` for `CompressionStream` is
-// a contained change.
+// isn't worth the bytes saved at this scale.
 //
 // Update timing: `scheduleUrlUpdate()` debounces by 250ms — long
 // enough that mid-resize ratio chatter doesn't thrash the URL bar,
@@ -36,76 +41,27 @@ import type { LayoutState } from '../types';
 /** Query param name on the URL. Short to keep links compact. */
 const URL_PARAM = 'd';
 
-/** Prefix for per-tile settings keys in localStorage. Mirrors
- *  `tileSettings.ts → settingsKey()` but defined here to keep this
- *  file dependency-free (no React imports — so it can run in
- *  `main.tsx` before the React tree mounts). */
-const SETTINGS_PREFIX = 'weblogcat:settings:';
-
 export interface DashboardState {
   /** Same shape `loadLayout()` returns. */
   layout: LayoutState;
-  /** Map of full localStorage key → parsed JSON value, scoped to the
-   *  per-tile settings bucket. We carry the full key so the restore
-   *  path can write straight back to localStorage without having to
-   *  reconstruct the (serial, tileId, kind) triple. */
-  tileSettings: Record<string, unknown>;
 }
 
 /** Snapshot the live dashboard state from localStorage. */
 export function captureState(): DashboardState {
-  const layout = loadLayout();
-  const tileSettings: Record<string, unknown> = {};
-  if (typeof localStorage === 'undefined') return { layout, tileSettings };
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k || !k.startsWith(SETTINGS_PREFIX)) continue;
-    const raw = localStorage.getItem(k);
-    if (raw == null) continue;
-    try {
-      tileSettings[k] = JSON.parse(raw);
-    } catch {
-      /* ignore malformed entries */
-    }
-  }
-  return { layout, tileSettings };
+  return { layout: loadLayout() };
 }
 
 /** Write the snapshot back into localStorage. Used on hydration from a
- *  pasted-in URL — overrides any existing local state so the recipient
- *  sees the sender's exact dashboard. */
+ *  pasted-in URL — overrides the existing layout so the recipient
+ *  sees the sender's exact dashboard shape. Per-tile settings are
+ *  intentionally NOT carried in the URL (see file header) so they
+ *  remain whatever the recipient already has locally. */
 export function applyState(state: DashboardState): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(state.layout));
   } catch {
     /* quota / privacy mode */
-  }
-  // Wipe any tile-settings keys that aren't in the incoming state, so
-  // the URL is the source of truth (the alternative — merging — would
-  // leak filter chips from a previous session into the shared link).
-  const toRemove: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k) continue;
-    if (k.startsWith(SETTINGS_PREFIX) && !(k in state.tileSettings)) {
-      toRemove.push(k);
-    }
-  }
-  for (const k of toRemove) {
-    try {
-      localStorage.removeItem(k);
-    } catch {
-      /* ignore */
-    }
-  }
-  for (const [k, v] of Object.entries(state.tileSettings)) {
-    if (!k.startsWith(SETTINGS_PREFIX)) continue; // defence in depth
-    try {
-      localStorage.setItem(k, JSON.stringify(v));
-    } catch {
-      /* ignore */
-    }
   }
 }
 
@@ -126,17 +82,20 @@ export function encode(state: DashboardState): string {
 }
 
 /** Reverse of `encode`. Returns null on malformed input rather than
- *  throwing — the caller should fall back to localStorage. */
+ *  throwing — the caller should fall back to localStorage. Accepts
+ *  both the slim `{ layout }` shape and the legacy `{ layout,
+ *  tileSettings }` shape from older shared URLs (the extra field is
+ *  silently dropped). */
 export function decode(s: string): DashboardState | null {
   try {
     const std = s.replace(/-/g, '+').replace(/_/g, '/');
     const padded = std + '==='.slice((std.length + 3) % 4);
     const bin = atob(padded);
     const json = decodeURIComponent(escape(bin));
-    const parsed = JSON.parse(json);
+    const parsed = JSON.parse(json) as { layout?: unknown };
     if (!parsed || typeof parsed !== 'object') return null;
-    if (!('layout' in parsed) || !('tileSettings' in parsed)) return null;
-    return parsed as DashboardState;
+    if (!('layout' in parsed)) return null;
+    return { layout: parsed.layout as LayoutState };
   } catch {
     return null;
   }
