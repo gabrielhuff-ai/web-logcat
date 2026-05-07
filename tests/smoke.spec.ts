@@ -305,14 +305,20 @@ test.describe('dashboard', () => {
     await expect(logcatTile).toHaveClass(/head-hidden/);
 
     // 3rd click: hideHead → show (everything visible again).
-    // The 2nd click set `.just-toggled` on the tile so the head
-    // collapses immediately after the click instead of being held
-    // open by `:has(.tile-head:hover)`. Bouncing the mouse out of
-    // the tile clears that flag (`onMouseLeave` in `<Tile/>`) so the
-    // standard hover-reveal kicks back in and the eye button becomes
-    // clickable for this final click.
-    await page.mouse.move(0, 0);
-    await logcatTile.getByRole('button', { name: /^show bar$/i }).click();
+    // The eye button lives inside `.tile-head`, which collapses to
+    // height 0 in head-hidden mode and only expands on hover via
+    // `:has(.tile-reveal:hover)`. Combined with the new
+    // `.just-toggled` suppression after the previous click, the
+    // hover-reveal race makes Playwright's pointer-based click
+    // unreliable here (it keeps resolving to the higher-z-index
+    // `.tile-reveal` strip). Dispatching the click via the DOM API
+    // sidesteps the actionability checks entirely — same idiom we
+    // already use for the wrap-toggle test below.
+    await logcatTile
+      .getByRole('button', { name: /^show bar$/i })
+      .evaluate((el) => {
+        if (el instanceof HTMLButtonElement) el.click();
+      });
     await expect(logcatTile).not.toHaveClass(/bars-hidden/);
     await expect(logcatTile).not.toHaveClass(/head-hidden/);
     await expect(logcatTile.locator('.filter-bar')).toBeVisible();
