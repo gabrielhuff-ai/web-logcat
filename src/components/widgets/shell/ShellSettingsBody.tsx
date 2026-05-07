@@ -1,4 +1,4 @@
-// Shell settings modal body. Two settings: font size + home directory.
+// Shell settings modal body — font size + home directory + run-as-root.
 
 import { useTileSettings } from '../../../lib/tileSettings';
 import { SHELL_DEFAULTS, type ShellSettings } from './shellSettings';
@@ -7,6 +7,7 @@ import {
   SettingsSection,
   Slider,
   TextInput,
+  Toggle,
 } from '../../settings/SettingsControls';
 
 export interface ShellSettingsBodyProps {
@@ -42,6 +43,13 @@ export function ShellSettingsBody({ tileId }: ShellSettingsBodyProps) {
             onChange={(homeDir) => setSettings({ homeDir })}
             placeholder="/sdcard"
             ariaLabel="Home directory"
+          />
+        </SettingsRow>
+        <SettingsRow label="Run as root">
+          <Toggle
+            on={settings.runAsRoot}
+            onChange={(runAsRoot) => setSettings({ runAsRoot })}
+            ariaLabel="Run as root"
           />
         </SettingsRow>
       </SettingsSection>

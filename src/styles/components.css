@@ -234,8 +234,8 @@
 }
 .fb-input-wrap {
   position: relative;
-  flex: 1;
-  min-width: 220px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .fb-input {
   width: 100%;

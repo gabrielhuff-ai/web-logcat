@@ -297,3 +297,19 @@
 .fx-ctx button:hover { background: var(--bg-2); color: var(--fg-0); }
 .fx-ctx svg { color: var(--fg-3); flex-shrink: 0; }
 .fx-ctx button:hover svg { color: var(--accent); }
+
+/* Visual separator between safe and destructive context-menu items. */
+.fx-ctx-sep {
+  margin: 4px 6px;
+  height: 1px;
+  background: var(--glass-line);
+}
+/* "Delete" gets the danger tint so it visually differentiates from
+   the navigation / read actions stacked above it. */
+.fx-ctx-danger { color: var(--lvl-e-fg); }
+.fx-ctx-danger:hover {
+  background: oklch(from var(--lvl-e-fg) l c h / 0.12);
+  color: var(--lvl-e-fg);
+}
+.fx-ctx-danger svg { color: var(--lvl-e-fg); }
+.fx-ctx-danger:hover svg { color: var(--lvl-e-fg); }

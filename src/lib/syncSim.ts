@@ -257,3 +257,20 @@ export function simMkdir(root: SimDir, path: string): void {
     cur = next;
   }
 }
+
+/**
+ * Remove a node (file or directory subtree) from the sim tree. Mirror
+ * of `rm -rf`: missing-target / root-path are no-ops; otherwise the
+ * matching child is spliced out of its parent. Used by `SyncFs.remove`
+ * in fake mode.
+ */
+export function simRemove(root: SimDir, path: string): void {
+  if (path === '/' || path === '') return;
+  const segments = splitPath(path);
+  if (segments.length === 0) return;
+  const last = segments[segments.length - 1];
+  const parent = simNodeAt(root, '/' + segments.slice(0, -1).join('/'));
+  if (!parent || parent.type !== 'dir') return;
+  const idx = parent.children.findIndex((c) => c.name === last);
+  if (idx >= 0) parent.children.splice(idx, 1);
+}

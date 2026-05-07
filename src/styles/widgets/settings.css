@@ -104,13 +104,19 @@
   box-shadow: var(--shadow-1);
 }
 
-/* Toggle — the v1 SettingsPanel pill. */
+/* Toggle — the v1 SettingsPanel pill. `flex-shrink: 0` keeps the
+   pill at its declared 36×20 size when its parent flex container
+   (e.g. a `.ws-row` next to a long description block) runs out of
+   horizontal space. Without this the row would compress the pill
+   to a few pixels wide and the dot would render alone. */
 .ws-toggle {
   width: 36px;
+  min-width: 36px;
   height: 20px;
   background: var(--bg-3);
   border-radius: 999px;
   position: relative;
+  flex-shrink: 0;
   transition: background-color 120ms var(--ease-out);
 }
 .ws-toggle.on {
@@ -274,7 +280,7 @@
 /* Stacked variant of `.ws-row` for descriptions that wrap below the
    row title. Used by the global settings modal. */
 .ws-row.gs-row-stacked { flex-direction: column; align-items: stretch; gap: 10px; }
-.gs-row-head { display: flex; flex-direction: column; gap: 2px; }
+.gs-row-head { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0; }
 .gs-row-desc { font-size: var(--t-xs); color: var(--fg-3); line-height: 1.5; }
 
 /* `.ws-seg` defaults to inline-flex; in stacked rows we want it to
