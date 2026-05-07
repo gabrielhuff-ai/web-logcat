@@ -5,32 +5,32 @@ name: Version bump
 # PR that warrants them, and the next push to main will pick the next
 # patch from there.
 #
-# The bump commit itself sets `version: <new>` and lands directly on
-# `main`. To avoid an infinite loop the job is gated on the commit
-# message (skips if the head commit is itself a bump) and on the
-# author (`github-actions[bot]` doesn't trigger the next run).
+# Branch protection on `main` blocks direct `GITHUB_TOKEN` pushes, so
+# the workflow opens a PR with the bump commit and enables auto-merge.
+# `BOT_PAT` (a fine-grained PAT with Contents:Write + Pull requests:
+# Write) is used so the resulting PR triggers CI — `GITHUB_TOKEN` would
+# be silently suppressed under GitHub's anti-recursion rule.
+#
+# Loop protection: skip when the head commit is itself a bump. Squash
+# merges of the bump PR put the PR title verbatim onto `main`, so the
+# `startsWith` check on the commit message catches the next iteration.
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bump:
     if: |
-      github.actor != 'github-actions[bot]' &&
-      !contains(github.event.head_commit.message, 'chore: bump patch version')
+      !startsWith(github.event.head_commit.message, 'chore: bump patch version')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # The default GITHUB_TOKEN is enough for `contents: write` and
-          # is what we use to push the bump commit.
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # Need full history so the push doesn't reject as non-fast-
-          # forward against `main`.
+          token: ${{ secrets.BOT_PAT }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -43,10 +43,19 @@ jobs:
           NEW_VERSION=$(npm version patch --no-git-tag-version)
           echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push
+      - name: Open PR and enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT }}
         run: |
+          BRANCH="auto/bump-${{ steps.bump.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add package.json package-lock.json
           git commit -m "chore: bump patch version to ${{ steps.bump.outputs.version }}"
-          git push origin main
+          git push origin "$BRANCH"
+          PR_URL=$(gh pr create \
+            --title "chore: bump patch version to ${{ steps.bump.outputs.version }}" \
+            --body "Automated patch version bump triggered by ${{ github.sha }}." \
+            --head "$BRANCH" --base main)
+          gh pr merge "$PR_URL" --auto --squash --delete-branch
