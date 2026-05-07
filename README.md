@@ -5,13 +5,13 @@ and Screen Mirror, all over WebUSB. Plug a phone into your laptop and
 get a draggable dashboard of widgets in the browser, no `adb` install
 and no Android Studio.
 
-**▶ Live at <https://gabrielhuff-ai.github.io/web-logcat/>**
+**▶ Live at <https://gabrielhuff.github.io/web-logcat/>**
 
 ![web-logcat dashboard with the default Mirror + Logcat + Shell + Dumpsys layout against the simulated stream](docs/screenshot.png)
 
 ## Use it
 
-1. Open the [live URL](https://gabrielhuff-ai.github.io/web-logcat/) in
+1. Open the [live URL](https://gabrielhuff.github.io/web-logcat/) in
    Chrome, Edge, or another Chromium-based browser. (WebUSB isn't
    available in Firefox or Safari.)
 2. Plug in an Android device with USB debugging enabled.
