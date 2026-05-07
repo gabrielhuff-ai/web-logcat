@@ -231,7 +231,7 @@ export function App() {
           <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
           {usingFake && (
             <div className="fake-badge">
-              <Icons.Wand size={11} /> Simulated log stream
+              <Icons.Sparkle size={12} /> Simulated log stream
             </div>
           )}
           {toast && <div className="toast">{toast}</div>}

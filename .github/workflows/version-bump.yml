@@ -1,0 +1,52 @@
+name: Version bump
+
+# Auto-increments the patch version on every push to `main`. Major /
+# minor bumps stay manual: bump them in `package.json` as part of the
+# PR that warrants them, and the next push to main will pick the next
+# patch from there.
+#
+# The bump commit itself sets `version: <new>` and lands directly on
+# `main`. To avoid an infinite loop the job is gated on the commit
+# message (skips if the head commit is itself a bump) and on the
+# author (`github-actions[bot]` doesn't trigger the next run).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, 'chore: bump patch version')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The default GITHUB_TOKEN is enough for `contents: write` and
+          # is what we use to push the bump commit.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Need full history so the push doesn't reject as non-fast-
+          # forward against `main`.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump patch version to ${{ steps.bump.outputs.version }}"
+          git push origin main

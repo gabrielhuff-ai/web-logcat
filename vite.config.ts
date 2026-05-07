@@ -4,6 +4,7 @@
 // UserConfigExport". Equivalent at runtime to the regular vite import.
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import pkg from './package.json' with { type: 'json' };
 
 // `base` controls the public path the app is served from.
 //
@@ -18,6 +19,9 @@ const base = process.env.BASE_PATH ?? '/';
 export default defineConfig({
   base,
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   server: { port: 5173, host: true },
   build: {
     outDir: 'dist',

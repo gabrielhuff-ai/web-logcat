@@ -68,6 +68,26 @@
   color: var(--fg-0);
   letter-spacing: -0.01em;
 }
+/* Beta release badge — sits at the bottom-right of the brand mark.
+ * Pill, accent-filled, small caps. Aligned to the baseline of the
+ * brand name with a slight vertical drop so it visually anchors to
+ * the descender line rather than the cap line. */
+.dash-brand-beta {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  margin-left: -2px;
+  margin-bottom: 1px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  line-height: 1.4;
+}
 .dash-brand-sub {
   font-size: 11px;
   color: var(--fg-3);
@@ -109,7 +129,7 @@
 .dash-device-meta { font-size: 10px; color: var(--fg-3); font-family: var(--font-mono); margin-top: 1px; }
 
 .dash-device-pop {
-  position: absolute; top: calc(100% + 6px); left: 0;
+  position: absolute; top: calc(100% + 6px); right: 0;
   min-width: 280px;
   background: oklch(from var(--bg-1) l c h / 0.92);
   backdrop-filter: blur(20px);
@@ -197,48 +217,44 @@
 
 /* The seam between two siblings — drag to resize. The handle's own
    bounding box stretches across the gap (10px in normal mode, ~6px
-   hit-zone in compact mode); on hover / drag a thin 2px line paints
+   hit-zone in compact mode); on hover / drag a 2px accent line paints
    centred along the seam.
-   We use a `linear-gradient` rather than a positioned 2px-wide box
-   because the latter rendered as a fat solid block in the row case
-   (likely a sub-pixel quirk where `width: 2px` + `left: calc(50% -
-   1px)` resolved to a wider extent on certain DPRs). The gradient
-   draws an explicit 2px-wide solid slice on a transparent background
-   and is bullet-proof. */
+   The line is a flex-centered `::before` child rather than a
+   positioned-with-calc box or a linear-gradient — both prior attempts
+   produced visible sub-pixel artefacts (a wider gray smear on certain
+   DPRs, or the line snapping to one edge of the bounding box). Flex
+   centering hands the centring math to the layout engine and snaps
+   cleanly at any DPR. */
 .dash-split-handle {
   background: transparent;
   z-index: 2;
   touch-action: none;
+  display: flex;
+  pointer-events: auto;
 }
-.dash-split-handle.row { cursor: col-resize; }
-.dash-split-handle.col { cursor: row-resize; }
+.dash-split-handle.row {
+  cursor: col-resize;
+  align-items: stretch;
+  justify-content: center;
+}
+.dash-split-handle.col {
+  cursor: row-resize;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+}
 .dash-split-handle::before {
   content: "";
-  position: absolute;
-  inset: 0;
+  display: block;
+  flex: 0 0 auto;
   background: transparent;
   transition: background 120ms;
-  pointer-events: none;
 }
-.dash-split-handle.row:hover::before,
-.dash-grid.dragging .dash-split-handle.row::before {
-  background: linear-gradient(
-    to right,
-    transparent calc(50% - 1px),
-    var(--accent) calc(50% - 1px),
-    var(--accent) calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-}
-.dash-split-handle.col:hover::before,
-.dash-grid.dragging .dash-split-handle.col::before {
-  background: linear-gradient(
-    to bottom,
-    transparent calc(50% - 1px),
-    var(--accent) calc(50% - 1px),
-    var(--accent) calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
+.dash-split-handle.row::before { width: 2px; }
+.dash-split-handle.col::before { height: 2px; }
+.dash-split-handle:hover::before,
+.dash-grid.dragging .dash-split-handle::before {
+  background: var(--accent);
 }
 
 /* === Tile === */
