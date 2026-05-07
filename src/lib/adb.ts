@@ -235,14 +235,27 @@ export function parseLogcatLine(
   if (!m) return null;
   const [, , pidStr, tidStr, levelStr, tag, message] = m;
   const pid = Number(pidStr);
+  const trimmedTag = tag.trim();
+  const level = levelStr as LogLevel;
+  // Android emits the entire FATAL EXCEPTION block under
+  // tag=`AndroidRuntime` at level E (the header line `FATAL
+  // EXCEPTION: <thread>`, the `Process: ...` line, the throwable
+  // class + message, every `\tat ...` frame, and any `Caused by:`
+  // chain). Flagging the whole block as `isCrashLine` lets
+  // `LogcatWidget`'s `crashHeads` detector and the LogList's
+  // collapsed-stack-frame UI work on real devices the same way they
+  // already do on the simulator (where `logGenerator.ts` sets the
+  // flag explicitly).
+  const isCrashLine = trimmedTag === 'AndroidRuntime' && level === 'E';
   return {
     id: ++_id,
     ts: Date.now(),
     pid,
     tid: Number(tidStr),
     pkg: pidToPkg(pid),
-    tag: tag.trim(),
-    level: levelStr as LogLevel,
+    tag: trimmedTag,
+    level,
     message,
+    isCrashLine,
   };
 }

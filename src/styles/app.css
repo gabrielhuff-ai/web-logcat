@@ -249,19 +249,25 @@
 .row-pin:hover { color: var(--accent-fg); opacity: 1 !important; }
 .row.pinned .row-pin { opacity: 1; color: var(--accent-fg); }
 
+/* Column widths are expressed in `em` so they scale with the cell's
+ * own font-size — that keeps the visible text-to-column ratio stable
+ * when the user shrinks or grows the per-tile body font. The base
+ * font is monospace (`var(--font-mono)`) so 1em ≈ 1 character cell;
+ * the values below are picked at the default 12px font-size to land
+ * close to the original 168 / 96 / 220 / 180 px widths. */
 .cell { flex-shrink: 0; }
 .cell.ts {
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
   font-size: var(--t-sm);
-  width: 168px;
+  width: 14em;
   align-self: center;
 }
 .cell.pid {
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
   font-size: var(--t-sm);
-  width: 96px;
+  width: 8em;
   text-align: right;
   padding: 0 6px;
   border-radius: 3px;
@@ -269,7 +275,7 @@
 }
 .cell.pkg {
   color: var(--fg-2);
-  width: 220px;
+  width: 18em;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--t-sm);
@@ -279,7 +285,7 @@
 }
 .cell.tag {
   color: var(--fg-1);
-  width: 180px;
+  width: 15em;
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0 6px;
