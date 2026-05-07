@@ -302,6 +302,34 @@ test.describe('dashboard', () => {
     const before = await logcatTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
 
+    // TEMP DEBUG: log layout state + tile rects so the failure mode
+    // shows up in CI logs even without trace-artifact access.
+    const debug = await page.evaluate(() => {
+      const grid = document.querySelector('.dash-grid');
+      const gridRect = grid ? grid.getBoundingClientRect() : null;
+      const tiles = Array.from(document.querySelectorAll('.tile')).map((t) => {
+        const r = t.getBoundingClientRect();
+        return {
+          id: (t as HTMLElement).dataset.tileId,
+          x: r.x,
+          y: r.y,
+          w: r.width,
+          h: r.height,
+          hasLogcat: !!t.querySelector('.lc-widget'),
+          hasShell: !!t.querySelector('.sh-widget'),
+        };
+      });
+      const layout = localStorage.getItem('weblogcat-dashboard-v2');
+      const dataPerf = document.documentElement.getAttribute('data-perf');
+      return {
+        grid: gridRect ? { w: gridRect.width, h: gridRect.height } : null,
+        tiles,
+        layout,
+        dataPerf,
+      };
+    });
+    console.log('DEBUG resize test state:', JSON.stringify(debug, null, 2));
+
     const handle = page.locator('.dash-split-handle--row').first();
     const handleBox = await handle.boundingBox();
     if (!handleBox) throw new Error('split handle has no bounding box');
