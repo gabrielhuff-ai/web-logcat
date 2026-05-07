@@ -3,6 +3,7 @@ import {
   MIN_RATIO,
   MAX_RATIO,
   addTile,
+  computeLayoutRects,
   countByKind,
   defaultLayout,
   emptyLayout,
@@ -83,12 +84,18 @@ describe('layout: addTile', () => {
     });
   });
 
-  it('picks split direction from the viewport aspect ratio', () => {
+  it('respects an explicit splitDir option', () => {
     const seed = addTile(emptyLayout(), 'logcat', { id: 'a' });
-    const wide = addTile(seed, 'shell', { id: 'b', viewportAspect: 2 });
-    const tall = addTile(seed, 'shell', { id: 'b', viewportAspect: 0.5 });
+    const wide = addTile(seed, 'shell', { id: 'b', splitDir: 'row' });
+    const tall = addTile(seed, 'shell', { id: 'b', splitDir: 'col' });
     expect(wide.tree?.type === 'split' && wide.tree.dir).toBe('row');
     expect(tall.tree?.type === 'split' && tall.tree.dir).toBe('col');
+  });
+
+  it('defaults to a row split when no direction is specified', () => {
+    const seed = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    const next = addTile(seed, 'shell', { id: 'b' });
+    expect(next.tree?.type === 'split' && next.tree.dir).toBe('row');
   });
 });
 
@@ -175,5 +182,63 @@ describe('layout: helpers', () => {
     const next = patchTile(l, 'w_logcat', { barsHidden: true });
     expect(next.tiles.w_logcat.barsHidden).toBe(true);
     expect(next.tiles.w_mirror.barsHidden).toBeUndefined();
+  });
+});
+
+describe('layout: computeLayoutRects', () => {
+  it('returns empty arrays for a null tree', () => {
+    const out = computeLayoutRects(null, { x: 0, y: 0, w: 1000, h: 600 }, 10);
+    expect(out.leaves).toEqual([]);
+    expect(out.splits).toEqual([]);
+  });
+
+  it('places a single leaf at the outer rect', () => {
+    const tree: LayoutNode = { type: 'leaf', id: 'a' };
+    const out = computeLayoutRects(tree, { x: 10, y: 10, w: 800, h: 400 }, 10);
+    expect(out.leaves).toEqual([{ id: 'a', rect: { x: 10, y: 10, w: 800, h: 400 } }]);
+    expect(out.splits).toEqual([]);
+  });
+
+  it('subtracts gap from the inner length on a row split', () => {
+    const tree: LayoutNode = {
+      type: 'split',
+      dir: 'row',
+      ratio: 0.5,
+      a: { type: 'leaf', id: 'a' },
+      b: { type: 'leaf', id: 'b' },
+    };
+    const out = computeLayoutRects(tree, { x: 0, y: 0, w: 410, h: 100 }, 10);
+    // inner = 410 - 10 = 400; each child = 200 wide.
+    expect(out.leaves).toEqual([
+      { id: 'a', rect: { x: 0, y: 0, w: 200, h: 100 } },
+      { id: 'b', rect: { x: 210, y: 0, w: 200, h: 100 } },
+    ]);
+    // Seam handle sits between them, 10px wide, full height.
+    expect(out.splits).toHaveLength(1);
+    expect(out.splits[0]).toMatchObject({
+      dir: 'row',
+      handleRect: { x: 200, y: 0, w: 10, h: 100 },
+      innerLen: 400,
+    });
+  });
+
+  it('lays out a col split top-over-bottom', () => {
+    const tree: LayoutNode = {
+      type: 'split',
+      dir: 'col',
+      ratio: 0.25,
+      a: { type: 'leaf', id: 'a' },
+      b: { type: 'leaf', id: 'b' },
+    };
+    const out = computeLayoutRects(tree, { x: 0, y: 0, w: 200, h: 410 }, 10);
+    // inner = 410 - 10 = 400; a = 100, b = 300.
+    expect(out.leaves).toEqual([
+      { id: 'a', rect: { x: 0, y: 0, w: 200, h: 100 } },
+      { id: 'b', rect: { x: 0, y: 110, w: 200, h: 300 } },
+    ]);
+    expect(out.splits[0]).toMatchObject({
+      dir: 'col',
+      handleRect: { x: 0, y: 100, w: 200, h: 10 },
+    });
   });
 });

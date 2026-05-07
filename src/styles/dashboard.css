@@ -172,70 +172,50 @@
 
 /* === Tiling layout (Hyprland-style dwindle) === */
 /*
- * The dashboard is a fixed-size, non-scrolling viewport: every tile's
- * share is implied by the binary-tree layout (`src/lib/layout.ts`) and
- * rendered as nested flex containers. `--dash-gap` and `--tile-radius`
- * are the two knobs `data-compact="on"` flips to zero so widgets cover
- * every pixel.
+ * The dashboard is a fixed-size, non-scrolling viewport. Every tile's
+ * share is implied by the binary-tree layout in `src/lib/layout.ts`;
+ * `<TileGrid/>` translates the tree into pixel rects (see
+ * `computeLayoutRects`) and absolute-positions every tile + seam handle
+ * directly inside `.dash-grid`. The flat React tree means widgets
+ * survive add/remove/swap without remounting.
  */
 .dash-grid {
-  --dash-gap: 10px;
   --tile-radius: var(--r-lg);
   position: relative;
   z-index: 1;
-  display: flex;
   flex: 1;
   min-height: 0;
-  padding: var(--dash-gap);
   overflow: hidden;
 }
 .dash-grid.dragging,
 .dash-grid.swap-dragging { cursor: grabbing; user-select: none; }
-.dash-grid.has-max { overflow: hidden; }
 
-/* Compact mode — collapse gaps + rounded corners. Single tile in this
-   mode looks identical to a maximised tile. */
-[data-compact="on"] .dash-grid {
-  --dash-gap: 0px;
-  --tile-radius: 0px;
-  padding: 0;
-}
+/* Compact mode — collapse rounded corners. The inter-tile gap is also
+   set to 0 by `<TileGrid/>` (see `NORMAL_GAP` / `COMPACT_GAP`). A
+   single tile in compact mode looks identical to a maximised tile. */
+[data-compact="on"] .dash-grid { --tile-radius: 0px; }
 
-/* Split node — a horizontal or vertical division of its parent area. */
-.dash-split {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-.dash-split-pane {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-
-/* The seam between two siblings — drag to resize. */
+/* The seam between two siblings — drag to resize. The element's own
+   bounding box already stretches across the seam (horizontally or
+   vertically); a `::before` overlay paints the hover / drag highlight. */
 .dash-split-handle {
-  flex: 0 0 var(--dash-gap);
-  position: relative;
   background: transparent;
   z-index: 2;
   touch-action: none;
 }
 .dash-split-handle.row { cursor: col-resize; }
 .dash-split-handle.col { cursor: row-resize; }
-/* Widen the hit area beyond the visible gap so dragging the seam is
-   forgiving even when --dash-gap is 0 (compact mode). */
 .dash-split-handle::before {
   content: "";
   position: absolute;
+  inset: 0;
   background: transparent;
   transition: background 120ms;
+  pointer-events: none;
 }
-.dash-split-handle.row::before { top: 0; bottom: 0; left: -3px; right: -3px; }
-.dash-split-handle.col::before { left: 0; right: 0; top: -3px; bottom: -3px; }
 .dash-split-handle:hover::before,
 .dash-grid.dragging .dash-split-handle::before {
-  background: oklch(from var(--accent) l c h / 0.35);
+  background: oklch(from var(--accent) l c h / 0.25);
 }
 
 /* === Tile === */
@@ -254,12 +234,6 @@
   position: relative;
   transition: box-shadow 160ms;
 }
-.tile:hover {
-  box-shadow:
-    0 1px 0 oklch(1 0 0 / 0.06) inset,
-    0 8px 32px oklch(0 0 0 / 0.35),
-    0 0 0 1px oklch(from var(--accent) l c h / 0.1);
-}
 .tile.dragging {
   opacity: 0.55;
   box-shadow:
@@ -276,21 +250,13 @@
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.06) inset,
     0 4px 24px oklch(0 0 0 / 0.25),
-    0 0 0 1px oklch(from var(--accent) l c h / 0.45);
+    0 0 0 1px oklch(from var(--accent) l c h / 0.25);
 }
 .tile.max {
   border-radius: 0;
   margin: 0;
 }
 [data-compact="on"] .tile { border: 1px solid oklch(from var(--bg-0) l c h / 0.6); }
-
-/* Compact-mode neighbours share a hairline rather than two stacked
-   borders + a 10px gap. Collapses naturally because borders sit on the
-   tile, not the seam. */
-[data-compact="on"] .dash-split.row > .dash-split-pane:not(:first-child) > .tile,
-[data-compact="on"] .dash-split.row > .dash-split-pane:not(:first-child) .tile { border-left-width: 0; }
-[data-compact="on"] .dash-split.col > .dash-split-pane:not(:first-child) > .tile,
-[data-compact="on"] .dash-split.col > .dash-split-pane:not(:first-child) .tile { border-top-width: 0; }
 
 /* Floating ghost shown next to the cursor while dragging a tile head. */
 .dash-swap-ghost {
@@ -368,7 +334,8 @@
 
 /* === Empty dashboard === */
 .dash-empty {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 8px;
   color: var(--fg-3);

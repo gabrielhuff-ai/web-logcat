@@ -1,38 +1,48 @@
 // Tile grid — renders the dwindle (Hyprland-style) binary-tree layout
-// as nested flex containers. Owns the live `layout` state, the in-flight
-// resize / swap drag, the maximised id, and persists changes to
-// localStorage.
+// as absolute-positioned tiles inside a single `.dash-grid` container.
 //
-// There is no scroll: the grid is a fixed-size viewport and every tile's
-// share of that viewport is implied by the tree (each split node carves
-// its parent area along one axis at a configurable ratio). Adding a
-// tile splits the focused leaf in two; removing collapses the parent
-// split into the surviving sibling. Resize handles live at the seam
-// between two siblings — dragging changes that split's ratio.
+// The earlier implementation rendered the tree as nested flex containers,
+// which made every tile's React-tree position depend on its tree path.
+// Adding or removing a tile re-shaped the surrounding `<div className="
+// dash-split">…<div className="dash-split-pane">…` chain, so React saw
+// the leaf's parent change identity and unmounted + remounted the widget
+// component — taking its in-memory state (logs, scroll position, mirror
+// canvas) with it. Absolute positioning keeps every tile a direct child
+// of `.dash-grid`, so the widget component instance survives
+// add/remove/swap unchanged.
 //
-// Tiles are rearranged by drag-to-swap: pick up a tile by its header,
-// drop it on another tile, and their leaf ids swap positions.
+// Layout math lives in `lib/layout.ts → computeLayoutRects`. We just
+// observe the grid size with ResizeObserver, recompute rects on layout /
+// size / gap changes, and stamp `position: absolute; left/top/width/
+// height` onto each tile + a thin seam handle between every pair of
+// siblings.
+//
+// Drag UX:
+//   - Header drag → swap tiles (drop target highlighted).
+//   - Seam handle drag → resize that split.
 
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from 'react';
 import { Tile } from './Tile';
 import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
 import {
+  computeLayoutRects,
   defaultLayout,
+  findPath,
   loadLayout,
   patchTile,
   removeTile as removeTileFromLayout,
+  rightmostLeafId,
   saveLayout,
-  setFocus,
   setRatio,
   swapTiles,
   addTile as addTileToLayout,
@@ -40,31 +50,25 @@ import {
   MIN_RATIO,
   MAX_RATIO,
 } from '../lib/layout';
-import type { LayoutNode, LayoutState, WidgetKind } from '../types';
+import { useDashboardChrome } from '../lib/dashboardChrome';
+import type { LayoutState, WidgetKind } from '../types';
 
-export interface TileGridProps {
-  /** Imperative request from the topbar to "Reset layout". */
-  resetSignal: number;
-  /** Imperative request from the topbar to add a widget. */
-  addSignal: { kind: WidgetKind; n: number } | null;
-  /** Notify parent when layout changes — used for the palette's `maxInstances` check. */
-  onLayoutChange?: (layout: LayoutState) => void;
-  /** Notify parent when the user clicks `+ Add` from the in-grid empty state. */
-  onRequestAdd: () => void;
-}
+/** Inter-tile gap in pixels (also the seam-handle thickness). */
+const NORMAL_GAP = 10;
+const COMPACT_GAP = 0;
 
 interface ResizeDrag {
   kind: 'resize';
   /** Path from the root to the split being resized. */
   path: Array<'a' | 'b'>;
-  /** Pixel size of the split's container along the relevant axis. */
-  containerPx: number;
+  /** Length available to the split (px) — used to translate dPx → dRatio. */
+  innerLen: number;
   /** Ratio at the start of the drag — used as the origin for delta math. */
   originRatio: number;
   /** Pointer position at drag start. */
   startX: number;
   startY: number;
-  /** Axis being resized. */
+  /** Axis being resized ('row' = horizontal seam = drag x). */
   axis: 'row' | 'col';
 }
 
@@ -84,15 +88,30 @@ interface SwapDrag {
 
 type DragState = ResizeDrag | SwapDrag;
 
+export interface TileGridProps {
+  /** Imperative request from the topbar to "Reset layout". */
+  resetSignal: number;
+  /** Imperative request from the topbar to add a widget. */
+  addSignal: { kind: WidgetKind; n: number } | null;
+  /** Notify parent when layout changes — used for the palette's `maxInstances` check. */
+  onLayoutChange?: (layout: LayoutState) => void;
+  /** Notify parent when the user clicks `+ Add` from the in-grid empty state. */
+  onRequestAdd: () => void;
+}
+
 export function TileGrid({
   resetSignal,
   addSignal,
   onLayoutChange,
   onRequestAdd,
 }: TileGridProps) {
+  const { tweaks } = useDashboardChrome();
+  const gap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
+
   const [layout, setLayout] = useState<LayoutState>(loadLayout);
   const [maximized, setMaximized] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
   // rAF coalescing: pointermove fires at >120Hz on some setups; we
@@ -100,6 +119,40 @@ export function TileGrid({
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+
+  // ---- Track grid size with ResizeObserver ------------------------------
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const update = () =>
+      setGridSize((prev) => {
+        const w = el.clientWidth;
+        const h = el.clientHeight;
+        return prev.w === w && prev.h === h ? prev : { w, h };
+      });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // The dashboard-local origin for tile rects — `gap` from each outer
+  // edge so tiles never butt against the dashboard border. In compact
+  // mode `gap === 0` so tiles fill every pixel.
+  const outerRect = useMemo(
+    () => ({
+      x: gap,
+      y: gap,
+      w: Math.max(0, gridSize.w - 2 * gap),
+      h: Math.max(0, gridSize.h - 2 * gap),
+    }),
+    [gridSize.w, gridSize.h, gap],
+  );
+
+  const computed = useMemo(
+    () => computeLayoutRects(layout.tree, outerRect, gap),
+    [layout.tree, outerRect, gap],
+  );
 
   // ---- Persist + notify parent on layout change --------------------------
   useEffect(() => {
@@ -116,6 +169,12 @@ export function TileGrid({
     setMaximized(null);
   }, [resetSignal]);
 
+  // ---- Add a tile ------------------------------------------------------
+  // Hyprland's dwindle convention: split the focused leaf along its
+  // longer axis. A wide tile splits into left/right (`row` dir); a tall
+  // tile splits into top/bottom (`col` dir). This keeps the resulting
+  // children roughly square instead of always shoving new tiles to the
+  // right regardless of the focused tile's aspect.
   const addTile = useCallback(
     (kind: WidgetKind) => {
       setLayout((l) => {
@@ -123,12 +182,22 @@ export function TileGrid({
         if (def.maxInstances != null && countByKind(l, kind) >= def.maxInstances) {
           return l;
         }
-        const grid = gridRef.current;
-        const aspect = grid && grid.clientHeight > 0 ? grid.clientWidth / grid.clientHeight : 16 / 9;
-        return addTileToLayout(l, kind, { viewportAspect: aspect });
+        let splitDir: 'row' | 'col' = 'row';
+        const targetId =
+          (l.focusId && findPath(l.tree, l.focusId)
+            ? l.focusId
+            : rightmostLeafId(l.tree)) ?? null;
+        if (targetId && l.tree && outerRect.w > 0 && outerRect.h > 0) {
+          const sub = computeLayoutRects(l.tree, outerRect, gap);
+          const target = sub.leaves.find((leaf) => leaf.id === targetId);
+          if (target && target.rect.h > 0) {
+            splitDir = target.rect.w >= target.rect.h ? 'row' : 'col';
+          }
+        }
+        return addTileToLayout(l, kind, { splitDir });
       });
     },
-    [],
+    [gap, outerRect],
   );
 
   const lastAddNRef = useRef<number>(addSignal?.n ?? 0);
@@ -157,10 +226,6 @@ export function TileGrid({
     setMaximized((m) => (m === id ? null : id));
   }, []);
 
-  const focusTile = useCallback((id: string) => {
-    setLayout((l) => setFocus(l, id));
-  }, []);
-
   // ---- Drag dispatch -----------------------------------------------------
   const onMoveStart = useCallback(
     (id: string) => (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -170,7 +235,9 @@ export function TileGrid({
       const target = e.target as HTMLElement;
       if (target.closest('button')) return;
       e.preventDefault();
-      focusTile(id);
+      // Note: focus tracking lives on the layout itself; mark the
+      // tile under the pointer as the next "+ Add" target.
+      setLayout((l) => (l.focusId === id ? l : { ...l, focusId: id }));
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -182,42 +249,27 @@ export function TileGrid({
         active: false,
       });
     },
-    [focusTile, maximized],
+    [maximized],
   );
 
   const onSplitHandleStart = useCallback(
-    (path: Array<'a' | 'b'>, axis: 'row' | 'col') =>
+    (path: Array<'a' | 'b'>, axis: 'row' | 'col', innerLen: number, originRatio: number) =>
       (e: ReactPointerEvent<HTMLDivElement>) => {
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
-        const handle = e.currentTarget as HTMLElement;
-        const container = handle.parentElement;
-        if (!container) return;
-        const containerPx =
-          axis === 'row' ? container.clientWidth : container.clientHeight;
-        if (containerPx <= 0) return;
-        // Walk to the split node we're resizing.
-        let node: LayoutNode | null = layout.tree;
-        for (const step of path) {
-          if (!node || node.type !== 'split') {
-            node = null;
-            break;
-          }
-          node = step === 'a' ? node.a : node.b;
-        }
-        if (!node || node.type !== 'split') return;
+        if (innerLen <= 0) return;
         setDrag({
           kind: 'resize',
           path,
-          containerPx,
-          originRatio: node.ratio,
+          innerLen,
+          originRatio,
           startX: e.clientX,
           startY: e.clientY,
           axis,
         });
       },
-    [layout.tree],
+    [],
   );
 
   // ---- Drag loop ---------------------------------------------------------
@@ -252,7 +304,7 @@ export function TileGrid({
     const onMove = (e: PointerEvent) => {
       if (drag.kind === 'resize') {
         const dPx = drag.axis === 'row' ? e.clientX - drag.startX : e.clientY - drag.startY;
-        const dRatio = dPx / drag.containerPx;
+        const dRatio = drag.innerLen > 0 ? dPx / drag.innerLen : 0;
         const nextRatio = Math.max(
           MIN_RATIO,
           Math.min(MAX_RATIO, drag.originRatio + dRatio),
@@ -265,8 +317,6 @@ export function TileGrid({
       const dy = e.clientY - drag.startY;
       const active = drag.active || Math.hypot(dx, dy) > 5;
       const hoverId = active ? hitTest(e.clientX, e.clientY) : null;
-      // Don't go through React for the floating ghost — mutate the local
-      // drag state and let the next render catch up.
       schedule(() => {
         setDrag((d) =>
           d && d.kind === 'swap'
@@ -322,99 +372,79 @@ export function TileGrid({
 
   const swapDrag = drag?.kind === 'swap' && drag.active ? drag : null;
 
-  // Hide non-maximized tiles when one is maximized.
-  const renderNode = (node: LayoutNode, path: Array<'a' | 'b'>): ReactNode => {
-    if (node.type === 'leaf') {
-      const tile = layout.tiles[node.id];
-      if (!tile) return null;
-      const def = WIDGETS[tile.kind];
-      const Comp = def.comp;
-      const isMax = maximized === tile.id;
-      const isHover = swapDrag?.hoverId === tile.id && swapDrag.fromId !== tile.id;
-      const isSource = swapDrag?.fromId === tile.id;
-      // When something is maximized, the maximized tile is rendered separately
-      // (positioned absolutely on top); other leaves render but are visually
-      // hidden by the `.has-max` rule.
-      const style: CSSProperties = isMax
-        ? {
-            position: 'absolute',
-            inset: 0,
-            zIndex: 30,
-          }
-        : { flex: '1 1 0%', minWidth: 0, minHeight: 0 };
-      return (
-        <Tile
-          key={tile.id}
-          tile={tile}
-          maximized={isMax}
-          dragging={isSource ?? false}
-          dropTarget={isHover ?? false}
-          focused={layout.focusId === tile.id}
-          style={style}
-          onMoveStart={onMoveStart(tile.id)}
-          onToggleBars={() => toggleBars(tile.id)}
-          onToggleMax={() => toggleMax(tile.id)}
-          onRemove={() => removeTile(tile.id)}
-        >
-          <Comp tileId={tile.id} />
-        </Tile>
-      );
-    }
-    // Split node — nested flex container with a resize handle between
-    // its children.
-    const dirClass = node.dir === 'row' ? 'dash-split row' : 'dash-split col';
-    const aPct = node.ratio * 100;
-    const bPct = (1 - node.ratio) * 100;
-    return (
-      <div
-        key={path.join('') || 'root'}
-        className={dirClass}
-        style={{
-          flex: '1 1 0%',
-          display: 'flex',
-          flexDirection: node.dir === 'row' ? 'row' : 'column',
-          minWidth: 0,
-          minHeight: 0,
-        }}
-      >
-        <div
-          className="dash-split-pane"
-          style={{
-            flex: `${aPct} ${aPct} 0%`,
-            display: 'flex',
-            minWidth: 0,
-            minHeight: 0,
-          }}
-        >
-          {renderNode(node.a, [...path, 'a'])}
-        </div>
-        <div
-          className={`dash-split-handle ${node.dir}`}
-          onPointerDown={onSplitHandleStart(path, node.dir)}
-          aria-label="Resize split"
-          role="separator"
-          aria-orientation={node.dir === 'row' ? 'vertical' : 'horizontal'}
-        />
-        <div
-          className="dash-split-pane"
-          style={{
-            flex: `${bPct} ${bPct} 0%`,
-            display: 'flex',
-            minWidth: 0,
-            minHeight: 0,
-          }}
-        >
-          {renderNode(node.b, [...path, 'b'])}
-        </div>
-      </div>
-    );
-  };
+  // Look up each split's current ratio (for the resize-drag origin).
+  const ratioAtPath = useCallback(
+    (path: Array<'a' | 'b'>): number => {
+      let n = layout.tree;
+      for (const step of path) {
+        if (!n || n.type !== 'split') return 0.5;
+        n = step === 'a' ? n.a : n.b;
+      }
+      return n && n.type === 'split' ? n.ratio : 0.5;
+    },
+    [layout.tree],
+  );
 
   return (
     <div ref={gridRef} className={gridClass}>
-      {layout.tree ? (
-        renderNode(layout.tree, [])
-      ) : (
+      {layout.tree
+        ? computed.leaves.map(({ id, rect }) => {
+            const tile = layout.tiles[id];
+            if (!tile) return null;
+            const def = WIDGETS[tile.kind];
+            const Comp = def.comp;
+            const isMax = maximized === id;
+            const isHover = swapDrag?.hoverId === id && swapDrag.fromId !== id;
+            const isSource = swapDrag?.fromId === id;
+            const style: CSSProperties = isMax
+              ? {
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 30,
+                }
+              : {
+                  position: 'absolute',
+                  left: rect.x,
+                  top: rect.y,
+                  width: rect.w,
+                  height: rect.h,
+                };
+            return (
+              <Tile
+                key={id}
+                tile={tile}
+                maximized={isMax}
+                dragging={isSource ?? false}
+                dropTarget={isHover ?? false}
+                focused={layout.focusId === id}
+                style={style}
+                onMoveStart={onMoveStart(id)}
+                onToggleBars={() => toggleBars(id)}
+                onToggleMax={() => toggleMax(id)}
+                onRemove={() => removeTile(id)}
+              >
+                <Comp tileId={id} />
+              </Tile>
+            );
+          })
+        : null}
+
+      {layout.tree
+        ? computed.splits.map(({ key, path, dir, handleRect, innerLen }) => (
+            <SplitHandle
+              key={key}
+              dir={dir}
+              rect={handleRect}
+              gap={gap}
+              onPointerDown={onSplitHandleStart(path, dir, innerLen, ratioAtPath(path))}
+            />
+          ))
+        : null}
+
+      {!layout.tree && (
         <div className="dash-empty">
           <Icons.Layout size={28} />
           <h3>Empty dashboard</h3>
@@ -433,6 +463,53 @@ export function TileGrid({
         />
       )}
     </div>
+  );
+}
+
+interface SplitHandleProps {
+  dir: 'row' | 'col';
+  rect: { x: number; y: number; w: number; h: number };
+  gap: number;
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+}
+
+/**
+ * The seam between two siblings — drag to resize. We expand the actual
+ * pointer-target box past the visible gap so users can grab it even when
+ * `gap === 0` (compact mode); the visible "fill" stays inside the gap
+ * itself via the `.dash-split-handle::before` pseudo.
+ */
+function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
+  // In compact mode (`gap === 0`) the handle has no width along the
+  // resize axis — give it a 6px hit-zone overlapping each neighbour by
+  // 3px so it stays grabbable.
+  const HIT = 6;
+  const overlap = gap === 0 ? HIT / 2 : 0;
+  const style: CSSProperties =
+    dir === 'row'
+      ? {
+          position: 'absolute',
+          left: rect.x - overlap,
+          top: rect.y,
+          width: rect.w + overlap * 2,
+          height: rect.h,
+        }
+      : {
+          position: 'absolute',
+          left: rect.x,
+          top: rect.y - overlap,
+          width: rect.w,
+          height: rect.h + overlap * 2,
+        };
+  return (
+    <div
+      className={`dash-split-handle ${dir}`}
+      style={style}
+      onPointerDown={onPointerDown}
+      aria-label="Resize split"
+      role="separator"
+      aria-orientation={dir === 'row' ? 'vertical' : 'horizontal'}
+    />
   );
 }
 
