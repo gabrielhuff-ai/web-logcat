@@ -608,7 +608,7 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
         };
   return (
     <div
-      className={`dash-split-handle ${dir}`}
+      className={`dash-split-handle dash-split-handle--${dir}`}
       style={style}
       onPointerDown={onPointerDown}
       aria-label="Resize split"
