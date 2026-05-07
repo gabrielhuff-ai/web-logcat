@@ -15,7 +15,6 @@ import { createPortal } from 'react-dom';
 import * as Icons from './Icons';
 import { Toggle } from './settings/SettingsControls';
 import { DEFAULT_TWEAKS } from '../lib/tweaks';
-import { APP_VERSION } from '../version';
 import type { Tweaks } from '../types';
 
 export interface GlobalSettingsModalProps {
@@ -132,16 +131,6 @@ export function GlobalSettingsModal({
             >
               Reset to defaults
             </button>
-          </div>
-
-          <div className="ws-section gs-about">
-            <div className="ws-section-label">About</div>
-            <p className="gs-about-blurb">
-              WebLogcat is a browser-based Android device inspector — a
-              draggable, resizable dashboard of Logcat, Shell, Dumpsys,
-              Files, and Screen-Mirror tiles powered by WebUSB + ADB.
-            </p>
-            <div className="gs-about-version">v{APP_VERSION}</div>
           </div>
         </div>
       </div>

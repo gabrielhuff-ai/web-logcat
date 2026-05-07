@@ -155,6 +155,7 @@ function DashTopbar({
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   return (
     <div className="dash-top">
@@ -266,6 +267,7 @@ function DashTopbar({
         >
           <Icons.Github size={14} />
         </a>
+        <AboutButton open={aboutOpen} setOpen={setAboutOpen} />
         <button
           className="icon-btn tt"
           data-tt="Global settings"
@@ -275,6 +277,61 @@ function DashTopbar({
           <Icons.Settings size={13} />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---- About popover ---------------------------------------------------------
+
+interface AboutButtonProps {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+}
+
+function AboutButton({ open, setOpen }: AboutButtonProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape close. Modeled on the device-picker popover.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const root = wrapRef.current;
+      if (!root) return;
+      if (!root.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, setOpen]);
+
+  return (
+    <div className="dash-about" ref={wrapRef}>
+      <button
+        className="icon-btn tt"
+        data-tt="About"
+        aria-label="About WebLogcat"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icons.Info size={14} />
+      </button>
+      {open && (
+        <div className="dash-device-pop dash-about-pop" role="dialog" aria-label="About">
+          <div className="dash-about-title">WebLogcat</div>
+          <p className="dash-about-blurb">
+            A browser-based Android device inspector — a draggable,
+            resizable dashboard of Logcat, Shell, Dumpsys, Files, and
+            Screen-Mirror tiles powered by WebUSB + ADB.
+          </p>
+          <div className="dash-about-version">v{APP_VERSION}</div>
+        </div>
+      )}
     </div>
   );
 }
