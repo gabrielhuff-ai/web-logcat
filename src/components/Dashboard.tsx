@@ -1,15 +1,17 @@
 // Dashboard — the connected app shell. Topbar (brand / device picker /
-// theme / +Add / Reset) above a `<TileGrid/>`.
+// add / clear / appearance / global settings / source-link) above a
+// `<TileGrid/>`.
 //
-// Replaces the v1 single-purpose `<Toolbar/>` + `<FilterBar/>` global
-// chrome. The brand / device / theme bits move out of Toolbar into the
-// `DashTopbar` here; everything else (filter bar, level row, log area,
-// search overlay) is now per-`<LogcatWidget/>`.
+// "Clear layout" empties the dashboard back to the empty-state CTA so
+// users explicitly add widgets afterwards. Cmd/Ctrl+Z and Cmd/Ctrl+
+// Shift+Z undo / redo additions, removals, and clears (driven by the
+// history stack inside `<TileGrid/>` — we just bump a signal here).
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import * as Icons from './Icons';
 import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
+import { GlobalSettingsModal } from './GlobalSettingsModal';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
 export interface DashboardProps {
@@ -34,10 +36,14 @@ export function Dashboard({
   onPairNew,
 }: DashboardProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // `resetSignal` and `addSignal` are bumped to push imperative actions
-  // down into `<TileGrid/>` without lifting its layout state up. This is
-  // simpler than threading callbacks through every drag/resize tick.
-  const [resetSignal, setResetSignal] = useState(0);
+  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` are bumped
+  // to push imperative actions down into `<TileGrid/>` without lifting
+  // its layout state up. Simpler than threading callbacks through every
+  // drag/resize tick.
+  const [clearSignal, setClearSignal] = useState(0);
+  const [undoSignal, setUndoSignal] = useState(0);
+  const [redoSignal, setRedoSignal] = useState(0);
   const [addSignal, setAddSignal] = useState<{ kind: WidgetKind; n: number } | null>(null);
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutState>({
     tiles: {},
@@ -48,6 +54,29 @@ export function Dashboard({
   const onAddPick = useCallback((kind: WidgetKind) => {
     setAddSignal((p) => ({ kind, n: (p?.n ?? 0) + 1 }));
     setPaletteOpen(false);
+  }, []);
+
+  // Cmd/Ctrl+Z (undo) and Cmd/Ctrl+Shift+Z (redo) on the dashboard.
+  // We swallow the keystroke when the focus is inside a text input so
+  // the user can still undo their typing without thrashing the layout.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() !== 'z') return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t?.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) setRedoSignal((n) => n + 1);
+      else setUndoSignal((n) => n + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (
@@ -62,11 +91,14 @@ export function Dashboard({
         onDisconnect={onDisconnect}
         onPairNew={onPairNew}
         onAddWidget={() => setPaletteOpen(true)}
-        onResetLayout={() => setResetSignal((n) => n + 1)}
+        onClearLayout={() => setClearSignal((n) => n + 1)}
+        onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
       />
 
       <TileGrid
-        resetSignal={resetSignal}
+        clearSignal={clearSignal}
+        undoSignal={undoSignal}
+        redoSignal={redoSignal}
         addSignal={addSignal}
         onLayoutChange={setLayoutSnapshot}
         onRequestAdd={() => setPaletteOpen(true)}
@@ -77,6 +109,14 @@ export function Dashboard({
           layout={layoutSnapshot}
           onClose={() => setPaletteOpen(false)}
           onPick={onAddPick}
+        />
+      )}
+
+      {globalSettingsOpen && (
+        <GlobalSettingsModal
+          tweaks={tweaks}
+          setTweaks={setTweaks}
+          onClose={() => setGlobalSettingsOpen(false)}
         />
       )}
     </div>
@@ -95,7 +135,8 @@ interface DashTopbarProps {
   onDisconnect: () => void;
   onPairNew: () => void;
   onAddWidget: () => void;
-  onResetLayout: () => void;
+  onClearLayout: () => void;
+  onOpenGlobalSettings: () => void;
 }
 
 function DashTopbar({
@@ -108,7 +149,8 @@ function DashTopbar({
   onDisconnect,
   onPairNew,
   onAddWidget,
-  onResetLayout,
+  onClearLayout,
+  onOpenGlobalSettings,
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -200,11 +242,11 @@ function DashTopbar({
         </button>
         <button
           className="icon-btn tt"
-          data-tt="Reset layout"
-          onClick={onResetLayout}
-          aria-label="Reset layout"
+          data-tt="Clear layout"
+          onClick={onClearLayout}
+          aria-label="Clear layout"
         >
-          <Icons.Refresh size={13} />
+          <Icons.Clear size={13} />
         </button>
         <div className="dash-divider" />
         <AppearanceButton
@@ -213,6 +255,14 @@ function DashTopbar({
           open={appearanceOpen}
           setOpen={setAppearanceOpen}
         />
+        <button
+          className="icon-btn tt"
+          data-tt="Global settings"
+          onClick={onOpenGlobalSettings}
+          aria-label="Global settings"
+        >
+          <Icons.Settings size={13} />
+        </button>
         <a
           className="icon-btn tt"
           data-tt="View source on GitHub"
@@ -266,7 +316,7 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
     };
   }, [open, setOpen]);
 
-  const { theme, accent, compactMode, performanceMode } = tweaks;
+  const { theme, accent, compactMode } = tweaks;
   return (
     <div className="dash-appearance" ref={wrapRef}>
       <button
@@ -337,37 +387,6 @@ function AppearanceButton({ tweaks, setTweaks, open, setOpen }: AppearanceButton
                 </span>
               </span>
             </button>
-          </div>
-          <div className="dash-appearance-section">
-            <div className="dash-appearance-label">Performance</div>
-            <div className="seg seg-3">
-              <button
-                className={performanceMode === 'auto' ? 'active' : ''}
-                onClick={() => setTweaks({ performanceMode: 'auto' })}
-                aria-pressed={performanceMode === 'auto'}
-              >
-                Auto
-              </button>
-              <button
-                className={performanceMode === 'on' ? 'active' : ''}
-                onClick={() => setTweaks({ performanceMode: 'on' })}
-                aria-pressed={performanceMode === 'on'}
-              >
-                On
-              </button>
-              <button
-                className={performanceMode === 'off' ? 'active' : ''}
-                onClick={() => setTweaks({ performanceMode: 'off' })}
-                aria-pressed={performanceMode === 'off'}
-              >
-                Off
-              </button>
-            </div>
-            <div className="dash-perf-hint">
-              Drops blur, animated decorations, and caps the Mirror widget
-              at 30 fps. Auto enables this on Intel iGPU laptops and when
-              the system requests reduced motion.
-            </div>
           </div>
         </div>
       )}

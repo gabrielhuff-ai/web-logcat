@@ -3,14 +3,19 @@
 //
 // State for swap-drag, focus, and maximize lives in `<TileGrid/>`; this
 // component is purely presentational + dispatches user intents back up
-// via callbacks. The settings modal, however, is a tile-local concern
-// (modal is per-tile so multiple tiles' settings don't conflict) and is
-// owned here.
+// via callbacks. The settings modal is a tile-local concern (modal is
+// per-tile so multiple tiles' settings don't conflict) and is owned
+// here.
 //
-// In the dwindle layout there is no per-tile resize grip — every tile's
-// bounds are dictated by the binary tree, and resizing happens at the
-// seam between two siblings (rendered by `<TileGrid/>` as
-// `.dash-split-handle`).
+// The eye-button cycles through three "chrome" states (`BarMode`):
+//   - `'show'`     — head + widget bar both visible (default).
+//   - `'hideBars'` — head visible, widget bar hidden.
+//   - `'hideHead'` — head hidden, body fills the tile. Hovering the
+//                    very top of the tile re-reveals the head and
+//                    pushes the body down (the `tile-reveal` strip is
+//                    the hover trigger).
+// Widgets without an internal control bar (Shell) skip the middle
+// state — `<TileGrid/>` handles that via `WIDGETS[kind].hasControlBar`.
 
 import {
   Suspense,
@@ -37,7 +42,8 @@ export interface TileProps {
   /** Inline style — set by `<TileGrid/>` (flex sizing, or absolute when maximised). */
   style: CSSProperties;
   onMoveStart: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onToggleBars: () => void;
+  /** Cycle the eye-button tristate. */
+  onCycleBarMode: () => void;
   onToggleMax: () => void;
   onRemove: () => void;
   /** The widget body — typically `<def.comp tileId={tile.id} />`. */
@@ -52,7 +58,7 @@ export function Tile({
   focused,
   style,
   onMoveStart,
-  onToggleBars,
+  onCycleBarMode,
   onToggleMax,
   onRemove,
   children,
@@ -61,16 +67,32 @@ export function Tile({
   const Icon = def.icon;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const barMode = tile.barMode ?? 'show';
+
   const className = [
     'tile',
     dragging && 'dragging',
     dropTarget && 'drop-target',
     focused && 'focused',
     maximized && 'max',
-    tile.barsHidden && 'bars-hidden',
+    barMode === 'hideBars' && 'bars-hidden',
+    barMode === 'hideHead' && 'head-hidden',
   ]
     .filter(Boolean)
     .join(' ');
+
+  // Eye-button label / icon depend on the *next* state. With the bar:
+  // show → hideBars → hideHead → show. Without: show ↔ hideHead.
+  const hasBar = def.hasControlBar !== false;
+  const eyeLabel =
+    barMode === 'show'
+      ? hasBar
+        ? 'Hide widget bar'
+        : 'Hide widget chrome'
+      : barMode === 'hideBars'
+        ? 'Hide widget chrome'
+        : 'Show widget bar';
+  const EyeIcon = barMode === 'show' ? Icons.Eye : Icons.EyeOff;
 
   return (
     <div
@@ -78,6 +100,14 @@ export function Tile({
       style={style}
       data-tile-id={tile.id}
     >
+      {/* When `barMode === 'hideHead'` the tile-head is collapsed to
+          height 0; this thin strip at the top sits above where the
+          head used to live and reveals it on hover. The strip itself
+          is invisible (transparent) but `cursor: ns-resize` hints
+          there's something there. */}
+      {barMode === 'hideHead' && !maximized && (
+        <div className="tile-reveal" aria-hidden />
+      )}
       <div
         className="tile-head"
         onPointerDown={(e) => {
@@ -103,11 +133,11 @@ export function Tile({
         </button>
         <button
           className="tile-btn tt"
-          data-tt={tile.barsHidden ? 'Show widget bar' : 'Hide widget bar'}
-          onClick={onToggleBars}
-          aria-label={tile.barsHidden ? 'Show widget bar' : 'Hide widget bar'}
+          data-tt={eyeLabel}
+          onClick={onCycleBarMode}
+          aria-label={eyeLabel}
         >
-          {tile.barsHidden ? <Icons.EyeOff size={11} /> : <Icons.Eye size={11} />}
+          <EyeIcon size={11} />
         </button>
         <button
           className="tile-btn tt"

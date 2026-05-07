@@ -45,6 +45,13 @@ export interface WidgetDef {
   enabled: boolean;
   /** Hard cap on simultaneous instances of this kind. Undefined ⇒ unlimited. */
   maxInstances?: number;
+  /**
+   * Whether the widget renders an internal control bar (Logcat's
+   * filter-bar, Dumpsys's preset pills, …). False ⇒ the eye-button
+   * tristate skips the middle "hide controls" step (Shell has nothing
+   * to hide). Defaults to true.
+   */
+  hasControlBar?: boolean;
 }
 
 // `React.lazy` requires a default export. The widget files use named
@@ -83,6 +90,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: ShellWidgetLazy,
     defaultSize: { w: 5, h: 4 },
     enabled: true,
+    hasControlBar: false,
   },
   dumpsys: {
     name: 'Dumpsys',

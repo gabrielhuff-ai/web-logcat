@@ -11,6 +11,21 @@
 
 import { test, expect } from '@playwright/test';
 
+/**
+ * Add a widget via the topbar palette. Returns a locator scoped to the
+ * `.tile` containing that widget kind's root element. Tests prefer this
+ * helper over `.tile.nth(N)` because the dwindle layout doesn't pin
+ * widgets to fixed indices — the new dashboard default is a single
+ * Logcat tile. Types are inferred from `@playwright/test`.
+ */
+async function addWidget(page, label, widgetClass) {
+  const before = await page.locator(widgetClass).count();
+  await page.getByRole('button', { name: /add widget/i }).click();
+  await page.locator('.palette-card').filter({ hasText: label }).click();
+  await expect(page.locator(widgetClass)).toHaveCount(before + 1);
+  return page.locator('.tile').filter({ has: page.locator(widgetClass) }).last();
+}
+
 test.describe('empty state', () => {
   test('renders the connect-or-fake-data card', async ({ page }) => {
     await page.goto('/');
@@ -35,10 +50,10 @@ test.describe('simulator', () => {
     // Device pill shows the simulated device.
     await expect(page.locator('.dash-device-name')).toContainText('Demo Device');
 
-    // The Phase 9 default layout ships the full HANDOFF arrangement:
-    // Mirror + Logcat + Shell + Dumpsys (the last is a stub until
-    // Phase 7 lands). Logs land in the Logcat list.
-    await expect(page.locator('.tile')).toHaveCount(4);
+    // The new default layout is a single Logcat tile filling the
+    // dashboard; logs stream into its list.
+    await expect(page.locator('.tile')).toHaveCount(1);
+    await expect(page.locator('.lc-widget')).toBeVisible();
     await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
   });
 });
@@ -92,26 +107,21 @@ test.describe('keyboard shortcuts', () => {
 });
 
 test.describe('dashboard', () => {
-  test('+ Add widget opens the palette with disabled non-shipped cards', async ({
+  test('+ Add widget opens the palette with all five cards enabled', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(4);
+    await expect(page.locator('.tile')).toHaveCount(1);
 
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
-    // After Phases 7+8+9 all five widget kinds ship; the Mirror card is
-    // blocked at the palette because the default layout already includes
-    // a Mirror tile (`maxInstances: 1`).
     const cards = page.locator('.palette-card');
     await expect(cards).toHaveCount(5);
-    await expect(cards.filter({ hasText: 'Logcat' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Shell' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Dumpsys' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Files' })).not.toBeDisabled();
-    await expect(cards.filter({ hasText: 'Screen Mirror' })).toBeDisabled();
+    for (const name of ['Logcat', 'Shell', 'Dumpsys', 'Files', 'Screen Mirror']) {
+      await expect(cards.filter({ hasText: name })).not.toBeDisabled();
+    }
   });
 
   test('Dumpsys tile runs a preset against the simulator', async ({
@@ -119,11 +129,7 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    // The default HANDOFF layout already includes a Dumpsys tile.
-    await expect(page.locator('.tile')).toHaveCount(4);
-
-    const dsTile = page.locator('.ds-widget').first();
-    await expect(dsTile).toBeVisible();
+    const dsTile = await addWidget(page, /Dumpsys/, '.ds-widget');
     // Default preset (Battery) should resolve via the captured fixture
     // and the Charge card renders.
     await expect(dsTile.locator('.ds-card-head').first()).toContainText(/charge/i);
@@ -142,20 +148,14 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    // Files isn't in the HANDOFF default layout — palette adds tile #5.
-    await expect(page.locator('.tile')).toHaveCount(4);
-
-    await page.getByRole('button', { name: /add widget/i }).click();
-    await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
-    await expect(page.locator('.tile')).toHaveCount(5);
-
-    const fxTile = page.locator('.fx-widget').first();
-    await expect(fxTile).toBeVisible();
+    const fxTile = await addWidget(page, /Files/, '.fx-widget');
     // Toolbar carries the breadcrumb pointing at the canned default
     // path (`/sdcard/Download`) — confirms the simulator list resolved.
     await expect(fxTile.locator('.fx-crumb.current')).toContainText('Download');
     // Files row renders for one of the canned simulator entries.
-    await expect(fxTile.locator('.fx-row').filter({ hasText: 'invoice-202411.pdf' })).toBeVisible();
+    await expect(
+      fxTile.locator('.fx-row').filter({ hasText: 'invoice-202411.pdf' }),
+    ).toBeVisible();
   });
 
   test('adding a Logcat widget yields an extra tile with independent filters', async ({
@@ -163,23 +163,25 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(4);
+    await expect(page.locator('.tile')).toHaveCount(1);
+    const firstLogcat = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
 
-    await page.getByRole('button', { name: /add widget/i }).click();
-    await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
-    await expect(page.locator('.tile')).toHaveCount(5);
-
-    // Add a filter to the first Logcat tile (which sits at index 1 in
-    // the HANDOFF default — Mirror at 0, Logcat at 1, Shell at 2,
-    // Dumpsys at 3, new Logcat at 4).
-    const firstLogcat = page.locator('.tile').nth(1);
+    // Add a filter to the original Logcat tile.
     await firstLogcat.locator('.fb-input').focus();
     await firstLogcat.locator('.fb-input').fill('tag:Activity');
     await firstLogcat.locator('.fb-input').press('Enter');
     await expect(firstLogcat.locator('.chip')).toHaveCount(1);
 
-    const newTile = page.locator('.tile').nth(4);
-    await expect(newTile.locator('.chip')).toHaveCount(0);
+    // Add a second Logcat — its chip bar should be empty (per-tile state).
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
+    await expect(page.locator('.tile')).toHaveCount(2);
+
+    const allLogcats = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    await expect(allLogcats).toHaveCount(2);
+    // The new tile is the one without a chip; check there's exactly one
+    // tile with 0 chips (the new one) and one with 1 chip.
+    await expect(allLogcats.filter({ has: page.locator('.chip') })).toHaveCount(1);
   });
 
   test('Mirror tile renders the simulated app frame and is capped at one', async ({
@@ -187,19 +189,13 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
+    await addWidget(page, /Screen Mirror/, '.mr-widget');
 
-    // The default layout already includes a Mirror tile.
-    await expect(page.locator('.mr-widget')).toHaveCount(1);
-    // The decorative SVG bezel was removed in the UI-tweaks pass; the
-    // simulated app frame now fills the tile body edge-to-edge.
+    // Bezel area + 8 hardware buttons render; capped at 1 instance.
     await expect(page.locator('.mirror-svg')).toBeVisible();
-
-    // The three button groups + 8 hardware buttons all rendered.
     await expect(page.locator('.mr-hw')).toHaveCount(8);
     await expect(page.locator('.mr-sep')).toHaveCount(2);
 
-    // maxInstances: 1 should keep the palette card disabled while a
-    // Mirror tile already exists.
     await page.getByRole('button', { name: /add widget/i }).click();
     await expect(
       page.locator('.palette-card').filter({ hasText: 'Screen Mirror' }),
@@ -209,9 +205,7 @@ test.describe('dashboard', () => {
   test('adding a Shell widget runs the simulator commands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    // Default layout already includes a Shell tile.
-    const shellTile = page.locator('.sh-widget').first();
-    await expect(shellTile).toBeVisible();
+    const shellTile = await addWidget(page, /Shell/, '.sh-widget');
 
     const input = shellTile.locator('input[aria-label="Shell input"]');
     await input.focus();
@@ -229,19 +223,15 @@ test.describe('dashboard', () => {
     await expect(shellTile.locator('.sh-line')).toHaveCount(1);
   });
 
-  // === Phase 10 polish: tile chrome interactions =========================
-  // The default layout has 4 tiles arranged via a binary-tree (dwindle)
-  // layout: Mirror on the left of a row split, with Logcat / Shell /
-  // Dumpsys laid out in the right pane.
+  // === Tile chrome interactions ==========================================
 
   test('dragging a tile by the grip onto another tile swaps them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(4);
+    // Default = single Logcat. Add a Shell so we have two tiles to swap.
+    await addWidget(page, /Shell/, '.sh-widget');
+    await expect(page.locator('.tile')).toHaveCount(2);
 
-    // Capture each tile's kind by id before the swap. The Mirror tile
-    // sits at index 0 and the Logcat tile at index 1 in the default
-    // layout, so swapping them flips the order.
     const before0 = await page.locator('.tile').nth(0).getAttribute('data-tile-id');
     const before1 = await page.locator('.tile').nth(1).getAttribute('data-tile-id');
     expect(before0).toBeTruthy();
@@ -255,7 +245,6 @@ test.describe('dashboard', () => {
 
     await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
     await page.mouse.down();
-    // Walk the cursor in steps so the swap-drag activation threshold trips.
     await page.mouse.move(
       toBox.x + toBox.width / 2,
       toBox.y + toBox.height / 2,
@@ -272,12 +261,11 @@ test.describe('dashboard', () => {
   test('dragging the seam between two tiles resizes them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
+    await addWidget(page, /Shell/, '.sh-widget');
 
-    // Capture the Mirror tile width before; the outer-most seam controls
-    // its share of the dashboard.
-    const mirrorTile = page.locator('.tile').nth(0);
-    const before = await mirrorTile.boundingBox();
-    if (!before) throw new Error('mirror tile has no bounding box');
+    const firstTile = page.locator('.tile').nth(0);
+    const before = await firstTile.boundingBox();
+    if (!before) throw new Error('tile has no bounding box');
 
     const handle = page.locator('.dash-split-handle.row').first();
     const handleBox = await handle.boundingBox();
@@ -295,25 +283,31 @@ test.describe('dashboard', () => {
     );
     await page.mouse.up();
 
-    const after = await mirrorTile.boundingBox();
-    if (!after) throw new Error('resized mirror tile has no bounding box');
+    const after = await firstTile.boundingBox();
+    if (!after) throw new Error('resized tile has no bounding box');
     expect(after.width).toBeGreaterThan(before.width);
   });
 
-  test('the eye toggle hides the widget bar', async ({ page }) => {
+  test('the eye toggle cycles bar mode', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    const logcatTile = page.locator('.tile').nth(1);
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
     await expect(logcatTile.locator('.filter-bar')).toBeVisible();
 
+    // 1st click: show → hideBars (filter bar collapses).
     await logcatTile.getByRole('button', { name: /hide widget bar/i }).click();
     await expect(logcatTile).toHaveClass(/bars-hidden/);
     await expect(logcatTile.locator('.filter-bar')).toBeHidden();
 
-    // And toggle back.
+    // 2nd click: hideBars → hideHead (tile head collapses too).
+    await logcatTile.getByRole('button', { name: /hide widget chrome/i }).click();
+    await expect(logcatTile).toHaveClass(/head-hidden/);
+
+    // 3rd click: hideHead → show (everything visible again).
     await logcatTile.getByRole('button', { name: /show widget bar/i }).click();
     await expect(logcatTile).not.toHaveClass(/bars-hidden/);
+    await expect(logcatTile).not.toHaveClass(/head-hidden/);
     await expect(logcatTile.locator('.filter-bar')).toBeVisible();
   });
 
@@ -321,7 +315,7 @@ test.describe('dashboard', () => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    const logcatTile = page.locator('.tile').nth(1);
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
     await logcatTile.getByRole('button', { name: /maximize tile/i }).click();
     await expect(logcatTile).toHaveClass(/\bmax\b/);
     await expect(page.locator('.dash-grid')).toHaveClass(/has-max/);
@@ -331,35 +325,45 @@ test.describe('dashboard', () => {
     await expect(page.locator('.dash-grid')).not.toHaveClass(/has-max/);
   });
 
-  test('Reset layout returns to the 4-tile default after adding extras', async ({
+  test('Clear layout empties the dashboard to the empty state', async ({
     page,
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(4);
+    await addWidget(page, /Shell/, '.sh-widget');
+    await expect(page.locator('.tile')).toHaveCount(2);
 
-    await page.getByRole('button', { name: /add widget/i }).click();
-    await page.locator('.palette-card').filter({ hasText: 'Logcat' }).click();
-    await expect(page.locator('.tile')).toHaveCount(5);
-
-    await page.getByRole('button', { name: /reset layout/i }).click();
-    await expect(page.locator('.tile')).toHaveCount(4);
+    await page.getByRole('button', { name: /clear layout/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(0);
+    await expect(page.locator('.dash-empty')).toBeVisible();
   });
 
-  // === Phase 11: per-widget settings modal ===============================
-  // The cog button on every tile opens a per-widget settings modal whose
-  // controls are backed by the same `useTileSettings` state that the on-
-  // bar controls already write to. Per docs/LEARNINGS.md#10 these
-  // assertions intentionally pin to the canonical 4-tile default
-  // arrangement (Mirror, Logcat, Shell, Dumpsys at indexes 0..3).
+  test('Cmd+Z undoes a widget addition; Cmd+Shift+Z redoes it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(1);
+    await addWidget(page, /Shell/, '.sh-widget');
+    await expect(page.locator('.tile')).toHaveCount(2);
+
+    await page.keyboard.press('Meta+z');
+    await expect(page.locator('.tile')).toHaveCount(1);
+    await expect(page.locator('.sh-widget')).toHaveCount(0);
+
+    await page.keyboard.press('Meta+Shift+z');
+    await expect(page.locator('.tile')).toHaveCount(2);
+    await expect(page.locator('.sh-widget')).toHaveCount(1);
+  });
+
+  // === Per-widget settings modal =========================================
 
   test('cog opens a per-widget settings modal on the Logcat tile', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    const logcatTile = page.locator('.tile').nth(1);
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
     await logcatTile.getByRole('button', { name: /widget settings/i }).click();
     await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).toBeVisible();
-    // Esc dismisses.
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: /Logcat · settings/i })).not.toBeVisible();
   });
@@ -367,7 +371,7 @@ test.describe('dashboard', () => {
   test('cog on the Shell tile shows the home directory field', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    const shellTile = page.locator('.tile').nth(2);
+    const shellTile = await addWidget(page, /Shell/, '.sh-widget');
     await shellTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Shell · settings/i });
     await expect(dialog).toBeVisible();
@@ -381,11 +385,10 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    const dsTile = page.locator('.tile').nth(3);
+    const dsTile = await addWidget(page, /Dumpsys/, '.ds-widget');
     await dsTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Dumpsys · settings/i });
     await expect(dialog).toBeVisible();
-    // Two segmented controls expected (preset + view) plus the slider.
     await expect(dialog.locator('.ws-seg').first()).toBeVisible();
     await dialog.getByRole('button', { name: /close/i }).click();
   });
@@ -393,7 +396,7 @@ test.describe('dashboard', () => {
   test('cog on the Mirror tile shows the overlay font-size slider', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    const mirrorTile = page.locator('.tile').nth(0);
+    const mirrorTile = await addWidget(page, /Screen Mirror/, '.mr-widget');
     await mirrorTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Screen Mirror · settings/i });
     await expect(dialog).toBeVisible();
@@ -406,14 +409,7 @@ test.describe('dashboard', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    // Files isn't in the default layout — palette adds it. The dwindle
-    // layout splits the focused leaf, so the new Files tile's index in
-    // the rendered list depends on the focus order — locate by the
-    // widget class instead.
-    await page.getByRole('button', { name: /add widget/i }).click();
-    await page.locator('.palette-card').filter({ hasText: 'Files' }).click();
-    await expect(page.locator('.tile')).toHaveCount(5);
-    const fxTile = page.locator('.tile').filter({ has: page.locator('.fx-widget') });
+    const fxTile = await addWidget(page, /Files/, '.fx-widget');
     await fxTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Files · settings/i });
     await expect(dialog).toBeVisible();
@@ -426,7 +422,7 @@ test.describe('dashboard', () => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
 
-    const logcatTile = page.locator('.tile').nth(1);
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
     // Open the modal.
     await logcatTile.getByRole('button', { name: /widget settings/i }).click();
     const dialog = page.getByRole('dialog', { name: /Logcat · settings/i });
@@ -492,6 +488,22 @@ test.describe('dashboard', () => {
     const dialog = page.getByRole('dialog', { name: /add widget/i });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: /close/i }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('global settings cog opens the dialog with performance + stream-speed controls', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    await page.getByRole('button', { name: /global settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /global settings/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/Performance mode/i);
+    await expect(dialog).toContainText(/Simulated stream speed/i);
+
+    await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
   });
 });

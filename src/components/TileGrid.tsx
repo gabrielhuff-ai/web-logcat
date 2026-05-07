@@ -36,9 +36,9 @@ import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
 import {
   computeLayoutRects,
-  defaultLayout,
   findPath,
   loadLayout,
+  nextBarMode,
   patchTile,
   removeTile as removeTileFromLayout,
   rightmostLeafId,
@@ -89,8 +89,12 @@ interface SwapDrag {
 type DragState = ResizeDrag | SwapDrag;
 
 export interface TileGridProps {
-  /** Imperative request from the topbar to "Reset layout". */
-  resetSignal: number;
+  /** Imperative request from the topbar to "Clear layout" (empty state). */
+  clearSignal: number;
+  /** Imperative request from Cmd+Z (undo previous layout edit). */
+  undoSignal: number;
+  /** Imperative request from Cmd+Shift+Z (redo previously-undone edit). */
+  redoSignal: number;
   /** Imperative request from the topbar to add a widget. */
   addSignal: { kind: WidgetKind; n: number } | null;
   /** Notify parent when layout changes — used for the palette's `maxInstances` check. */
@@ -99,8 +103,13 @@ export interface TileGridProps {
   onRequestAdd: () => void;
 }
 
+/** Maximum size of the undo / redo history. */
+const HISTORY_CAP = 50;
+
 export function TileGrid({
-  resetSignal,
+  clearSignal,
+  undoSignal,
+  redoSignal,
   addSignal,
   onLayoutChange,
   onRequestAdd,
@@ -108,17 +117,53 @@ export function TileGrid({
   const { tweaks } = useDashboardChrome();
   const gap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
 
-  const [layout, setLayout] = useState<LayoutState>(loadLayout);
+  const [layout, setLayoutDirect] = useState<LayoutState>(loadLayout);
   const [maximized, setMaximized] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Undo / redo: every "structural" layout edit (add / remove / clear /
+  // swap) pushes the *previous* layout onto `undoStack`. The redo stack
+  // gets reset on a fresh edit, like every other text editor. Resize
+  // (`setRatio`) and focus updates skip the history — they're noisy
+  // continuous deltas, not discrete user intents.
+  const undoStackRef = useRef<LayoutState[]>([]);
+  const redoStackRef = useRef<LayoutState[]>([]);
 
   // rAF coalescing: pointermove fires at >120Hz on some setups; we
   // batch into the next animation frame so React only re-renders once
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Set the layout AND push the previous one onto the undo stack.
+   * `transient: true` skips the history (resize/focus). Both forms
+   * accept a function or a value, mirroring `useState`'s setter.
+   */
+  type LayoutUpdater = LayoutState | ((prev: LayoutState) => LayoutState);
+  const applyLayout = useCallback(
+    (next: LayoutUpdater, opts: { transient?: boolean } = {}) => {
+      setLayoutDirect((prev) => {
+        const computed =
+          typeof next === 'function'
+            ? (next as (p: LayoutState) => LayoutState)(prev)
+            : next;
+        if (computed === prev) return prev;
+        if (!opts.transient) {
+          const stack = undoStackRef.current;
+          stack.push(prev);
+          if (stack.length > HISTORY_CAP) stack.shift();
+          // A fresh edit invalidates the redo branch.
+          redoStackRef.current = [];
+        }
+        return computed;
+      });
+    },
+    [],
+  );
+
 
   // ---- Track grid size with ResizeObserver ------------------------------
   useLayoutEffect(() => {
@@ -161,13 +206,48 @@ export function TileGrid({
   }, [layout, onLayoutChange]);
 
   // ---- Topbar imperatives ------------------------------------------------
-  const lastResetRef = useRef(resetSignal);
+  const lastClearRef = useRef(clearSignal);
   useEffect(() => {
-    if (resetSignal === lastResetRef.current) return;
-    lastResetRef.current = resetSignal;
-    setLayout(defaultLayout());
+    if (clearSignal === lastClearRef.current) return;
+    lastClearRef.current = clearSignal;
+    applyLayout({ tiles: {}, tree: null, focusId: null });
     setMaximized(null);
-  }, [resetSignal]);
+  }, [clearSignal, applyLayout]);
+
+  // Cmd+Z — pop the previous layout off `undoStack`, push the current
+  // one onto the redo stack. Transient (no new history entry).
+  const lastUndoRef = useRef(undoSignal);
+  useEffect(() => {
+    if (undoSignal === lastUndoRef.current) return;
+    lastUndoRef.current = undoSignal;
+    setLayoutDirect((cur) => {
+      const stack = undoStackRef.current;
+      const prev = stack.pop();
+      if (!prev) return cur;
+      const redo = redoStackRef.current;
+      redo.push(cur);
+      if (redo.length > HISTORY_CAP) redo.shift();
+      return prev;
+    });
+    setMaximized(null);
+  }, [undoSignal]);
+
+  // Cmd+Shift+Z — symmetric.
+  const lastRedoRef = useRef(redoSignal);
+  useEffect(() => {
+    if (redoSignal === lastRedoRef.current) return;
+    lastRedoRef.current = redoSignal;
+    setLayoutDirect((cur) => {
+      const redo = redoStackRef.current;
+      const next = redo.pop();
+      if (!next) return cur;
+      const undo = undoStackRef.current;
+      undo.push(cur);
+      if (undo.length > HISTORY_CAP) undo.shift();
+      return next;
+    });
+    setMaximized(null);
+  }, [redoSignal]);
 
   // ---- Add a tile ------------------------------------------------------
   // Hyprland's dwindle convention: split the focused leaf along its
@@ -177,7 +257,7 @@ export function TileGrid({
   // right regardless of the focused tile's aspect.
   const addTile = useCallback(
     (kind: WidgetKind) => {
-      setLayout((l) => {
+      applyLayout((l) => {
         const def = WIDGETS[kind];
         if (def.maxInstances != null && countByKind(l, kind) >= def.maxInstances) {
           return l;
@@ -197,7 +277,7 @@ export function TileGrid({
         return addTileToLayout(l, kind, { splitDir });
       });
     },
-    [gap, outerRect],
+    [gap, outerRect, applyLayout],
   );
 
   const lastAddNRef = useRef<number>(addSignal?.n ?? 0);
@@ -209,18 +289,31 @@ export function TileGrid({
   }, [addSignal, addTile]);
 
   // ---- Tile actions ------------------------------------------------------
-  const removeTile = useCallback((id: string) => {
-    setLayout((l) => removeTileFromLayout(l, id));
-    setMaximized((m) => (m === id ? null : m));
-  }, []);
+  const removeTile = useCallback(
+    (id: string) => {
+      applyLayout((l) => removeTileFromLayout(l, id));
+      setMaximized((m) => (m === id ? null : m));
+    },
+    [applyLayout],
+  );
 
-  const toggleBars = useCallback((id: string) => {
-    setLayout((l) => {
-      const cur = l.tiles[id];
-      if (!cur) return l;
-      return patchTile(l, id, { barsHidden: !cur.barsHidden });
-    });
-  }, []);
+  // `barsHidden` cycles through 'show' (default) / 'hideBars' /
+  // 'hideHead' on each click. Widgets without an internal control bar
+  // (e.g. Shell) skip the middle state — see `cycleBarMode` below.
+  // Per-tile UI toggles are not "structural" edits, so they go through
+  // `transient: true` to keep the undo stack focused on add/remove/clear.
+  const cycleBarMode = useCallback((id: string) => {
+    applyLayout(
+      (l) => {
+        const cur = l.tiles[id];
+        if (!cur) return l;
+        const def = WIDGETS[cur.kind];
+        const next = nextBarMode(cur.barMode, def.hasControlBar !== false);
+        return patchTile(l, id, { barMode: next });
+      },
+      { transient: true },
+    );
+  }, [applyLayout]);
 
   const toggleMax = useCallback((id: string) => {
     setMaximized((m) => (m === id ? null : id));
@@ -237,7 +330,10 @@ export function TileGrid({
       e.preventDefault();
       // Note: focus tracking lives on the layout itself; mark the
       // tile under the pointer as the next "+ Add" target.
-      setLayout((l) => (l.focusId === id ? l : { ...l, focusId: id }));
+      applyLayout(
+        (l) => (l.focusId === id ? l : { ...l, focusId: id }),
+        { transient: true },
+      );
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -249,7 +345,7 @@ export function TileGrid({
         active: false,
       });
     },
-    [maximized],
+    [maximized, applyLayout],
   );
 
   const onSplitHandleStart = useCallback(
@@ -309,7 +405,11 @@ export function TileGrid({
           MIN_RATIO,
           Math.min(MAX_RATIO, drag.originRatio + dRatio),
         );
-        schedule(() => setLayout((l) => setRatio(l, drag.path, nextRatio)));
+        schedule(() =>
+          applyLayout((l) => setRatio(l, drag.path, nextRatio), {
+            transient: true,
+          }),
+        );
         return;
       }
       // swap drag
@@ -339,7 +439,7 @@ export function TileGrid({
         if (Math.hypot(dx, dy) > 5) {
           const target = hitTest(e.clientX, e.clientY);
           if (target && target !== drag.fromId) {
-            setLayout((l) => swapTiles(l, drag.fromId, target));
+            applyLayout((l) => swapTiles(l, drag.fromId, target));
           }
         }
       }
@@ -356,7 +456,7 @@ export function TileGrid({
         rafRef.current = null;
       }
     };
-  }, [drag]);
+  }, [drag, applyLayout]);
 
   // ---- Render ------------------------------------------------------------
   const gridClass = useMemo(() => {
@@ -422,7 +522,7 @@ export function TileGrid({
                 focused={layout.focusId === id}
                 style={style}
                 onMoveStart={onMoveStart(id)}
-                onToggleBars={() => toggleBars(id)}
+                onCycleBarMode={() => cycleBarMode(id)}
                 onToggleMax={() => toggleMax(id)}
                 onRemove={() => removeTile(id)}
               >

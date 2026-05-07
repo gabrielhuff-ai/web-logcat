@@ -19,29 +19,14 @@ import {
 import type { LayoutNode, LayoutState } from '../types';
 
 describe('layout: defaultLayout', () => {
-  it('returns four leaves wired through three nested splits', () => {
+  it('seeds a single Logcat tile filling the dashboard', () => {
     const l = defaultLayout();
-    expect(Object.keys(l.tiles).sort()).toEqual([
-      'w_dumpsys',
-      'w_logcat',
-      'w_mirror',
-      'w_shell',
-    ]);
-    expect(leafIds(l.tree)).toEqual([
-      'w_mirror',
-      'w_logcat',
-      'w_shell',
-      'w_dumpsys',
-    ]);
+    expect(Object.keys(l.tiles)).toEqual(['w_logcat']);
+    expect(leafIds(l.tree)).toEqual(['w_logcat']);
   });
 
   it('focuses the Logcat tile so the next +Add lands next to it', () => {
     expect(defaultLayout().focusId).toBe('w_logcat');
-  });
-
-  it('does not include Files (palette-only per HANDOFF)', () => {
-    const kinds = Object.values(defaultLayout().tiles).map((t) => t.kind);
-    expect(kinds).not.toContain('files');
   });
 });
 
@@ -136,52 +121,58 @@ describe('layout: setRatio', () => {
   });
 
   it('updates a nested split addressed by path', () => {
-    const l = defaultLayout();
-    // root.b.b is the row split holding shell + dumpsys.
-    const next = setRatio(l, ['b', 'b'], 0.3);
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b', splitDir: 'row' });
+    l = addTile(l, 'dumpsys', { id: 'c', splitDir: 'col' });
+    // The new dumpsys split nests under root.b (rightmost branch).
+    const next = setRatio(l, ['b'], 0.3);
     const root = next.tree as Extract<LayoutNode, { type: 'split' }>;
-    const mid = root.b as Extract<LayoutNode, { type: 'split' }>;
-    const inner = mid.b as Extract<LayoutNode, { type: 'split' }>;
+    const inner = root.b as Extract<LayoutNode, { type: 'split' }>;
     expect(inner.ratio).toBeCloseTo(0.3, 5);
   });
 });
 
 describe('layout: swapTiles', () => {
   it('exchanges two leaf ids in place', () => {
-    const l = defaultLayout();
-    const next = swapTiles(l, 'w_mirror', 'w_dumpsys');
-    expect(leafIds(next.tree)).toEqual([
-      'w_dumpsys',
-      'w_logcat',
-      'w_shell',
-      'w_mirror',
-    ]);
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b', splitDir: 'row' });
+    l = addTile(l, 'dumpsys', { id: 'c', splitDir: 'col' });
+    const next = swapTiles(l, 'a', 'c');
+    expect(leafIds(next.tree)).toEqual(['c', 'b', 'a']);
   });
 });
 
 describe('layout: helpers', () => {
   it('findPath traverses through nested splits', () => {
-    const l = defaultLayout();
-    expect(findPath(l.tree, 'w_mirror')).toEqual(['a']);
-    expect(findPath(l.tree, 'w_logcat')).toEqual(['b', 'a']);
-    expect(findPath(l.tree, 'w_dumpsys')).toEqual(['b', 'b', 'b']);
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b', splitDir: 'row' });
+    l = addTile(l, 'dumpsys', { id: 'c', splitDir: 'col' });
+    expect(findPath(l.tree, 'a')).toEqual(['a']);
+    expect(findPath(l.tree, 'b')).toEqual(['b', 'a']);
+    expect(findPath(l.tree, 'c')).toEqual(['b', 'b']);
   });
 
   it('rightmostLeafId follows .b to the deepest leaf', () => {
-    expect(rightmostLeafId(defaultLayout().tree)).toBe('w_dumpsys');
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'shell', { id: 'b' });
+    expect(rightmostLeafId(l.tree)).toBe('b');
   });
 
   it('countByKind tallies tiles by their kind discriminator', () => {
-    const l = defaultLayout();
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'logcat', { id: 'b' });
+    l = addTile(l, 'mirror', { id: 'c' });
+    expect(countByKind(l, 'logcat')).toBe(2);
     expect(countByKind(l, 'mirror')).toBe(1);
     expect(countByKind(l, 'files')).toBe(0);
   });
 
   it('patchTile applies a partial update to one tile', () => {
-    const l = defaultLayout();
-    const next = patchTile(l, 'w_logcat', { barsHidden: true });
-    expect(next.tiles.w_logcat.barsHidden).toBe(true);
-    expect(next.tiles.w_mirror.barsHidden).toBeUndefined();
+    let l: LayoutState = addTile(emptyLayout(), 'logcat', { id: 'a' });
+    l = addTile(l, 'mirror', { id: 'b' });
+    const next = patchTile(l, 'a', { barMode: 'hideBars' });
+    expect(next.tiles.a.barMode).toBe('hideBars');
+    expect(next.tiles.b.barMode).toBeUndefined();
   });
 });
 

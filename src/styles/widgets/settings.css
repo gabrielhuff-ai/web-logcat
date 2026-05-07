@@ -270,3 +270,14 @@
   padding-bottom: 1px;
   line-height: 1.4;
 }
+
+/* Stacked variant of `.ws-row` for descriptions that wrap below the
+   row title. Used by the global settings modal. */
+.ws-row.gs-row-stacked { flex-direction: column; align-items: stretch; gap: 10px; }
+.gs-row-head { display: flex; flex-direction: column; gap: 2px; }
+.gs-row-desc { font-size: var(--t-xs); color: var(--fg-3); line-height: 1.5; }
+
+/* `.ws-seg` defaults to inline-flex; in stacked rows we want it to
+   span the full width with each segment growing. */
+.ws-row.gs-row-stacked .ws-seg { display: flex; }
+.ws-row.gs-row-stacked .ws-seg button { flex: 1 1 0; justify-content: center; }
