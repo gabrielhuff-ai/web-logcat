@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import * as Icons from './Icons';
+import { APP_VERSION } from '../version';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
 
@@ -95,6 +96,7 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
           for keyboard shortcuts
         </div>
       </div>
+      <div className="empty-version">v{APP_VERSION}</div>
     </div>
   );
 }

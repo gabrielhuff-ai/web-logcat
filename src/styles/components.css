@@ -153,6 +153,20 @@
   letter-spacing: 0.04em;
 }
 .empty-hint .kbd { margin: 0 4px; }
+
+/* Version pill — bottom-right of the pre-connect screen. Subtle so it
+   doesn't compete with the connect-or-fake-data CTA, but always
+   visible for support / bug-reporting. */
+.empty-version {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.04em;
+  z-index: 2;
+}
 .dot-spinner {
   width: 10px;
   height: 10px;

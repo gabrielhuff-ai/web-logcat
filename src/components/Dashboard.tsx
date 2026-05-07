@@ -183,9 +183,6 @@ function DashTopbar({
           <Icons.Device size={13} />
           <div className="dash-device-info">
             <div className="dash-device-name">{device.model}</div>
-            <div className="dash-device-meta">
-              {device.serial} · Android {device.androidVersion}
-            </div>
           </div>
           <Icons.Chevron size={11} />
           {devOpen && (
@@ -259,14 +256,6 @@ function DashTopbar({
           open={appearanceOpen}
           setOpen={setAppearanceOpen}
         />
-        <button
-          className="icon-btn tt"
-          data-tt="Global settings"
-          onClick={onOpenGlobalSettings}
-          aria-label="Global settings"
-        >
-          <Icons.Settings size={13} />
-        </button>
         <a
           className="icon-btn tt"
           data-tt="View source on GitHub"
@@ -277,6 +266,14 @@ function DashTopbar({
         >
           <Icons.Github size={14} />
         </a>
+        <button
+          className="icon-btn tt"
+          data-tt="Global settings"
+          onClick={onOpenGlobalSettings}
+          aria-label="Global settings"
+        >
+          <Icons.Settings size={13} />
+        </button>
       </div>
     </div>
   );
