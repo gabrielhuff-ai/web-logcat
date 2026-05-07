@@ -56,8 +56,14 @@ jobs:
           kill "$PREVIEW_PID" 2>/dev/null || true
 
       - name: Open PR if screenshot changed
+        id: pr
         uses: peter-evans/create-pull-request@v7
         with:
+          # Use the long-lived PAT so the resulting PR triggers CI;
+          # `GITHUB_TOKEN`-authored PRs are silently suppressed under
+          # GitHub's anti-recursion rule, leaving the PR with no green
+          # check and stalling auto-merge forever.
+          token: ${{ secrets.BOT_PAT }}
           # Stable branch name so re-runs update the same PR rather than
           # spawning new ones; the action force-pushes the latest
           # screenshot onto it.
@@ -75,3 +81,10 @@ jobs:
           author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
           committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
           delete-branch: true
+
+      - name: Enable auto-merge
+        if: steps.pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT }}
+        run: |
+          gh pr merge ${{ steps.pr.outputs.pull-request-number }} --auto --squash --delete-branch
