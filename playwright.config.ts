@@ -17,6 +17,14 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
+    // Tells the browser to advertise `prefers-reduced-motion: reduce`,
+    // which the app's `performanceModeOn` heuristic in `lib/tweaks.ts`
+    // honours by toggling `[data-perf="on"]` on the document. That
+    // disables the position transitions on `.tile`, so bounding-box
+    // probes after a drag/resize/add see the final layout instead of
+    // a frame mid-easing. The app's runtime UX still animates for
+    // real users — the toggle only affects this headless context.
+    reducedMotion: 'reduce',
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {

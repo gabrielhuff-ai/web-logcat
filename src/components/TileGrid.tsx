@@ -421,10 +421,13 @@ export function TileGrid({
       }
     };
 
-    /** Edge band as a fraction of the tile dimension. The four edge
-     *  bands surround a centre swap zone (width × height of `1 -
-     *  2*EDGE` on each axis). 0.25 = a quarter on each side, with a
-     *  50% × 50% centre square reserved for swap. */
+    /** Edge band as a fraction of the tile *body*. The four edge
+     *  bands surround a centre swap zone; 0.25 means a quarter on
+     *  each side of the body with a 50% × 50% centre square left
+     *  for swap. The head bar is excluded from the calculation
+     *  (any drop on the head is unconditionally a swap), which
+     *  matches the "header = grab handle" UX users carry over from
+     *  IDEs. */
     const EDGE = 0.25;
     const hitTest = (
       x: number,
@@ -434,8 +437,12 @@ export function TileGrid({
       if (!grid) return { id: null, edge: null };
       const els = document.elementsFromPoint(x, y);
       let tileEl: HTMLElement | null = null;
+      let onHead = false;
       for (const el of els) {
         if (!grid.contains(el)) continue;
+        if (!tileEl && (el as HTMLElement).closest('.tile-head')) {
+          onHead = true;
+        }
         const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
         if (candidate) {
           tileEl = candidate;
@@ -445,11 +452,24 @@ export function TileGrid({
       if (!tileEl) return { id: null, edge: null };
       const id = tileEl.dataset.tileId ?? null;
       if (!id) return { id: null, edge: null };
+      // Drop on the head bar → always a swap. The drag UX picks the
+      // tile up by its header, so dropping head-to-head is the
+      // obvious "swap places" gesture.
+      if (onHead) return { id, edge: null };
 
+      // Compute the body region (full tile minus the head's height
+      // when the head is present) and resolve the edge band against
+      // the body, not the whole tile — otherwise the head's 34px
+      // would land in the top edge zone for any tall tile.
       const rect = tileEl.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return { id, edge: null };
+      const headEl = tileEl.querySelector<HTMLElement>(':scope > .tile-head');
+      const headHeight = headEl ? headEl.getBoundingClientRect().height : 0;
+      const bodyTop = rect.top + headHeight;
+      const bodyHeight = rect.height - headHeight;
+      if (bodyHeight <= 0) return { id, edge: null };
       const relX = (x - rect.left) / rect.width;
-      const relY = (y - rect.top) / rect.height;
+      const relY = (y - bodyTop) / bodyHeight;
 
       // Distance to each edge as a fraction. Smallest distance picks
       // the edge band; ties (corners) resolve by axis priority left
