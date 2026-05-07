@@ -147,14 +147,23 @@
   padding: 0;
   background: var(--bg-0);
   border-bottom: 1px solid var(--line);
+  /* Allow children to shrink past their content size when the tile
+     gets narrow — without this, the stats / pin-summary blocks bump
+     up against an inflexible chip row and overflow the tile (the
+     right edge gets clipped by `.tile { overflow: hidden }`). */
+  min-width: 0;
+  overflow: hidden;
 }
-.lvl-spacer { flex: 1; }
+.lvl-filter { min-width: 0; flex-shrink: 1; }
+.lvl-spacer { flex: 1 1 0; min-width: 0; }
 .lvl-stats {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: var(--t-xs);
   color: var(--fg-2);
   font-variant-numeric: tabular-nums;
   padding: 0 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .lvl-stats .rate-dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -433,8 +442,8 @@
 
 /* ===== Toast ===== */
 .toast {
-  position: absolute;
-  bottom: 80px;
+  position: fixed;
+  bottom: 32px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-3);

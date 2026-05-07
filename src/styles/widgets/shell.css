@@ -63,3 +63,56 @@
   font-size: inherit;
   caret-color: var(--accent);
 }
+
+/* ===== Shell toolbar — Restart button + Run-as-root pill =====
+ * Slim bar across the top of the widget. The eye-button tristate
+ * (inherited from `.tile`) hides this exactly like the toolbars in
+ * the other widgets — `.widget-bar` is the marker class. */
+.sh-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--glass-line);
+  background: oklch(from var(--bg-0) calc(l - 0.01) c h / 0.6);
+  flex-shrink: 0;
+}
+.sh-icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--fg-2);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.sh-icon-btn:hover {
+  color: var(--accent);
+  background: var(--bg-2);
+  border-color: var(--glass-line);
+}
+.sh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  background: var(--bg-2);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+  transition: all 120ms var(--ease-out);
+}
+.sh-pill:hover { color: var(--fg-1); background: var(--bg-3); }
+.sh-pill.on {
+  color: var(--accent);
+  background: oklch(from var(--accent) l c h / 0.14);
+  border-color: oklch(from var(--accent) l c h / 0.4);
+}

@@ -38,21 +38,20 @@
  * one row without horizontal scroll. The tile establishes a size
  * container in `dashboard.css → .tile { container-type: inline-size; }`.
  */
-@container tile (max-width: 720px) {
+@container tile (max-width: 920px) {
   .lvl-pill .lvl-name { display: none; }
   .lvl-pill { padding: 0 6px; }
+}
+@container tile (max-width: 760px) {
   .lvl-toggles .tb-mini { padding-right: 6px; gap: 0; font-size: 0; }
   .lvl-toggles .tb-mini svg { font-size: var(--t-sm); }
 }
-@container tile (max-width: 540px) {
+@container tile (max-width: 600px) {
   .lvl-stats { font-size: var(--t-xs); }
   .lvl-stats > span:nth-child(4),
   .lvl-stats > .rate-sep { display: none; }
 }
-@container tile (max-width: 460px) {
-  /* At very narrow widths, also hide the rate dot — the per-second rate
-     is the lower-priority readout once the chip text + filter
-     suggestions are already gone. */
+@container tile (max-width: 520px) {
   .rate-dot { display: none; }
 }
 

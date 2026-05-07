@@ -1,8 +1,12 @@
 // Shell widget — single interactive ADB shell scoped to one tile.
 //
-// Per HANDOFF §Shell Widget: no toolbar, no split panes. If the user
-// wants a second shell, they add a second Shell widget. Each widget
-// instance owns its own shell channel.
+// Mostly per HANDOFF §Shell Widget. The original spec called for "no
+// toolbar" but field testing surfaced two missing affordances: a
+// restart button (recover from a wedged channel without removing /
+// re-adding the tile) and a run-as-root toggle (Pixel/AOSP devices
+// with `su` available). Both live on a slim `.sh-toolbar widget-bar`
+// + the per-widget settings modal so the keyboard shortcut surface
+// stays the prompt itself.
 //
 // Two backends, switched on `useAdb().usingFake`:
 //   - Real device → `adb.subprocess.shellProtocol?.spawn([])` opens a
@@ -28,6 +32,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { WritableStream } from '@yume-chan/stream-extra';
+import * as Icons from '../Icons';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
 import { useTileSettings } from '../../lib/tileSettings';
@@ -67,7 +72,15 @@ interface ShellChannel {
 export function ShellWidget({ tileId }: ShellWidgetProps) {
   const { device, adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
-  const [settings] = useTileSettings<ShellSettings>(tileId, 'shell', SHELL_DEFAULTS);
+  const [settings, setSettings] = useTileSettings<ShellSettings>(
+    tileId,
+    'shell',
+    SHELL_DEFAULTS,
+  );
+  // Bumped to force the shell-channel effect to tear down and re-open
+  // the underlying `shell:` socket. Used by the Restart button and
+  // the Run-as-root toggle.
+  const [restartCounter, setRestartCounter] = useState(0);
 
   const [history, setHistory] = useState<ShellLine[]>(() => initialBanner(device?.model));
   const [input, setInput] = useState('');
@@ -139,9 +152,11 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
 
     const handle = (async () => {
       try {
-        // Empty argv ⇒ interactive `shell:`. yume-chan accepts a
-        // string-or-string[] command; an empty array works for both.
-        const proc = await shellProtocol.spawn([]);
+        // Run-as-root spawns through `su`; the empty argv path stays
+        // an interactive `shell:`. yume-chan accepts string-or-string[].
+        const proc = await shellProtocol.spawn(
+          settings.runAsRoot ? ['su'] : [],
+        );
         if (cancelled) {
           await proc.kill();
           return null;
@@ -236,7 +251,11 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
       });
       channelRef.current = null;
     };
-  }, [adb, usingFake, appendLines, showToast]);
+    // `restartCounter` is the deliberate dep that lets the Restart
+    // button + the Run-as-root toggle tear down + reopen the channel
+    // without remounting the widget. `settings.runAsRoot` is also
+    // listed so a toggle change immediately re-runs the effect.
+  }, [adb, usingFake, appendLines, showToast, restartCounter, settings.runAsRoot]);
 
   // ---- Submit one line ---------------------------------------------------
   const submit = useCallback(
@@ -316,6 +335,20 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
         }
         return;
       }
+      if (e.key === 'Tab') {
+        // Default browser behaviour is to move focus out of the
+        // input (and on to the address bar in Chrome's case). Always
+        // swallow it. On a real device we forward a literal tab to
+        // the channel so any shell that *does* implement completion
+        // (e.g. a custom rooted ROM with bash) sees the keystroke.
+        // The simulator currently has no completion implementation —
+        // the keystroke is dropped after `preventDefault()`.
+        e.preventDefault();
+        if (!usingFake && channelRef.current) {
+          void channelRef.current.write('\t');
+        }
+        return;
+      }
       if (e.key.toLowerCase() === 'l' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setHistory([]);
@@ -385,6 +418,37 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
       onClick={onWidgetClick}
       style={widgetStyle}
     >
+      <div className="sh-toolbar widget-bar">
+        <button
+          type="button"
+          className="sh-icon-btn tt"
+          data-tt="Restart shell"
+          onClick={(e) => {
+            e.stopPropagation();
+            setRestartCounter((n) => n + 1);
+          }}
+          aria-label="Restart shell"
+        >
+          <Icons.Refresh size={13} />
+        </button>
+        <button
+          type="button"
+          className={`sh-pill tt ${settings.runAsRoot ? 'on' : ''}`}
+          data-tt={
+            settings.runAsRoot
+              ? 'Running as root (toggle off to restart)'
+              : 'Run as root (requires su)'
+          }
+          aria-pressed={settings.runAsRoot}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSettings({ runAsRoot: !settings.runAsRoot });
+          }}
+        >
+          root
+        </button>
+        <span style={{ flex: 1 }} />
+      </div>
       <div className="sh-scroll" ref={scrollRef}>
         {history.map((line, i) => {
           if (line.kind === 'system') {

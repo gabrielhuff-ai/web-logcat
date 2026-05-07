@@ -437,6 +437,12 @@
 .tile.head-hidden:has(.tile-head:hover) .tile-head {
   height: 34px;
   border-bottom-width: 1px;
+  /* Once the head is fully revealed, drop the clip so the action-
+     button tooltips can paint below the head bar (the `tt::after`
+     pseudo-element sits at `top: calc(100% + 6px)` — clipped while
+     the head is collapsed, but it should be visible the moment the
+     user hovers in to read it). */
+  overflow: visible;
 }
 .tile.head-hidden:has(.tile-reveal:hover) .tile-head > *,
 .tile.head-hidden:has(.tile-head:hover) .tile-head > * {

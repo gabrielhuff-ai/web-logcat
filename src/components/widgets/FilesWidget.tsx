@@ -315,9 +315,12 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         entry.type === 'link' && entry.linkTarget
           ? entry.linkTarget
           : joinPath(path, entry.name);
+      const isApk = target.toLowerCase().endsWith('.apk');
       const res = await fs.open(target);
       if (res.ok) {
-        showToast(`Opened ${entry.name} on device`);
+        showToast(
+          isApk ? `Installed ${entry.name}` : `Opened ${entry.name} on device`,
+        );
       } else {
         showToast(res.reason ?? 'Open failed');
       }
@@ -538,6 +541,53 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
     }
   }, [path, reload, showToast]);
 
+  // ---- delete ------------------------------------------------------------
+  const removeEntries = useCallback(
+    async (names: string[]) => {
+      const fs = fsRef.current;
+      if (fs == null || names.length === 0) return;
+      const label =
+        names.length === 1 ? names[0] : `${names.length} items`;
+      const ok = window.confirm(
+        `Delete ${label}? This cannot be undone.`,
+      );
+      if (!ok) return;
+      let failures = 0;
+      for (const n of names) {
+        try {
+          await fs.remove(joinPath(path, n));
+        } catch {
+          failures += 1;
+        }
+      }
+      // Drop the just-deleted names from the live selection so the
+      // post-reload UI doesn't try to re-show pinned-foot path text
+      // for a stale entry.
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const n of names) next.delete(n);
+        return next;
+      });
+      await reload();
+      if (failures === 0) {
+        showToast(
+          names.length === 1
+            ? `Deleted ${names[0]}`
+            : `Deleted ${names.length} items`,
+        );
+      } else if (failures < names.length) {
+        showToast(`Deleted ${names.length - failures}/${names.length} items`);
+      } else {
+        showToast('Delete failed');
+      }
+    },
+    [path, reload, showToast],
+  );
+  const onDeleteSelected = useCallback(() => {
+    if (selected.size === 0) return;
+    void removeEntries([...selected]);
+  }, [removeEntries, selected]);
+
   // ---- Disposal ----------------------------------------------------------
   useEffect(() => {
     return () => {
@@ -657,6 +707,21 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
             aria-label="Pull"
           >
             <DownloadIcon />
+          </button>
+          <button
+            className="icon-btn tt"
+            data-tt={
+              selected.size === 0
+                ? 'Delete (select first)'
+                : selected.size === 1
+                  ? 'Delete'
+                  : `Delete ${selected.size} items`
+            }
+            onClick={onDeleteSelected}
+            disabled={selected.size === 0}
+            aria-label="Delete selected"
+          >
+            <Icons.Clear size={14} />
           </button>
           <button
             className={`icon-btn tt ${showHidden ? 'active' : ''}`}
@@ -867,6 +932,11 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
             if (e.type === 'dir') navigate(joinPath(path, e.name));
             else if (e.type === 'link' && e.linkTarget) navigate(e.linkTarget);
           }}
+          onDelete={() => {
+            const e = contextMenu.entry;
+            setContextMenu(null);
+            void removeEntries([e.name]);
+          }}
         />
       )}
     </div>
@@ -876,6 +946,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
 // ---- Right-click context menu ---------------------------------------------
 
 interface FxContextMenuProps {
+  onDelete: () => void;
   x: number;
   y: number;
   entry: SyncEntry;
@@ -897,6 +968,7 @@ function FxContextMenu({
   onPull,
   onCopyPath,
   onNavigate,
+  onDelete,
 }: FxContextMenuProps) {
   void path;
   // Click-outside + Esc dismiss. Models on the device-picker popover.
@@ -943,6 +1015,15 @@ function FxContextMenu({
       )}
       <button type="button" role="menuitem" onClick={onCopyPath}>
         <Icons.Stack size={12} /> Copy full path
+      </button>
+      <div className="fx-ctx-sep" role="separator" />
+      <button
+        type="button"
+        role="menuitem"
+        className="fx-ctx-danger"
+        onClick={onDelete}
+      >
+        <Icons.Clear size={12} /> Delete
       </button>
     </div>
   );

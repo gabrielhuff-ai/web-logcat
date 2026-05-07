@@ -90,7 +90,11 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: ShellWidgetLazy,
     defaultSize: { w: 5, h: 4 },
     enabled: true,
-    hasControlBar: false,
+    // The Shell widget grew a small bar (Restart + Run-as-root toggle)
+    // in addition to the prompt itself; flip the registry hint to
+    // match so the eye-button tristate keeps the middle "hide
+    // controls" state.
+    hasControlBar: true,
   },
   dumpsys: {
     name: 'Dumpsys',

@@ -31,6 +31,7 @@ import {
   simNodeAt,
   simRead,
   simMkdir,
+  simRemove,
 } from './syncSim';
 
 /** Threshold above which `write()` will fire `onProgress` callbacks. */
@@ -74,6 +75,15 @@ export interface SyncFs {
    * shell channel — same workaround the upstream Tango demo uses.
    */
   mkdir(path: string): Promise<void>;
+  /**
+   * Recursively remove a file or directory at `path`. The shell-out
+   * uses `rm -rf` so it works for both kinds without inspecting the
+   * entry first; `-f` swallows missing-target / permission errors so
+   * a stale tree doesn't surface a TS exception. The simulator path
+   * mutates its in-memory tree so the next `list()` reflects the
+   * deletion.
+   */
+  remove(path: string): Promise<void>;
   /**
    * Ask the device to open a file with its default app. Runs
    * `am start -a android.intent.action.VIEW -d "file://<path>" -t
@@ -310,27 +320,55 @@ function createRealSync(adb: Adb): SyncFs {
       await adb.subprocess.noneProtocol.spawnWaitText(cmd);
     },
 
+    async remove(path) {
+      // `rm -rf` handles both files and directories; `-f` swallows
+      // missing-target / permission errors so a refresh-then-delete
+      // race doesn't crash the widget.
+      const sp = adb.subprocess.shellProtocol;
+      const cmd = ['rm', '-rf', path];
+      if (sp) {
+        const proc = await sp.spawn(cmd);
+        const code = await proc.exited;
+        if (code !== 0) {
+          throw new Error(`rm -rf failed (exit ${code})`);
+        }
+        return;
+      }
+      await adb.subprocess.noneProtocol.spawnWaitText(cmd);
+    },
+
     async open(path) {
+      // APKs get the `pm install -r` treatment: matches what tapping
+      // an .apk in the device's stock Files app does (PackageInstaller
+      // dialog over ADB's shell uid grant). The plain `am start
+      // VIEW file://…apk` route triggers the FileUriExposedException
+      // on modern Android, which is why it never worked previously.
       const mime = mimeForExtension(path);
-      // `am start -a VIEW -d file://… -t mime` is the canonical
-      // route. Shell-quoting the path keeps spaces + parens safe.
-      const cmd = [
-        'am',
-        'start',
-        '-a',
-        'android.intent.action.VIEW',
-        '-d',
-        `file://${path}`,
-        '-t',
-        mime,
-      ];
+      const isApk = path.toLowerCase().endsWith('.apk');
+      const cmd = isApk
+        ? ['pm', 'install', '-r', '-t', '-d', path]
+        : [
+            'am',
+            'start',
+            '-a',
+            'android.intent.action.VIEW',
+            '-d',
+            `file://${path}`,
+            '-t',
+            mime,
+          ];
       try {
         const sp = adb.subprocess.shellProtocol;
         if (sp) {
           const proc = await sp.spawn(cmd);
           const code = await proc.exited;
           if (code !== 0) {
-            return { ok: false, reason: `am start exit ${code}` };
+            return {
+              ok: false,
+              reason: isApk
+                ? `pm install exit ${code}`
+                : `am start exit ${code}`,
+            };
           }
           return { ok: true };
         }
@@ -416,6 +454,10 @@ function createSimSync(): SyncFs {
 
     async mkdir(path) {
       simMkdir(root, path);
+    },
+
+    async remove(path) {
+      simRemove(root, path);
     },
 
     async open(_path) {

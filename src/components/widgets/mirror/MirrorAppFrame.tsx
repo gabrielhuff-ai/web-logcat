@@ -30,7 +30,7 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
   return (
     <svg
       viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="xMidYMid meet"
       className="mirror-svg"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -56,7 +56,7 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
         y={0}
         width={VIEWBOX_W}
         height={VIEWBOX_H}
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="xMidYMid meet"
       />
 
       {/* Live status-bar clock overlay. The screenshot has its own
