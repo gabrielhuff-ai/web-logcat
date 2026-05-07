@@ -94,6 +94,16 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const lastClickedRef = useRef<string | null>(null);
 
+  // Live right-click context menu. Anchored at the click position; the
+  // entry is captured at open time so the menu actions don't depend on
+  // the selection drifting underneath. `null` = closed.
+  interface ContextMenuState {
+    x: number;
+    y: number;
+    entry: SyncEntry;
+  }
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
   const [sortBy, setSortBy] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showHidden, setShowHidden] = useState(false);
@@ -297,11 +307,37 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
     },
     [sorted],
   );
+  const openOnDevice = useCallback(
+    async (entry: SyncEntry) => {
+      const fs = fsRef.current;
+      if (!fs) return;
+      const target =
+        entry.type === 'link' && entry.linkTarget
+          ? entry.linkTarget
+          : joinPath(path, entry.name);
+      const res = await fs.open(target);
+      if (res.ok) {
+        showToast(`Opened ${entry.name} on device`);
+      } else {
+        showToast(res.reason ?? 'Open failed');
+      }
+    },
+    [path, showToast],
+  );
+
   const onRowDouble = (entry: SyncEntry) => {
     if (entry.type === 'dir') {
       navigate(joinPath(path, entry.name));
     } else if (entry.type === 'link' && entry.linkTarget) {
-      navigate(entry.linkTarget);
+      // Symlinks: navigate INTO if it points at a directory, otherwise
+      // ask the device to open the resolved file. Lacking a stat call
+      // here, we treat any non-absolute-dir-looking target as a file.
+      const isDir = entry.linkTarget.endsWith('/');
+      if (isDir) navigate(entry.linkTarget);
+      else void openOnDevice(entry);
+    } else {
+      // Plain file → ask the device to open it with its default app.
+      void openOnDevice(entry);
     }
   };
 
@@ -753,6 +789,17 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
                   className={`fx-row ${selected.has(entry.name) ? 'sel ' : ''}${entry.type}`}
                   onClick={(e) => onRowClick(e, entry.name)}
                   onDoubleClick={() => onRowDouble(entry)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    // Promote the right-clicked entry into the
+                    // selection so subsequent menu actions match
+                    // what the user expects to be "current".
+                    if (!selected.has(entry.name)) {
+                      setSelected(new Set([entry.name]));
+                      lastClickedRef.current = entry.name;
+                    }
+                    setContextMenu({ x: e.clientX, y: e.clientY, entry });
+                  }}
                   draggable={entry.type === 'file'}
                   onDragStart={(e) => onRowDragStart(e, entry.name)}
                   onDragEnd={(e) => onRowDragEnd(e, entry.name)}
@@ -790,6 +837,113 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         )}
         {selected.size > 1 && <span>{selected.size} selected</span>}
       </div>
+
+      {contextMenu && (
+        <FxContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          entry={contextMenu.entry}
+          path={path}
+          onClose={() => setContextMenu(null)}
+          onOpen={() => {
+            setContextMenu(null);
+            void openOnDevice(contextMenu.entry);
+          }}
+          onPull={() => {
+            setContextMenu(null);
+            void pullFile(contextMenu.entry.name);
+          }}
+          onCopyPath={() => {
+            setContextMenu(null);
+            const full = joinPath(path, contextMenu.entry.name);
+            void navigator.clipboard
+              .writeText(full)
+              .then(() => showToast('Path copied'))
+              .catch(() => showToast('Copy failed'));
+          }}
+          onNavigate={() => {
+            const e = contextMenu.entry;
+            setContextMenu(null);
+            if (e.type === 'dir') navigate(joinPath(path, e.name));
+            else if (e.type === 'link' && e.linkTarget) navigate(e.linkTarget);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Right-click context menu ---------------------------------------------
+
+interface FxContextMenuProps {
+  x: number;
+  y: number;
+  entry: SyncEntry;
+  path: string;
+  onClose: () => void;
+  onOpen: () => void;
+  onPull: () => void;
+  onCopyPath: () => void;
+  onNavigate: () => void;
+}
+
+function FxContextMenu({
+  x,
+  y,
+  entry,
+  path,
+  onClose,
+  onOpen,
+  onPull,
+  onCopyPath,
+  onNavigate,
+}: FxContextMenuProps) {
+  void path;
+  // Click-outside + Esc dismiss. Models on the device-picker popover.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest('.fx-ctx')) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const isDir = entry.type === 'dir';
+  const isLinkToDir =
+    entry.type === 'link' && entry.linkTarget?.endsWith('/');
+  return (
+    <div
+      className="fx-ctx"
+      style={{ left: x, top: y }}
+      role="menu"
+      aria-label="File actions"
+    >
+      {(isDir || isLinkToDir) && (
+        <button type="button" role="menuitem" onClick={onNavigate}>
+          <Icons.Folder size={12} /> Open folder
+        </button>
+      )}
+      {!isDir && (
+        <button type="button" role="menuitem" onClick={onOpen}>
+          <Icons.Eye size={12} /> Open on device
+        </button>
+      )}
+      {!isDir && (
+        <button type="button" role="menuitem" onClick={onPull}>
+          <Icons.Down size={12} /> Pull to local
+        </button>
+      )}
+      <button type="button" role="menuitem" onClick={onCopyPath}>
+        <Icons.Stack size={12} /> Copy full path
+      </button>
     </div>
   );
 }

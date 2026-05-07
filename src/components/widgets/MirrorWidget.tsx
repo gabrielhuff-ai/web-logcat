@@ -401,57 +401,40 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         firstTimestampBehavior: 'offset',
       });
 
-      // Minimal H.264 NAL framer: each scrcpy "data" packet is already
-      // one access unit, but we have raw NAL bytes here. Pipe them
-      // straight into the muxer as encoded chunks; mp4-muxer handles
-      // the AVC bitstream (`addEncodedVideoChunkRaw` is documented for
-      // exactly this case in the mp4-muxer README).
-      const reader = session.video.getReader();
+      // Subscribe to raw NAL bytes via the session's fan-out callback
+      // (see `lib/scrcpy.ts`). The session keeps the upstream stream
+      // tee'd + actively drained, so we can come and go without ever
+      // touching `getReader` (which previously raced with the tee's
+      // pipe-through and produced "stream is locked to a reader").
       let cancelled = false;
       let firstTs: number | null = null;
 
-      void (async () => {
-        while (!cancelled) {
-          let chunk: { done: boolean; value?: Uint8Array };
-          try {
-            chunk = await reader.read();
-          } catch {
-            break;
-          }
-          if (chunk.done || !chunk.value) break;
-          const now = performance.now() * 1000; // microseconds
-          if (firstTs == null) firstTs = now;
-          const ts = Math.round(now - firstTs);
-          // Heuristic key-frame detection on the AnnexB stream: scrcpy
-          // produces NAL-unit boundaries at 0x00000001; type 5 (IDR)
-          // signals a keyframe in H.264. mp4-muxer is forgiving here —
-          // any non-keyframe before the first IDR is dropped.
-          const isKey = isAnnexBKeyframe(chunk.value);
-          // 16ms ≈ 60fps; the muxer just needs a non-zero duration so
-          // the produced .mp4 timestamps stay strictly monotonic.
-          muxer.addVideoChunkRaw(chunk.value, isKey ? 'key' : 'delta', ts, 16_000);
-        }
-      })();
+      const unsubscribe = session.subscribeRaw((chunk) => {
+        if (cancelled) return;
+        const now = performance.now() * 1000; // microseconds
+        if (firstTs == null) firstTs = now;
+        const ts = Math.round(now - firstTs);
+        // Heuristic key-frame detection on the AnnexB stream: scrcpy
+        // produces NAL-unit boundaries at 0x00000001; type 5 (IDR)
+        // signals a keyframe in H.264. mp4-muxer is forgiving here —
+        // any non-keyframe before the first IDR is dropped.
+        const isKey = isAnnexBKeyframe(chunk);
+        // 16ms ≈ 60fps; the muxer just needs a non-zero duration so
+        // the produced .mp4 timestamps stay strictly monotonic.
+        muxer.addVideoChunkRaw(chunk, isKey ? 'key' : 'delta', ts, 16_000);
+      });
 
       recorderRef.current = {
         async stop() {
           cancelled = true;
-          try {
-            await reader.cancel();
-          } catch {
-            /* ignore */
-          }
+          unsubscribe();
           muxer.finalize();
           const target = muxer.target as { buffer: ArrayBuffer };
           return new Blob([target.buffer], { type: 'video/mp4' });
         },
         cancel() {
           cancelled = true;
-          try {
-            void reader.cancel();
-          } catch {
-            /* ignore */
-          }
+          unsubscribe();
         },
       };
       setRecordTime(0);

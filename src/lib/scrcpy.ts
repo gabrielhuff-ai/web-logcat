@@ -28,7 +28,7 @@ import {
   type ScrcpyMediaStreamPacket,
   type ScrcpyVideoStreamMetadata,
 } from '@yume-chan/scrcpy';
-import { ReadableStream, TransformStream } from '@yume-chan/stream-extra';
+import { ReadableStream } from '@yume-chan/stream-extra';
 
 /** URL of the vendored jar relative to the deployed app root. */
 export const SCRCPY_SERVER_URL = 'scrcpy/scrcpy-server-v2.7.jar';
@@ -39,21 +39,26 @@ export const SCRCPY_VERSION = '2.7';
  * What the widget consumes after a successful `startScrcpy`.
  *
  *   - `metadata` — codec id + source dimensions reported by scrcpy.
- *   - `video`    — the raw NAL-unit byte stream (Uint8Array chunks).
- *                  Tee this once for the WebCodecs decoder and once for
- *                  the mp4 muxer.
- *   - `packets`  — same data, but already framed into
- *                  `ScrcpyMediaStreamPacket`s ready for the WebCodecs
- *                  decoder's `writable`.
+ *   - `packets`  — typed `ScrcpyMediaStreamPacket`s ready for the
+ *                  WebCodecs decoder's `writable`. The session
+ *                  internally tees the upstream byte stream and drains
+ *                  the second branch into a dispatch loop, so no extra
+ *                  locking happens here.
+ *   - `subscribeRaw(fn)` — register a listener for raw H.264 / H.265
+ *                  NAL byte chunks. The mp4 muxer subscribes only
+ *                  while recording. Subscribers are called in the
+ *                  order they registered; returns an unsubscribe
+ *                  function. Subscribing post-session-start is safe —
+ *                  the dispatch loop runs whether or not anyone is
+ *                  listening, so the tee never stalls.
  *   - `control`  — typed sender for tap / key / power / etc.
  *   - `dispose`  — kill the server process + close the transport.
  */
+export type RawChunkListener = (chunk: Uint8Array) => void;
 export interface ScrcpySession {
   metadata: ScrcpyVideoStreamMetadata;
-  /** Raw H.264 / H.265 NAL units, as produced by scrcpy. */
-  video: ReadableStream<Uint8Array>;
-  /** Same data reframed into typed packets — pipe to the decoder's writable. */
   packets: ReadableStream<ScrcpyMediaStreamPacket>;
+  subscribeRaw(listener: RawChunkListener): () => void;
   control: ScrcpyControlMessageWriter | undefined;
   dispose: () => Promise<void>;
 }
@@ -125,33 +130,63 @@ export async function startScrcpy(
   }
   const video = await (videoP as Promise<{ metadata: ScrcpyVideoStreamMetadata; stream: ReadableStream<ScrcpyMediaStreamPacket> }>);
 
-  // We hand callers two views of the byte stream:
-  //   - `packets`: typed `ScrcpyMediaStreamPacket`s for the WebCodecs
-  //     decoder's `writable`.
-  //   - `video`:  raw `Uint8Array` NAL data — the muxer needs this so
-  //     it can pair frames with the decoder's encoded chunks.
-  // Tee the source so consumers can attach independently. We do it via
-  // `tee()` on the typed-packet stream and reproject one branch back to
-  // raw bytes for the recorder path.
-  const [packetsForDecoder, packetsForRecorder] = video.stream.tee();
-
-  const rawForRecorder = packetsForRecorder.pipeThrough(
-    new TransformStream<ScrcpyMediaStreamPacket, Uint8Array>({
-      transform(packet, controller) {
-        // Both `data` and `configuration` packets carry their bytes in
-        // a `.data` field — emit them all so the muxer can sniff SPS/
-        // PPS headers as well as the IDR / non-IDR slices.
-        controller.enqueue(packet.data);
-      },
-    }),
-  );
+  // We need two independent consumers of the same upstream packet
+  // stream: the WebCodecs decoder (always live, drives the canvas)
+  // and the mp4 muxer (only live while the user is recording). The
+  // earlier shape exposed both as `ReadableStream`s tee'd from the
+  // source — but that left the recording branch locked-but-unread,
+  // which could backpressure the decoder, and the act of `getReader`-
+  // ing the locked branch later raised
+  //
+  //   "ReadableStreamDefaultReader constructor can only accept
+  //    readable streams that are not yet locked to a reader"
+  //
+  // when the user clicked Record. The reliable shape is to tee + drain
+  // both branches up front and fan out raw bytes to a callback set
+  // (no per-recording stream locking; subscribers come and go freely).
+  const [packetsForDecoder, packetsForRaw] = video.stream.tee();
+  const rawListeners = new Set<RawChunkListener>();
+  // Drain `packetsForRaw` for the lifetime of the session so the tee
+  // never stalls. Each packet's bytes are dispatched to whoever has
+  // subscribed via `subscribeRaw`. Errors / EOF are swallowed — the
+  // decoder branch surfaces them via its own `pipeTo` rejection.
+  const rawReader = packetsForRaw.getReader();
+  void (async () => {
+    try {
+      while (true) {
+        const { done, value } = await rawReader.read();
+        if (done) return;
+        if (rawListeners.size > 0) {
+          for (const fn of rawListeners) {
+            try {
+              fn(value.data);
+            } catch {
+              /* one bad subscriber shouldn't tear the loop */
+            }
+          }
+        }
+      }
+    } catch {
+      /* upstream closed / aborted — exit quietly */
+    }
+  })();
 
   return {
     metadata: video.metadata,
-    video: rawForRecorder,
     packets: packetsForDecoder,
+    subscribeRaw(fn: RawChunkListener) {
+      rawListeners.add(fn);
+      return () => {
+        rawListeners.delete(fn);
+      };
+    },
     control: client.controller,
     dispose: async () => {
+      try {
+        await rawReader.cancel();
+      } catch {
+        /* ignore */
+      }
       try {
         await client.close();
       } catch {
