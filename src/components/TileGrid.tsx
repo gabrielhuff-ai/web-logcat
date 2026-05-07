@@ -144,25 +144,6 @@ export function TileGrid({
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
 
-  // Snapshot of the layout at the moment a swap-drag begins. Each
-  // pointermove during the drag computes its preview by re-running
-  // `restructureTile` / `swapTiles` against this origin, so the
-  // restructures don't compound — drag onto the right edge of A,
-  // then onto the bottom edge of B, then back over A — the final
-  // layout matches whichever target the cursor settles on, not the
-  // path the user traced through.
-  const dragOriginLayoutRef = useRef<LayoutState | null>(null);
-
-  // Mirror of the latest `layout` so callbacks that need the current
-  // value (drag start, ratio reads) can read it without going into
-  // `useCallback`'s dep list — keeping handlers stable across layout
-  // changes is what lets the tile elements avoid full prop-flipping
-  // re-renders on every nudge of a split ratio.
-  const layoutRef = useRef(layout);
-  useEffect(() => {
-    layoutRef.current = layout;
-  }, [layout]);
-
   /**
    * Set the layout AND push the previous one onto the undo stack.
    * `transient: true` skips the history (resize/focus). Both forms
@@ -364,11 +345,6 @@ export function TileGrid({
         (l) => (l.focusId === id ? l : { ...l, focusId: id }),
         { transient: true },
       );
-      // Stash the layout we're starting from so each pointermove can
-      // recompute the live preview against a known origin (otherwise
-      // successive restructures would compound on top of each other).
-      // The drop step keeps whatever the latest preview produced.
-      dragOriginLayoutRef.current = layoutRef.current;
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -504,13 +480,15 @@ export function TileGrid({
         );
         return;
       }
-      // swap drag — live-preview semantics: every pointermove
-      // computes the layout the user *would* end up with if they
-      // released right now, and applies it transiently. Tiles
-      // animate to those positions via the CSS transition on
-      // `.tile { left/top/width/height }`. The drop step then just
-      // clears the drag state — whatever the last preview produced
-      // is committed.
+      // swap drag — overlay-preview semantics: the layout itself
+      // doesn't mutate during the drag; we just track which tile
+      // (and which of its body edges) the cursor is over and render
+      // a translucent highlight there. The drop step is the only
+      // moment we apply `swapTiles` / `restructureTile`. This
+      // matches the prior-art (IntelliJ tool windows, VS Code
+      // editor groups) and avoids the cross-the-boundary flicker
+      // that a live-mutation model produces when the user lingers
+      // near a zone edge.
       const dx = e.clientX - drag.startX;
       const dy = e.clientY - drag.startY;
       const active = drag.active || Math.hypot(dx, dy) > 5;
@@ -519,7 +497,6 @@ export function TileGrid({
         : { id: null as string | null, edge: null as SplitEdge | null };
       const targetId = probe.id;
       const edge = targetId && targetId !== drag.fromId ? probe.edge : null;
-      const origin = dragOriginLayoutRef.current;
       schedule(() => {
         setDrag((d) =>
           d && d.kind === 'swap'
@@ -533,22 +510,6 @@ export function TileGrid({
               }
             : d,
         );
-        if (!origin || !active) return;
-        // Recompute against the stashed origin so successive moves
-        // don't compound. Branches:
-        //   - hovering the source itself or empty space → keep the
-        //     origin layout (preview = no-op).
-        //   - hovering the centre of another tile → preview swap.
-        //   - hovering an edge of another tile → preview restructure.
-        let next = origin;
-        if (targetId && targetId !== drag.fromId) {
-          if (edge) {
-            next = restructureTile(origin, drag.fromId, targetId, edge);
-          } else {
-            next = swapTiles(origin, drag.fromId, targetId);
-          }
-        }
-        applyLayout(() => next, { transient: true });
       });
     };
 
@@ -560,31 +521,18 @@ export function TileGrid({
         pendingRef.current = null;
       }
       if (drag.kind === 'swap') {
-        const origin = dragOriginLayoutRef.current;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
-        if (origin && Math.hypot(dx, dy) > 5) {
+        if (Math.hypot(dx, dy) > 5) {
           const probe = hitTest(e.clientX, e.clientY);
           const target = probe.id;
           const edge = probe.edge;
-          // Recompute the final layout from the stashed origin (so
-          // the drop matches whatever was visible under the cursor)
-          // and commit it as a *non-transient* edit so it shows up
-          // in the undo stack.
-          let finalLayout = origin;
           if (target && target !== drag.fromId) {
             if (edge) {
-              finalLayout = restructureTile(origin, drag.fromId, target, edge);
+              applyLayout((l) => restructureTile(l, drag.fromId, target, edge));
             } else {
-              finalLayout = swapTiles(origin, drag.fromId, target);
+              applyLayout((l) => swapTiles(l, drag.fromId, target));
             }
-          }
-          if (finalLayout !== origin) {
-            applyLayout(() => finalLayout);
-          } else {
-            // Cancelled drop (back over self / out of grid). Restore
-            // the origin so the transient previews don't leak.
-            applyLayout(() => origin, { transient: true });
           }
         }
       }
@@ -639,7 +587,11 @@ export function TileGrid({
             const def = WIDGETS[tile.kind];
             const Comp = def.comp;
             const isMax = maximized === id;
-            const isHover = swapDrag?.hoverId === id && swapDrag.fromId !== id;
+            // The drop-target visual is now the `<DropOverlay/>` slab
+            // (full tile for centre/swap, half-tile slab for edge
+            // splits). Skip the `.tile.drop-target` outline entirely
+            // so the two cues don't double up.
+            const isHover = false;
             const isSource = swapDrag?.fromId === id;
             const style: CSSProperties = isMax
               ? {
@@ -700,6 +652,17 @@ export function TileGrid({
         </div>
       )}
 
+      {swapDrag && swapDrag.hoverId && swapDrag.fromId !== swapDrag.hoverId &&
+        (() => {
+          const targetRect = computed.leaves.find(
+            (l) => l.id === swapDrag.hoverId,
+          )?.rect;
+          if (!targetRect) return null;
+          return (
+            <DropOverlay rect={targetRect} edge={swapDrag.hoverEdge} />
+          );
+        })()}
+
       {swapDrag && layout.tiles[swapDrag.fromId] && (
         <SwapGhost
           tileKind={layout.tiles[swapDrag.fromId].kind}
@@ -757,6 +720,50 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
     >
       <div className="dash-split-line" aria-hidden />
     </div>
+  );
+}
+
+interface DropOverlayProps {
+  rect: { x: number; y: number; w: number; h: number };
+  edge: SplitEdge | null;
+}
+
+/**
+ * Translucent highlight rendered on top of the drop-target tile during
+ * a swap drag. Communicates where the dragged tile would land:
+ *   - `edge === null`           → the whole target (swap in place).
+ *   - `'left'` / `'right'`      → the corresponding 50% horizontal
+ *                                 slab (target ends up on the other
+ *                                 side).
+ *   - `'top'` / `'bottom'`      → the corresponding 50% vertical slab.
+ *
+ * The render is purely cosmetic — the underlying layout stays
+ * untouched until the pointer-up handler commits the move. That's
+ * what keeps the UX from flickering between layouts as the cursor
+ * crosses zone boundaries.
+ */
+function DropOverlay({ rect, edge }: DropOverlayProps) {
+  let left = rect.x;
+  let top = rect.y;
+  let width = rect.w;
+  let height = rect.h;
+  if (edge === 'left') {
+    width = rect.w / 2;
+  } else if (edge === 'right') {
+    left = rect.x + rect.w / 2;
+    width = rect.w / 2;
+  } else if (edge === 'top') {
+    height = rect.h / 2;
+  } else if (edge === 'bottom') {
+    top = rect.y + rect.h / 2;
+    height = rect.h / 2;
+  }
+  return (
+    <div
+      className="dash-drop-overlay"
+      style={{ left, top, width, height }}
+      aria-hidden
+    />
   );
 }
 

@@ -15,6 +15,7 @@ import { createPortal } from 'react-dom';
 import * as Icons from './Icons';
 import { Toggle } from './settings/SettingsControls';
 import { DEFAULT_TWEAKS } from '../lib/tweaks';
+import { APP_VERSION } from '../version';
 import type { Tweaks } from '../types';
 
 export interface GlobalSettingsModalProps {
@@ -133,6 +134,7 @@ export function GlobalSettingsModal({
             </button>
           </div>
         </div>
+        <div className="ws-version">v{APP_VERSION}</div>
       </div>
     </>,
     document.body,

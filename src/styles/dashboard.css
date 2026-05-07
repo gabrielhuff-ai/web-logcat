@@ -68,32 +68,6 @@
   color: var(--fg-0);
   letter-spacing: -0.01em;
 }
-/* About popover — anchored to the topbar's About icon button.
- * Reuses the device-picker popover shell (`.dash-device-pop`) and
- * adds spacing + typography for the description card. */
-.dash-about { position: relative; }
-.dash-about-pop {
-  width: 320px;
-  padding: 14px 16px;
-}
-.dash-about-title {
-  font-size: var(--t-md);
-  font-weight: 600;
-  color: var(--fg-0);
-  margin-bottom: 6px;
-}
-.dash-about-blurb {
-  margin: 0 0 12px 0;
-  font-size: var(--t-sm);
-  color: var(--fg-2);
-  line-height: 1.5;
-}
-.dash-about-version {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  color: var(--fg-3);
-  text-align: right;
-}
 
 /* Tile-internal tooltips — `.tile` clips with `overflow: hidden` for
  * rounded corners, which means the default centred tooltip
@@ -409,6 +383,30 @@
   border: 1px solid var(--glass-line);
   box-shadow: none !important;
 }
+
+/* Drop-target highlight rendered during a swap drag. Painted as a
+ * single translucent accent slab over the half (or full) of the
+ * target tile where the dragged tile would land — see
+ * `<DropOverlay/>` in TileGrid.tsx. We animate `left/top/width/
+ * height` so the slab smoothly slides between zones as the cursor
+ * crosses edge bands, and a slower opacity fade-in/out keeps the
+ * appearance / disappearance from feeling abrupt. */
+.dash-drop-overlay {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  background: oklch(from var(--accent) l c h / 0.18);
+  border: 1.5px solid oklch(from var(--accent) l c h / 0.65);
+  border-radius: var(--tile-radius, var(--r-lg));
+  transition:
+    left 140ms var(--ease-out),
+    top 140ms var(--ease-out),
+    width 140ms var(--ease-out),
+    height 140ms var(--ease-out),
+    opacity 120ms var(--ease-out);
+  animation: fadeIn 120ms var(--ease-out);
+}
+[data-perf="on"] .dash-drop-overlay { transition: none; animation: none; }
 
 /* Floating ghost shown next to the cursor while dragging a tile head. */
 .dash-swap-ghost {

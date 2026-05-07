@@ -48,6 +48,19 @@
   overflow: auto;
   padding: 4px 0 12px;
 }
+/* Version footer pinned to the bottom-right of the modal. Sits
+ * outside `.ws-body` so it stays anchored even when the body
+ * scrolls. Tiny, mono, low-contrast — same treatment as the
+ * empty-state version label. */
+.ws-version {
+  flex-shrink: 0;
+  padding: 8px 18px 12px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.04em;
+}
 .ws-section {
   padding: 14px 18px 6px;
   border-bottom: 1px solid var(--glass-line);
