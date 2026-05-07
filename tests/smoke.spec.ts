@@ -305,6 +305,13 @@ test.describe('dashboard', () => {
     await expect(logcatTile).toHaveClass(/head-hidden/);
 
     // 3rd click: hideHead → show (everything visible again).
+    // The 2nd click set `.just-toggled` on the tile so the head
+    // collapses immediately after the click instead of being held
+    // open by `:has(.tile-head:hover)`. Bouncing the mouse out of
+    // the tile clears that flag (`onMouseLeave` in `<Tile/>`) so the
+    // standard hover-reveal kicks back in and the eye button becomes
+    // clickable for this final click.
+    await page.mouse.move(0, 0);
     await logcatTile.getByRole('button', { name: /^show bar$/i }).click();
     await expect(logcatTile).not.toHaveClass(/bars-hidden/);
     await expect(logcatTile).not.toHaveClass(/head-hidden/);
