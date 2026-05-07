@@ -195,9 +195,10 @@
    single tile in compact mode looks identical to a maximised tile. */
 [data-compact="on"] .dash-grid { --tile-radius: 0px; }
 
-/* The seam between two siblings — drag to resize. The element's own
-   bounding box already stretches across the seam (horizontally or
-   vertically); a `::before` overlay paints the hover / drag highlight. */
+/* The seam between two siblings — drag to resize. The handle's own
+   bounding box stretches across the gap; on hover / drag a thin 2px
+   line paints centred along the seam (rather than filling the whole
+   10px gap, which read as "covering the right tile"). */
 .dash-split-handle {
   background: transparent;
   z-index: 2;
@@ -208,14 +209,27 @@
 .dash-split-handle::before {
   content: "";
   position: absolute;
-  inset: 0;
   background: transparent;
   transition: background 120ms;
   pointer-events: none;
 }
+.dash-split-handle.row::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-1px);
+}
+.dash-split-handle.col::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+}
 .dash-split-handle:hover::before,
 .dash-grid.dragging .dash-split-handle::before {
-  background: oklch(from var(--accent) l c h / 0.25);
+  background: var(--accent);
 }
 
 /* === Tile === */
@@ -226,6 +240,12 @@
   backdrop-filter: blur(14px);
   border: 1px solid var(--glass-line);
   border-radius: var(--tile-radius, var(--r-lg));
+  /* Establish a size container so widget content can adapt to the
+     tile's actual width (the dashboard tree means tiles can be very
+     narrow), independent of viewport width. See `@container tile`
+     rules in `widgets/logcat.css` etc. */
+  container-type: inline-size;
+  container-name: tile;
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.04) inset,
     0 4px 24px oklch(0 0 0 / 0.25);
@@ -250,8 +270,13 @@
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.06) inset,
     0 4px 24px oklch(0 0 0 / 0.25),
-    0 0 0 1px oklch(from var(--accent) l c h / 0.25);
+    0 0 0 2px var(--accent);
 }
+.tile.focused .tile-head {
+  background: oklch(from var(--accent) calc(l - 0.15) c h / 0.35);
+  border-bottom-color: oklch(from var(--accent) l c h / 0.45);
+}
+.tile.focused .tile-icon { color: var(--fg-0); }
 .tile.max {
   border-radius: 0;
   margin: 0;
@@ -324,13 +349,61 @@
   overflow: hidden;
 }
 
-/* Bars hidden — collapse any widget-internal toolbar to maximise content area */
+/* === Eye-button tristate ============================================ */
+/*
+ * `.tile.bars-hidden`  — head visible, widget-internal control bar
+ *                        collapsed (Logcat filter-bar, Dumpsys preset
+ *                        pills, …). Original v1 behaviour.
+ * `.tile.head-hidden`  — also collapses the tile head + widget bar so
+ *                        the body fills the whole tile. The 6px
+ *                        `.tile-reveal` strip at the very top is the
+ *                        hover trigger that re-shows the head; on
+ *                        hover it expands back to its normal height
+ *                        and the body shifts down (no overlay).
+ */
 .tile.bars-hidden .widget-bar,
 .tile.bars-hidden .lc-toolbar,
 .tile.bars-hidden .ds-toolbar,
 .tile.bars-hidden .fx-toolbar,
 .tile.bars-hidden .mr-toolbar,
 .tile.bars-hidden .filter-bar { display: none !important; }
+
+.tile.head-hidden .widget-bar,
+.tile.head-hidden .lc-toolbar,
+.tile.head-hidden .ds-toolbar,
+.tile.head-hidden .fx-toolbar,
+.tile.head-hidden .mr-toolbar,
+.tile.head-hidden .filter-bar { display: none !important; }
+
+.tile-reveal {
+  flex: 0 0 6px;
+  background: transparent;
+  cursor: ns-resize;
+  z-index: 3;
+}
+.tile.head-hidden .tile-head {
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-width: 0;
+  overflow: hidden;
+  transition:
+    height 180ms var(--ease-out),
+    border-bottom-width 180ms var(--ease-out);
+}
+.tile.head-hidden .tile-head > * { opacity: 0; pointer-events: none; }
+.tile.head-hidden:has(.tile-reveal:hover) .tile-head,
+.tile.head-hidden:has(.tile-head:hover) .tile-head {
+  height: 34px;
+  border-bottom-width: 1px;
+}
+.tile.head-hidden:has(.tile-reveal:hover) .tile-head > *,
+.tile.head-hidden:has(.tile-head:hover) .tile-head > * {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 120ms var(--ease-out) 60ms;
+}
 
 /* === Empty dashboard === */
 .dash-empty {

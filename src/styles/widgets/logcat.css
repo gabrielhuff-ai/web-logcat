@@ -30,3 +30,43 @@
   left: 50% !important;
   transform: translateX(-50%);
 }
+
+/* ===== Responsive collapse =====
+ * The dashboard tree means tiles can be much narrower than the viewport.
+ * Below ~520px container width the LevelRow's chip names + the column-
+ * toggle button labels are dropped so the icons + level letters fit on
+ * one row without horizontal scroll. The tile establishes a size
+ * container in `dashboard.css → .tile { container-type: inline-size; }`.
+ */
+@container tile (max-width: 520px) {
+  .lvl-pill .lvl-name { display: none; }
+  .lvl-pill { padding: 0 6px; }
+  .lvl-toggles .tb-mini { padding-right: 6px; gap: 0; font-size: 0; }
+  .lvl-toggles .tb-mini svg { font-size: var(--t-sm); }
+}
+@container tile (max-width: 380px) {
+  .lvl-stats { font-size: var(--t-xs); }
+  .lvl-stats > span:nth-child(4),
+  .lvl-stats > .rate-sep { display: none; }
+}
+
+/* Ellipsise autocomplete suggestions so they never push the dropdown
+   wider than the FilterBar (which used to overflow into neighbouring
+   tiles in narrow layouts). */
+.fb-ac { max-width: calc(100% + 16px); }
+.fb-ac-item { min-width: 0; gap: 12px; }
+.fb-ac-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-ac-hint {
+  flex: 0 0 auto;
+  margin-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}

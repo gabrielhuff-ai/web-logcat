@@ -12,6 +12,7 @@
 // there is no grid any more. Everything is proportional.
 
 import type {
+  BarMode,
   LayoutNode,
   LayoutState,
   Tile,
@@ -28,53 +29,17 @@ export const STORAGE_KEY = 'weblogcat-dashboard-v2';
 // ---- Default layout --------------------------------------------------------
 
 /**
- * Default arrangement — mirrors the HANDOFF four-tile layout:
- *
- *   ┌──────────┬─────────────────────────────────┐
- *   │          │                                 │
- *   │  Mirror  │             Logcat              │
- *   │   25%    │             ~60% h              │
- *   │          ├──────────────────┬──────────────┤
- *   │          │      Shell       │   Dumpsys    │
- *   │          │       55%        │     45%      │
- *   └──────────┴──────────────────┴──────────────┘
- *
- * As a tree (`row` = left/right seam, `col` = top/bottom seam):
- *
- *   row(0.25)
- *     ├─ leaf(mirror)
- *     └─ col(0.6)
- *          ├─ leaf(logcat)
- *          └─ row(0.555)
- *                ├─ leaf(shell)
- *                └─ leaf(dumpsys)
+ * Default arrangement — a single Logcat tile filling the dashboard.
+ * Shown only on first visit (no saved layout); thereafter `loadLayout()`
+ * restores whatever the user had open. The topbar's "Clear" button
+ * empties the dashboard back to the empty-state CTA, so users add
+ * subsequent widgets explicitly via "+ Add widget".
  */
 export function defaultLayout(): LayoutState {
   const tiles: Record<string, Tile> = {
-    w_mirror: { id: 'w_mirror', kind: 'mirror' },
     w_logcat: { id: 'w_logcat', kind: 'logcat' },
-    w_shell: { id: 'w_shell', kind: 'shell' },
-    w_dumpsys: { id: 'w_dumpsys', kind: 'dumpsys' },
   };
-  const tree: LayoutNode = {
-    type: 'split',
-    dir: 'row',
-    ratio: 0.25,
-    a: { type: 'leaf', id: 'w_mirror' },
-    b: {
-      type: 'split',
-      dir: 'col',
-      ratio: 0.6,
-      a: { type: 'leaf', id: 'w_logcat' },
-      b: {
-        type: 'split',
-        dir: 'row',
-        ratio: 5 / 9,
-        a: { type: 'leaf', id: 'w_shell' },
-        b: { type: 'leaf', id: 'w_dumpsys' },
-      },
-    },
-  };
+  const tree: LayoutNode = { type: 'leaf', id: 'w_logcat' };
   return { tiles, tree, focusId: 'w_logcat' };
 }
 
@@ -107,10 +72,35 @@ export function loadLayout(): LayoutState {
     if (parsed.tree && !leavesMatchTiles(parsed.tree, parsed.tiles)) {
       return defaultLayout();
     }
-    return parsed;
+    return migrateLayout(parsed);
   } catch {
     return defaultLayout();
   }
+}
+
+/**
+ * One-shot migration applied to whatever `loadLayout()` finds on disk.
+ * The dwindle layout's first cut shipped with `Tile.barsHidden:
+ * boolean`; the tristate landed later as `Tile.barMode`. Translate
+ * `barsHidden: true` → `'hideBars'` so users keep their preference
+ * across the upgrade. Anything already on the new shape passes
+ * through unchanged.
+ */
+function migrateLayout(s: LayoutState): LayoutState {
+  let mutated = false;
+  const tiles: Record<string, Tile> = {};
+  for (const [id, tile] of Object.entries(s.tiles)) {
+    const legacy = (tile as Tile & { barsHidden?: boolean }).barsHidden;
+    if (legacy != null && tile.barMode == null) {
+      mutated = true;
+      const { barsHidden: _legacy, ...rest } =
+        tile as Tile & { barsHidden?: boolean };
+      tiles[id] = { ...rest, barMode: legacy ? 'hideBars' : 'show' };
+    } else {
+      tiles[id] = tile;
+    }
+  }
+  return mutated ? { ...s, tiles } : s;
 }
 
 export function saveLayout(layout: LayoutState): void {
@@ -505,4 +495,20 @@ export function computeLayoutRects(
 
   walk(tree, outer, []);
   return { leaves, splits };
+}
+
+/**
+ * Cycle the eye-button tristate. Widgets without an internal control
+ * bar (`hasControlBar === false`) skip the middle "hide controls"
+ * state — for them, the cycle is just `show ↔ hideHead`.
+ */
+export function nextBarMode(
+  cur: BarMode | undefined,
+  hasControlBar: boolean,
+): BarMode {
+  const c = cur ?? 'show';
+  if (!hasControlBar) return c === 'show' ? 'hideHead' : 'show';
+  if (c === 'show') return 'hideBars';
+  if (c === 'hideBars') return 'hideHead';
+  return 'show';
 }

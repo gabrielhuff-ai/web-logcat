@@ -90,16 +90,36 @@ export interface DeviceInfo {
 export type WidgetKind = 'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror';
 
 /**
+ * Three "chrome" states a tile can be in (cycled by the eye button in
+ * the tile header):
+ *
+ *   - `'show'`     — tile head + widget control bar both visible.
+ *   - `'hideBars'` — tile head visible, widget control bar hidden.
+ *                    Skipped automatically by widgets that don't have a
+ *                    bar (Shell) — they go straight from `'show'` to
+ *                    `'hideHead'`.
+ *   - `'hideHead'` — tile head + control bar both hidden. The head
+ *                    re-reveals (and pushes the body down) when the
+ *                    user hovers the very top of the tile.
+ *
+ * Default = `'show'`. Stored on `Tile` instead of derived because the
+ * preference is per-tile-instance (one Logcat tile may want chrome
+ * hidden while another shows it).
+ */
+export type BarMode = 'show' | 'hideBars' | 'hideHead';
+
+/**
  * One placed widget instance on the dashboard.
- *   - `id`         stable, string-typed key the tile is referenced by.
- *   - `kind`       widget kind discriminator.
- *   - `barsHidden` toggles the "hide widget chrome" mode (the eye button
- *                  in the tile header). Optional — absent ⇒ false.
+ *   - `id`      stable, string-typed key the tile is referenced by.
+ *   - `kind`    widget kind discriminator.
+ *   - `barMode` chrome-visibility tristate. Optional — absent ⇒
+ *               `'show'`. Legacy `barsHidden: boolean` from earlier
+ *               versions is migrated on load: `true` → `'hideBars'`.
  */
 export interface Tile {
   id: string;
   kind: WidgetKind;
-  barsHidden?: boolean;
+  barMode?: BarMode;
 }
 
 /**
