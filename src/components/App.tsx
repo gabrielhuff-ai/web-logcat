@@ -136,7 +136,10 @@ export function App() {
         realStreamRef.current = result.stream;
         hubRef.current.reset([]);
         setDevice(result.device);
-        setDevices([result.device]);
+        // Keep the demo device in the picker so the user can flip to
+        // simulated data without disconnecting the real device — see
+        // `switchDevice` for the back-and-forth handler.
+        setDevices([result.device, FAKE_DEVICE]);
         setUsingFake(false);
         // Phase 6: thread the live Adb handle into the context so widgets
         // (Shell first) can call `adb.subprocess.shellProtocol?.spawn()`
@@ -174,11 +177,19 @@ export function App() {
 
   const switchDevice = useCallback(
     (d: DeviceInfo) => {
+      // Switching to the demo device runs through `connectFake` so the
+      // log buffer + simulator interval flip cleanly. Real devices
+      // stay live in the background — the picker keeps both rows
+      // available so the user can flip back and forth.
+      if (d.fake) {
+        void connectFake();
+        return;
+      }
       setDevice(d);
-      setUsingFake(d.fake === true);
+      setUsingFake(false);
       showToast(`Switched to ${d.model}`);
     },
-    [showToast],
+    [connectFake, showToast],
   );
 
   // ---- Global keyboard shortcuts -----------------------------------------

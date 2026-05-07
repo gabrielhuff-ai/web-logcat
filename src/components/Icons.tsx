@@ -58,6 +58,14 @@ export const EyeOff = make(
   'M3 3l18 18M10.6 10.6a3 3 0 0 0 4 4M9 5.5C10 5.2 11 5 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 4M6 7.5C3.5 9.4 2 12 2 12s4 7 10 7c1.5 0 2.9-.3 4.2-.9',
   1.6,
 );
+// Eye with a horizontal bar across the middle — the "intermediate"
+// state of the tile-chrome tristate. Reads as "partially obscured"
+// without the full closed-eye slash that EyeOff implies. Used for
+// `barMode === 'hideBars'`.
+export const EyeMinus = make(
+  'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM7 12h10',
+  1.6,
+);
 export const Chevron = make('M6 9l6 6 6-6', 1.7);
 export const ChevronRight = make('M9 6l6 6-6 6', 1.7);
 export const Device = make('M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm3 18h4', 1.6);

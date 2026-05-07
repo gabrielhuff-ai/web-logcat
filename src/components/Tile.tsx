@@ -19,6 +19,8 @@
 
 import {
   Suspense,
+  useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -69,6 +71,37 @@ export function Tile({
 
   const barMode = tile.barMode ?? 'show';
 
+  // Suppress the head's hover-reveal for a short window after the user
+  // clicks into `hideHead`, so the head collapses immediately even
+  // though the cursor is still hovering the eye button. The
+  // suppression clears on the next mouseleave or after a 1500ms
+  // safety timeout, whichever comes first — so re-hovering after
+  // moving away brings the head back as expected.
+  const [suppressReveal, setSuppressReveal] = useState(false);
+  const suppressTimerRef = useRef<number | null>(null);
+  const prevBarModeRef = useRef(barMode);
+  useEffect(() => {
+    if (prevBarModeRef.current !== 'hideHead' && barMode === 'hideHead') {
+      setSuppressReveal(true);
+      if (suppressTimerRef.current != null) {
+        window.clearTimeout(suppressTimerRef.current);
+      }
+      suppressTimerRef.current = window.setTimeout(() => {
+        setSuppressReveal(false);
+        suppressTimerRef.current = null;
+      }, 1500);
+    }
+    prevBarModeRef.current = barMode;
+  }, [barMode]);
+  useEffect(
+    () => () => {
+      if (suppressTimerRef.current != null) {
+        window.clearTimeout(suppressTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const className = [
     'tile',
     dragging && 'dragging',
@@ -77,6 +110,7 @@ export function Tile({
     maximized && 'max',
     barMode === 'hideBars' && 'bars-hidden',
     barMode === 'hideHead' && 'head-hidden',
+    suppressReveal && 'just-toggled',
   ]
     .filter(Boolean)
     .join(' ');
@@ -98,13 +132,28 @@ export function Tile({
       : barMode === 'hideBars'
         ? 'Hide chrome'
         : 'Show bar';
-  const EyeIcon = barMode === 'show' ? Icons.Eye : Icons.EyeOff;
+  // Three distinct glyphs so each tristate has its own visual
+  // identity:
+  //   - `show`     → full open eye
+  //   - `hideBars` → eye with a horizontal slash (something is
+  //                  partially obscured — the widget bar)
+  //   - `hideHead` → eye with the diagonal closed slash (everything
+  //                  hidden)
+  const EyeIcon =
+    barMode === 'show'
+      ? Icons.Eye
+      : barMode === 'hideBars'
+        ? Icons.EyeMinus
+        : Icons.EyeOff;
 
   return (
     <div
       className={className}
       style={style}
       data-tile-id={tile.id}
+      onMouseLeave={() => {
+        if (suppressReveal) setSuppressReveal(false);
+      }}
     >
       {/* When `barMode === 'hideHead'` the tile-head is collapsed to
           height 0; this thin strip at the top sits above where the

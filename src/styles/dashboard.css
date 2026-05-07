@@ -112,11 +112,13 @@
 }
 
 /* Beta release badge — sits at the bottom-right of the brand mark.
- * Pill, accent-filled, small caps. The text is hard-coded to white
- * (rather than using `--accent-fg`) because `--accent-fg` is a soft-
- * tint complement designed to read on `--accent-soft`, not on the
- * solid `--accent`. White reads cleanly on both light- and dark-mode
- * accent fills; we mirror the same choice as `.dash-add`. */
+ * Pill, accent-filled. The text uses `--bg-0` (the canvas colour) so
+ * the contrast against `--accent` stays high in both themes:
+ *   - dark mode: dark canvas on light-medium accent
+ *   - light mode: light canvas on medium accent
+ * Mirrors the `.ds-pill.on` Dumpsys preset button — shipping the same
+ * inverse-contrast trick keeps the foreground readable without
+ * theme-specific overrides. */
 .dash-brand-beta {
   align-self: flex-end;
   display: inline-flex;
@@ -125,7 +127,7 @@
   margin-left: -2px;
   margin-bottom: 1px;
   background: var(--accent);
-  color: oklch(1 0 0);
+  color: var(--bg-0);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -225,7 +227,11 @@
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px;
   background: var(--accent);
-  color: white;
+  /* Use `--bg-0` so the label keeps high contrast in both themes —
+     same inverse-contrast pattern as `.ds-pill.on` and the beta
+     badge. White read fine in light mode but turned soft on the
+     light-medium dark-mode accent. */
+  color: var(--bg-0);
   border-radius: 7px;
   font-size: var(--t-sm);
   font-weight: 500;
@@ -511,8 +517,14 @@
     border-bottom-width 180ms var(--ease-out);
 }
 .tile.head-hidden .tile-head > * { opacity: 0; pointer-events: none; }
-.tile.head-hidden:has(.tile-reveal:hover) .tile-head,
-.tile.head-hidden:has(.tile-head:hover) .tile-head {
+/* `:not(.just-toggled)` gates the hover-reveal so it doesn't fire on
+ * the click that ENTERED head-hidden mode — the mouse is still over
+ * the head from the click and the reveal would immediately undo what
+ * the user just asked for. `<Tile/>` clears the `just-toggled` class
+ * on `mouseleave` (or after a 1500ms safety timeout) so re-hovering
+ * after moving away brings the head back as expected. */
+.tile.head-hidden:not(.just-toggled):has(.tile-reveal:hover) .tile-head,
+.tile.head-hidden:not(.just-toggled):has(.tile-head:hover) .tile-head {
   height: 34px;
   border-bottom-width: 1px;
   /* Once the head is fully revealed, drop the clip so the action-
@@ -522,8 +534,8 @@
      user hovers in to read it). */
   overflow: visible;
 }
-.tile.head-hidden:has(.tile-reveal:hover) .tile-head > *,
-.tile.head-hidden:has(.tile-head:hover) .tile-head > * {
+.tile.head-hidden:not(.just-toggled):has(.tile-reveal:hover) .tile-head > *,
+.tile.head-hidden:not(.just-toggled):has(.tile-head:hover) .tile-head > * {
   opacity: 1;
   pointer-events: auto;
   transition: opacity 120ms var(--ease-out) 60ms;
