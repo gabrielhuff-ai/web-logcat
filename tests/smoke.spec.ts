@@ -11,6 +11,30 @@
 
 import { test, expect } from '@playwright/test';
 
+// Pre-seed every page with a clean slate + forced performance mode.
+//   - localStorage.clear() — keeps each test booting from in-code
+//     defaults (the dwindle layout etc.) regardless of what the
+//     previous test left behind.
+//   - `weblogcat:tweaks:v1` with `performanceMode: 'on'` — pins
+//     `[data-perf="on"]` on the document so `.tile`'s position
+//     transitions are off for bbox probes. Belt-and-braces against
+//     Playwright's `reducedMotion: 'reduce'` not always reaching
+//     the page's `matchMedia` (CI was reporting `dataPerf: 'off'`
+//     even with the config flag set).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.clear();
+      localStorage.setItem(
+        'weblogcat:tweaks:v1',
+        JSON.stringify({ performanceMode: 'on' }),
+      );
+    } catch {
+      /* SecurityError in some sandbox configs — ignore */
+    }
+  });
+});
+
 /**
  * Add a widget via the topbar palette. Returns a locator scoped to the
  * `.tile` containing that widget kind's root element. Tests prefer this
@@ -232,13 +256,21 @@ test.describe('dashboard', () => {
     await addWidget(page, /Shell/, '.sh-widget');
     await expect(page.locator('.tile')).toHaveCount(2);
 
-    const before0 = await page.locator('.tile').nth(0).getAttribute('data-tile-id');
-    const before1 = await page.locator('.tile').nth(1).getAttribute('data-tile-id');
-    expect(before0).toBeTruthy();
-    expect(before1).toBeTruthy();
+    // Select the two tiles by widget class rather than index — the
+    // dwindle layout doesn't pin tiles to fixed DOM positions and
+    // `.tile.nth(N)` was hitting transient mid-render rects in CI.
+    // Filtering by `:has(.<widget>-widget)` is unambiguous and
+    // resolves on-demand on each access.
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    const shellTile = page.locator('.tile').filter({ has: page.locator('.sh-widget') });
+    const beforeLogcatBox = await logcatTile.boundingBox();
+    const beforeShellBox = await shellTile.boundingBox();
+    if (!beforeLogcatBox || !beforeShellBox) {
+      throw new Error('tile bboxes missing');
+    }
 
-    const fromHead = page.locator('.tile').nth(0).locator('.tile-head');
-    const toHead = page.locator('.tile').nth(1).locator('.tile-head');
+    const fromHead = logcatTile.locator('.tile-head');
+    const toHead = shellTile.locator('.tile-head');
     const fromBox = await fromHead.boundingBox();
     const toBox = await toHead.boundingBox();
     if (!fromBox || !toBox) throw new Error('header bounding boxes missing');
@@ -252,20 +284,30 @@ test.describe('dashboard', () => {
     );
     await page.mouse.up();
 
-    const after0 = await page.locator('.tile').nth(0).getAttribute('data-tile-id');
-    const after1 = await page.locator('.tile').nth(1).getAttribute('data-tile-id');
-    expect(after0).toBe(before1);
-    expect(after1).toBe(before0);
+    // After the swap, the Logcat tile should sit where the Shell tile
+    // used to be and vice versa. Compare the post-drop bboxes against
+    // the pre-drop ones rather than checking `data-tile-id` ordering
+    // (which is brittle with the absolute-positioned render).
+    const afterLogcatBox = await logcatTile.boundingBox();
+    const afterShellBox = await shellTile.boundingBox();
+    if (!afterLogcatBox || !afterShellBox) throw new Error('post-drop bboxes missing');
+    expect(Math.round(afterLogcatBox.x)).toBe(Math.round(beforeShellBox.x));
+    expect(Math.round(afterShellBox.x)).toBe(Math.round(beforeLogcatBox.x));
   });
 
   test('dragging the seam between two tiles resizes them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
     await addWidget(page, /Shell/, '.sh-widget');
+    await expect(page.locator('.tile')).toHaveCount(2);
 
-    const firstTile = page.locator('.tile').nth(0);
-    const before = await firstTile.boundingBox();
+    // Same selector idiom as the swap test — by widget class instead
+    // of `.tile.nth(N)` so the resize assertion isn't sensitive to
+    // DOM ordering or transient mid-render rects.
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    const before = await logcatTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
+
 
     const handle = page.locator('.dash-split-handle--row').first();
     const handleBox = await handle.boundingBox();
@@ -283,7 +325,7 @@ test.describe('dashboard', () => {
     );
     await page.mouse.up();
 
-    const after = await firstTile.boundingBox();
+    const after = await logcatTile.boundingBox();
     if (!after) throw new Error('resized tile has no bounding box');
     expect(after.width).toBeGreaterThan(before.width);
   });

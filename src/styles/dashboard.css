@@ -700,6 +700,22 @@
    * is the only visual cue that's purely cosmetic. */
   transition: box-shadow 160ms;
 }
+/* Belt-and-braces: honour `prefers-reduced-motion` in CSS directly
+ * too, not just via the `[data-perf="on"]` attribute set by
+ * `lib/tweaks.ts`. The JS path runs in a `useEffect` and there's a
+ * one-frame window between React's first paint and the attribute
+ * landing on `<html>` — long enough for the layout-change tile
+ * width transition to start animating in CI before the override
+ * lands. The media query catches that window. */
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: box-shadow 160ms;
+  }
+  .dash-drop-overlay {
+    transition: none;
+    animation: none;
+  }
+}
 /* Resize-in-progress (`.dash-grid.dragging` is set by the seam-
  * handle drag) wants the affected tiles to track the cursor 1:1,
  * not chase it through a 220ms easing. Swap drag, conversely,
