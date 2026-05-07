@@ -259,7 +259,7 @@ function DashTopbar({
         <a
           className="icon-btn tt"
           data-tt="View source on GitHub"
-          href="https://github.com/gabrielhuff-ai/web-logcat"
+          href="https://github.com/gabrielhuff/web-logcat"
           target="_blank"
           rel="noopener noreferrer"
           aria-label="View source on GitHub"
