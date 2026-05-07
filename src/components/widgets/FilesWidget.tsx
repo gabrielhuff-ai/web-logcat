@@ -27,6 +27,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
 import * as Icons from '../Icons';
 import { useAdb } from '../../lib/adbContext';
@@ -109,6 +110,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const [showHidden, setShowHidden] = useState(false);
 
   const [transfer, setTransfer] = useState<Transfer | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
 
   // Tree pane owns its own expanded set so opening a directory in the
@@ -121,6 +123,8 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const treeScrollRef = useRef<HTMLDivElement | null>(null);
 
   // ---- List load + reload ------------------------------------------------
   const reload = useCallback(async () => {
@@ -316,7 +320,17 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           ? entry.linkTarget
           : joinPath(path, entry.name);
       const isApk = target.toLowerCase().endsWith('.apk');
+      // APK installs run `pm install` over the shell channel and
+      // commonly take 5-30s for non-trivial packages. Surface an
+      // in-progress indicator immediately so the click registers as
+      // something happening, then replace it with the outcome.
+      if (isApk) {
+        setInstalling(entry.name);
+      } else {
+        showToast(`Opening ${entry.name}…`);
+      }
       const res = await fs.open(target);
+      if (isApk) setInstalling(null);
       if (res.ok) {
         showToast(
           isApk ? `Installed ${entry.name}` : `Opened ${entry.name} on device`,
@@ -616,6 +630,118 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   };
   const onPushClick = () => fileInputRef.current?.click();
 
+  // ---- Keyboard navigation ----------------------------------------------
+  // List pane: ↑/↓ moves the cursor through `sorted`; Enter opens the
+  // focused entry (folders navigate, files open on device); Backspace /
+  // ← goes up one directory.
+  const focusListRow = useCallback((name: string) => {
+    setSelected(new Set([name]));
+    lastClickedRef.current = name;
+    const el = listScrollRef.current?.querySelector<HTMLElement>(
+      `[data-fx-row="${cssEscape(name)}"]`,
+    );
+    el?.scrollIntoView({ block: 'nearest' });
+  }, []);
+
+  const onListKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (sorted.length === 0) return;
+      const cur = lastClickedRef.current;
+      const idx = cur ? sorted.findIndex((s) => s.name === cur) : -1;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = sorted[Math.min(sorted.length - 1, idx < 0 ? 0 : idx + 1)];
+        if (next) focusListRow(next.name);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = sorted[Math.max(0, idx <= 0 ? 0 : idx - 1)];
+        if (prev) focusListRow(prev.name);
+      } else if (e.key === 'Enter' && idx >= 0) {
+        e.preventDefault();
+        onRowDouble(sorted[idx]);
+      } else if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && path !== '/') {
+        e.preventDefault();
+        goUp();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sorted, path, goUp, focusListRow],
+  );
+
+  // Tree pane: ↑/↓ walks the visible nodes in display order; → expands
+  // (or steps into when already expanded); ← collapses (or steps to
+  // parent when leaf); Enter selects the node into the list pane.
+  const visibleTreeNodes = useMemo(() => {
+    const out: { path: string; depth: number }[] = [];
+    const walk = (p: string, depth: number) => {
+      out.push({ path: p, depth });
+      if (!treeExpanded.has(p)) return;
+      const kids = treeChildren.get(p);
+      if (!kids) return;
+      for (const k of kids) {
+        const child = p === '/' ? '/' + k.name : p + '/' + k.name;
+        walk(child, depth + 1);
+      }
+    };
+    walk(ROOT, 0);
+    return out;
+  }, [treeExpanded, treeChildren]);
+
+  const focusTreeNode = useCallback((p: string) => {
+    navigate(p);
+    const el = treeScrollRef.current?.querySelector<HTMLElement>(
+      `[data-fx-tnode="${cssEscape(p)}"]`,
+    );
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [navigate]);
+
+  const onTreeKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (visibleTreeNodes.length === 0) return;
+      const idx = visibleTreeNodes.findIndex((n) => n.path === path);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = visibleTreeNodes[Math.min(visibleTreeNodes.length - 1, idx < 0 ? 0 : idx + 1)];
+        if (next) focusTreeNode(next.path);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = visibleTreeNodes[Math.max(0, idx <= 0 ? 0 : idx - 1)];
+        if (prev) focusTreeNode(prev.path);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (!treeExpanded.has(path)) {
+          setTreeExpanded((prev) => {
+            const n = new Set(prev);
+            n.add(path);
+            return n;
+          });
+          void loadTreeChildren(path);
+        } else {
+          const next = visibleTreeNodes[idx + 1];
+          if (next && next.depth > (visibleTreeNodes[idx]?.depth ?? -1)) {
+            focusTreeNode(next.path);
+          }
+        }
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (treeExpanded.has(path) && path !== ROOT) {
+          setTreeExpanded((prev) => {
+            const n = new Set(prev);
+            n.delete(path);
+            return n;
+          });
+        } else if (path !== ROOT) {
+          const parent = path.replace(/\/[^/]+$/, '') || '/';
+          focusTreeNode(parent);
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        focusTreeNode(path);
+      }
+    },
+    [path, visibleTreeNodes, treeExpanded, loadTreeChildren, focusTreeNode],
+  );
+
   // ---- Render ------------------------------------------------------------
   const widgetStyle: CSSProperties = {
     ['--widget-font-size' as string]: `${settings.fontSize}px`,
@@ -742,6 +868,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         />
       </div>
 
+      {installing && (
+        <div className="fx-xfer fx-xfer-busy" role="status" aria-live="polite">
+          <span className="fx-xfer-icon">
+            <Icons.Refresh size={12} />
+          </span>
+          <span className="fx-xfer-name">Installing · {installing}</span>
+          <div className="fx-xfer-bar">
+            <div className="fx-xfer-indeterminate" />
+          </div>
+          <span className="fx-xfer-pct">…</span>
+        </div>
+      )}
       {transfer && (
         <div className={`fx-xfer ${transfer.done ? 'done' : ''}`}>
           <span className="fx-xfer-icon">
@@ -779,7 +917,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
       )}
 
       <div className="fx-body">
-        <div className="fx-tree" role="tree">
+        <div
+          className="fx-tree"
+          role="tree"
+          tabIndex={0}
+          ref={treeScrollRef}
+          onKeyDown={onTreeKeyDown}
+          onClick={() => {
+            if (!treeScrollRef.current?.contains(document.activeElement)) {
+              treeScrollRef.current?.focus({ preventScroll: true });
+            }
+          }}
+        >
           <FxTree
             path={ROOT}
             label="/"
@@ -801,7 +950,26 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
             onSelect={(p) => navigate(p)}
           />
         </div>
-        <div className="fx-list-pane">
+        <div
+          className="fx-list-pane"
+          tabIndex={0}
+          ref={listScrollRef}
+          onKeyDown={onListKeyDown}
+          onClick={(e) => {
+            // Promote focus to the pane on any click within so arrow-
+            // key navigation works after a row click.
+            if (!listScrollRef.current?.contains(document.activeElement)) {
+              listScrollRef.current?.focus({ preventScroll: true });
+            } else if (document.activeElement !== listScrollRef.current) {
+              // Click landed on a non-focusable child (e.g. a row) —
+              // hand focus back to the pane so onKeyDown fires.
+              const t = e.target as HTMLElement;
+              if (t.tagName !== 'BUTTON' && t.tagName !== 'INPUT') {
+                listScrollRef.current?.focus({ preventScroll: true });
+              }
+            }
+          }}
+        >
           <div className="fx-listhead" role="row">
             <button
               className={`fx-h ${sortBy === 'name' ? 'on ' + sortDir : ''}`}
@@ -851,6 +1019,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
               sorted.map((entry) => (
                 <div
                   key={entry.name}
+                  data-fx-row={entry.name}
                   className={`fx-row ${selected.has(entry.name) ? 'sel ' : ''}${entry.type}`}
                   onClick={(e) => onRowClick(e, entry.name)}
                   onDoubleClick={() => onRowDouble(entry)}
@@ -991,7 +1160,12 @@ function FxContextMenu({
   const isDir = entry.type === 'dir';
   const isLinkToDir =
     entry.type === 'link' && entry.linkTarget?.endsWith('/');
-  return (
+  // Render via a portal to document.body so the `position: fixed` menu
+  // doesn't get re-rooted by a transformed ancestor (the dashboard
+  // tile chrome uses `transform` for drag-to-swap; under certain DPR
+  // / display configurations the menu was offsetting up to 25 % of
+  // the viewport on retina M-series Macs).
+  return createPortal(
     <div
       className="fx-ctx"
       style={{ left: x, top: y }}
@@ -1025,7 +1199,8 @@ function FxContextMenu({
       >
         <Icons.Clear size={12} /> Delete
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1052,6 +1227,7 @@ function FxTree(props: FxTreeProps) {
     <>
       <div
         className={`fx-tnode ${isCurrent ? 'sel' : ''}`}
+        data-fx-tnode={path}
         style={{ paddingLeft: 6 + depth * 12 }}
         onClick={() => onSelect(path)}
       >
@@ -1202,6 +1378,16 @@ function FileIcon({ entry }: { entry: SyncEntry }) {
 function joinPath(a: string, b: string): string {
   if (a === '/') return '/' + b;
   return a + '/' + b;
+}
+
+/** Quote a string for use as a CSS attribute selector value. We only
+ *  use it to look up rows by their `data-fx-row` attribute, so the
+ *  shape of the input is whatever the device's filesystem hands us. */
+function cssEscape(s: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(s);
+  }
+  return s.replace(/["\\]/g, '\\$&');
 }
 
 function formatBytes(n: number): string {

@@ -30,6 +30,15 @@ export interface FilterBarProps {
   onExport: () => void;
   /** Called when the user presses `/` outside an input — focuses the chip input. */
   registerFocusHandler?: (focus: () => void) => void;
+  /** Filter id selected for find-next-match navigation, or null. */
+  activeFilterId?: number | null;
+  setActiveFilterId?: (id: number | null) => void;
+  /** 1-based position of the currently-highlighted match (0 if none). */
+  currentMatch?: number;
+  /** Total match count for the active filter. */
+  matchCount?: number;
+  /** Advance to the next match — bound to Enter on the active chip. */
+  onAdvanceMatch?: () => void;
 }
 
 interface Suggestion {
@@ -70,6 +79,11 @@ export function FilterBar({
   setWrapLines,
   onExport,
   registerFocusHandler,
+  activeFilterId = null,
+  setActiveFilterId,
+  currentMatch = 0,
+  matchCount = 0,
+  onAdvanceMatch,
 }: FilterBarProps) {
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
@@ -201,7 +215,17 @@ export function FilterBar({
 
       <div className="fb-chips" onClick={() => inputRef.current?.focus()}>
         {filters.map((f) => (
-          <FilterChip key={f.id} f={f} onRemove={() => removeFilter(f.id)} />
+          <FilterChip
+            key={f.id}
+            f={f}
+            active={f.id === activeFilterId}
+            onActivate={() => {
+              if (!setActiveFilterId) return;
+              setActiveFilterId(activeFilterId === f.id ? null : f.id);
+            }}
+            onAdvance={onAdvanceMatch}
+            onRemove={() => removeFilter(f.id)}
+          />
         ))}
         <div className="fb-input-wrap">
           <input
@@ -246,6 +270,15 @@ export function FilterBar({
         </div>
       </div>
 
+      {activeFilterId !== null && matchCount > 0 && (
+        <div
+          className="fb-match-counter"
+          aria-label={`Match ${currentMatch} of ${matchCount}`}
+        >
+          {currentMatch}/{matchCount}
+        </div>
+      )}
+
       <button
         className={`icon-btn tt ${onlyMatches ? 'active' : ''}`}
         data-tt={onlyMatches ? 'Showing only matches' : 'Show only matches'}
@@ -272,16 +305,36 @@ export function FilterBar({
 
 interface FilterChipProps {
   f: Filter;
+  active: boolean;
+  onActivate?: () => void;
+  onAdvance?: () => void;
   onRemove: () => void;
 }
 
-function FilterChip({ f, onRemove }: FilterChipProps) {
+function FilterChip({ f, active, onActivate, onAdvance, onRemove }: FilterChipProps) {
   const style = {
     '--c-fg': `oklch(var(--fc-l) var(--fc-c) var(--fc-${f.color}))`,
     '--c-bg': `oklch(var(--fc-bg-l) var(--fc-bg-c) var(--fc-${f.color}))`,
   } as CSSProperties;
   return (
-    <span className="chip" style={style}>
+    <span
+      className={`chip ${active ? 'chip-active' : ''}`}
+      style={style}
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        // Suppress when click bubbled up from the X button.
+        if ((e.target as HTMLElement).closest('.chip-x')) return;
+        onActivate?.();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (active) onAdvance?.();
+          else onActivate?.();
+        }
+      }}
+    >
       {f.type !== 'message' && <span className="chip-type">{f.type}:</span>}
       <span className="chip-val">{f.value}</span>
       <button
