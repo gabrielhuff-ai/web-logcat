@@ -3,10 +3,12 @@
 // localhost:4173, then runs this script to render the simulated-data
 // dashboard view to docs/screenshot.png.
 //
-// v2: the connected app is a Dashboard hosting a tile grid (Mirror,
-// Logcat, Shell, Dumpsys by default). The script scopes filter chip
-// + scroll interactions to the first Logcat tile so a busy log stream
-// with highlighted matches shows up alongside the other widgets.
+// v2: the connected app is a Dashboard hosting a tile grid. The
+// default layout is a single Logcat tile; the script adds Mirror,
+// Shell, and Dumpsys via the palette so the screenshot showcases the
+// full multi-widget dashboard. Logcat-specific interactions (filter
+// chips, scroll position) are scoped to the tile that hosts
+// `.lc-widget` so they're robust against tile order changes.
 //
 // Plain ESM (no TypeScript) so we can run it under `node` directly
 // without spinning up tsx/ts-node.
@@ -37,13 +39,24 @@ await page.goto(URL, { waitUntil: 'load' });
 // not the empty state.
 await page.getByRole('button', { name: /fake data/i }).click();
 
-// Wait for the dashboard topbar + the four default tiles to mount.
+// Wait for the dashboard topbar + the (single) default Logcat tile.
 await page.waitForSelector('.dash-brand-name', { timeout: 5_000 });
 await page.waitForSelector('.tile', { timeout: 5_000 });
 
-// Logcat is index 1 in the canonical default layout (Mirror, Logcat,
-// Shell, Dumpsys). Wait for at least one streaming row in it.
-const logcatTile = page.locator('.tile').nth(1);
+// Add Mirror, Shell, and Dumpsys via the palette so the screenshot
+// shows the multi-widget dashboard rather than a lone Logcat tile.
+const addWidget = async (name) => {
+  await page.locator('.dash-add').click();
+  await page.locator('.palette-card-title', { hasText: new RegExp(`^${name}$`) }).click();
+  await page.waitForSelector('.palette', { state: 'detached', timeout: 5_000 });
+};
+await addWidget('Mirror');
+await addWidget('Shell');
+await addWidget('Dumpsys');
+
+// Locate the Logcat tile by its widget class so it's robust against
+// tile order changes from the palette adds.
+const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') }).first();
 await logcatTile.locator('.row').first().waitFor({ timeout: 5_000 });
 
 // Add two free-text chips that match many entries across both message
