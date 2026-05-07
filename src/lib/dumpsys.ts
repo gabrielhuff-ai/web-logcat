@@ -39,7 +39,11 @@ export interface DumpsysPreset {
 /** All five Phase 7 presets, ordered as in the design reference. */
 export const DUMPSYS_PRESETS: readonly DumpsysPreset[] = [
   { id: 'battery', label: 'Battery', desc: 'Power & charge state', args: ['battery'] },
-  { id: 'meminfo', label: 'Memory', desc: 'Memory usage by process', args: ['meminfo', 'system_server'] },
+  // Unfiltered `dumpsys meminfo` so we get the global "Total RAM" /
+  // "Free RAM" footer and the "Total PSS by process" table. Filtering
+  // to a single process (e.g. `system_server`) drops both sections on
+  // Android 13+ devices, which left the widget showing 0 GB.
+  { id: 'meminfo', label: 'Memory', desc: 'Memory usage by process', args: ['meminfo'] },
   { id: 'cpuinfo', label: 'CPU', desc: 'CPU usage', args: ['cpuinfo'] },
   { id: 'gfxinfo', label: 'GFX', desc: 'Frame timing for the foreground app', args: ['gfxinfo'] },
   { id: 'wifi', label: 'Wi-Fi', desc: 'Wi-Fi state & networks', args: ['wifi'] },

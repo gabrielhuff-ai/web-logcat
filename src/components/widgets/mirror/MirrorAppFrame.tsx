@@ -34,18 +34,12 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
       className="mirror-svg"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <defs>
-        {/* Fallback wallpaper if the screenshot asset is missing — keeps
-            dev environments rendering something sensible. */}
-        <linearGradient id="mr-fallback-wall" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="oklch(0.5 0.14 220)" />
-          <stop offset="100%" stopColor="oklch(0.35 0.18 320)" />
-        </linearGradient>
-      </defs>
-
-      {/* Wallpaper fallback under the image so missing PNGs don't show
-          a transparent gap. */}
-      <rect width={VIEWBOX_W} height={VIEWBOX_H} fill="url(#mr-fallback-wall)" />
+      {/* Black backdrop under the screenshot. The PNG is letterboxed
+          (its 9:20 aspect doesn't quite match the SVG viewbox), so
+          without a black fill the surrounding `.mr-screen` background
+          would bleed through and the edges read as colored bars
+          rather than phone bezels. */}
+      <rect width={VIEWBOX_W} height={VIEWBOX_H} fill="black" />
 
       {/* Pixel home-screen screenshot. `xlinkHref` for broader SVG-1.1
           tooling, `href` for SVG 2; both are accepted by browsers. */}

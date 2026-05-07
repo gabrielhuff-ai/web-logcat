@@ -87,8 +87,11 @@ function Row({ k, v, warn = false }: { k: string; v: string; warn?: boolean }) {
 }
 
 function BatteryGlyph({ pct, charging }: { pct: number; charging: boolean }) {
-  // Width scales with pct; the body inside the glyph is 66 wide.
-  const fillW = Math.max(2, Math.round((pct / 100) * 66));
+  // Body is x=2..70 (68 wide); the fill sits at x=6 with a 4px inset
+  // on the left and we mirror that with a 4px inset on the right, so
+  // the fill spans at most 60px (was 66, which made 100% overshoot
+  // the body's right edge by 2px and looked asymmetric).
+  const fillW = Math.max(2, Math.round((pct / 100) * 60));
   const colorVar =
     pct < 15
       ? 'var(--lvl-e-fg)'
