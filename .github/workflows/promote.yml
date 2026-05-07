@@ -1,0 +1,41 @@
+name: Promote main to release
+
+# Manual "promote" button — fast-forwards `release` to whatever
+# `main` currently points at. The ruleset on `release` blocks force
+# pushes and deletes; this workflow only ever does a fast-forward
+# push, so it composes cleanly with the protection.
+#
+# Trigger via the Actions tab → "Promote main to release" → Run
+# workflow. The resulting push to `release` triggers `deploy.yml`
+# which publishes production at `<owner>.github.io/web-logcat/`.
+#
+# Authenticates with `BOT_PAT` (Contents:Write, scoped to this repo)
+# rather than the default `GITHUB_TOKEN` so the resulting push
+# triggers downstream workflows (`GITHUB_TOKEN`-authored events
+# don't, under GitHub's anti-recursion rule).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-to-release
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.BOT_PAT }}
+
+      - name: Fast-forward release to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git push origin HEAD:release
