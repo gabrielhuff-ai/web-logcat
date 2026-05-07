@@ -371,6 +371,73 @@ export function swapTiles(layout: LayoutState, a: string, b: string): LayoutStat
   return { ...layout, tree: swap(layout.tree) };
 }
 
+/** Edge of a target tile a dragged tile can be dropped on to split the
+ *  target. Encodes both the resulting split direction (`top`/`bottom`
+ *  → `col`, `left`/`right` → `row`) and the ordering of source vs
+ *  target inside the new split (source goes first when the edge is
+ *  `top`/`left`, second when `bottom`/`right`). */
+export type SplitEdge = 'top' | 'right' | 'bottom' | 'left';
+
+/**
+ * Restructure the tree so that `sourceId` becomes the new neighbour
+ * of `targetId` along `edge`. Drag-to-edge UX: moving a tile onto
+ * the right edge of another tile produces `[target | source]`,
+ * onto the bottom edge produces `[target / source]`, and so on.
+ *
+ * Implemented as detach-then-insert against the existing primitives:
+ *   1. Detach `source` from its current parent split (collapse the
+ *      parent into source's sibling — same shape as `removeTile`,
+ *      just without dropping `source` from `tiles`).
+ *   2. Locate `target` in the now-shrunk tree.
+ *   3. Replace the target leaf with a new split whose two children
+ *      are `source` + `target` ordered by `edge`, with ratio 0.5.
+ *
+ * No-ops when the operation can't sensibly produce a different
+ * tree (drop on self; source is the root; target was actually
+ * source's only sibling and dropping there reproduces the same
+ * tree).
+ */
+export function restructureTile(
+  layout: LayoutState,
+  sourceId: string,
+  targetId: string,
+  edge: SplitEdge,
+): LayoutState {
+  if (sourceId === targetId || !layout.tree) return layout;
+
+  const sourcePath = findPath(layout.tree, sourceId);
+  if (!sourcePath || sourcePath.length === 0) return layout;
+  const sourceParentPath = sourcePath.slice(0, -1);
+  const sourceLastStep = sourcePath[sourcePath.length - 1];
+  const sourceParent = nodeAt(layout.tree, sourceParentPath);
+  if (sourceParent.type !== 'split') return layout;
+  const sourceSibling = sourceLastStep === 'a' ? sourceParent.b : sourceParent.a;
+  const detached = replaceAt(layout.tree, sourceParentPath, sourceSibling);
+
+  const targetPath = findPath(detached, targetId);
+  if (!targetPath) return layout;
+
+  const dir: 'row' | 'col' = edge === 'left' || edge === 'right' ? 'row' : 'col';
+  const sourceFirst = edge === 'top' || edge === 'left';
+  const split: LayoutNode = {
+    type: 'split',
+    dir,
+    ratio: 0.5,
+    a: sourceFirst
+      ? { type: 'leaf', id: sourceId }
+      : { type: 'leaf', id: targetId },
+    b: sourceFirst
+      ? { type: 'leaf', id: targetId }
+      : { type: 'leaf', id: sourceId },
+  };
+
+  return {
+    ...layout,
+    tree: replaceAt(detached, targetPath, split),
+    focusId: sourceId,
+  };
+}
+
 /**
  * Update a single split's ratio. The split is identified by the path
  * from the root; the ratio is clamped to [`MIN_RATIO`, `MAX_RATIO`].
