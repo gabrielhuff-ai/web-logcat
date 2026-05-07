@@ -6,6 +6,10 @@ name: Capture screenshot
 # refreshed image instead of committing on top. The PR auto-merges
 # once required checks pass (gated on the same `Allow auto-merge`
 # repo setting `screenshot.yml` itself depends on).
+#
+# Loop protection: `paths-ignore` excludes `docs/screenshot.png`, so
+# the auto-merge of the screenshot PR (whose squash commit only touches
+# that file) does not re-trigger this workflow.
 
 on:
   push:

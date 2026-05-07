@@ -15,6 +15,15 @@ name: Version bump
 # merges of the bump PR put the PR title verbatim onto `main`, so the
 # `startsWith` check on the commit message catches the next iteration.
 
+# Loop protection:
+#   - The bump PR's squash-merge commit message contains
+#     `chore: bump patch version` (it's the PR title verbatim, plus any
+#     `(#NN)` suffix GitHub adds). The `contains` guard skips the next
+#     iteration regardless of whether the repo's squash setting puts the
+#     PR title at byte 0 or buries it inside a "title + details" message.
+#   - `concurrency` serialises bump runs so two near-simultaneous pushes
+#     to main can't both try to publish the same patch number.
+
 on:
   push:
     branches: [main]
@@ -22,10 +31,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
 jobs:
   bump:
     if: |
-      !startsWith(github.event.head_commit.message, 'chore: bump patch version')
+      !contains(github.event.head_commit.message, 'chore: bump patch version')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
