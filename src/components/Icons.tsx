@@ -74,9 +74,6 @@ export const Wand = make('M5 19l11-11 3 3-11 11zM14 5l1.5-1.5M19 10l1.5-1.5M19 4
 // Four-point sparkle. Used for the "Simulated log stream" badge —
 // reads cleanly at 12px where Wand's tiny detail strokes pixelated.
 export const Sparkle = make('M12 3l1.6 5.4 5.4 1.6-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6z');
-// Info glyph — circled "i". Used by the About popover trigger in the
-// dashboard topbar.
-export const Info = make('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8h.01M11 12h1v5h1', 1.6);
 export const Down = make('M12 4v15m-6-6l6 6 6-6', 1.7);
 export const Lock = make('M7 10V7a5 5 0 0 1 10 0v3m-12 0h14v10H5z', 1.6);
 export const Unlock = make('M7 10V7a5 5 0 0 1 9.5-2M5 10h14v10H5z', 1.6);
