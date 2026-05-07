@@ -36,6 +36,7 @@ import {
   type DumpsysResult,
 } from '../../lib/dumpsys';
 import {
+  AUTO_REFRESH_OPTIONS,
   DUMPSYS_DEFAULTS,
   type DumpsysSettings,
   type DumpsysView,
@@ -80,14 +81,23 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
 
   const [result, setResult] = useState<DumpsysResult | null>(null);
   const [running, setRunning] = useState(false);
+  // Set true while a *silent* (auto / manual-while-result-shown) refresh
+  // is in flight. Distinct from `running` so the body keeps showing the
+  // previous result instead of falling back to the spinner. Drives the
+  // `.ds-refresh-pulse` indicator in the toolbar.
+  const [silentRefreshing, setSilentRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const runIdRef = useRef(0);
 
   const run = useCallback(
-    async (id: DumpsysPresetId) => {
+    async (id: DumpsysPresetId, opts: { silent?: boolean } = {}) => {
       const myRun = ++runIdRef.current;
-      setRunning(true);
-      setError(null);
+      const silent = opts.silent === true;
+      if (silent) setSilentRefreshing(true);
+      else {
+        setRunning(true);
+        setError(null);
+      }
       const startedAt = Date.now();
 
       try {
@@ -97,25 +107,36 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
         } else {
           res = await runDumpsys(adb, id);
         }
-        // Honour the minimum spinner duration so the "running…" UI
-        // doesn't strobe on instant results from the simulator.
-        const elapsed = Date.now() - startedAt;
-        if (elapsed < MIN_SPIN_MS) {
-          await new Promise((r) => setTimeout(r, MIN_SPIN_MS - elapsed));
+        // Honour the minimum spinner duration on visible runs so the
+        // "running…" UI doesn't strobe on instant fixture results. We
+        // skip this for silent refreshes — there's no spinner to keep
+        // company, and a 200ms artificial wait would just delay fresh
+        // data needlessly.
+        if (!silent) {
+          const elapsed = Date.now() - startedAt;
+          if (elapsed < MIN_SPIN_MS) {
+            await new Promise((r) => setTimeout(r, MIN_SPIN_MS - elapsed));
+          }
         }
         if (runIdRef.current !== myRun) return; // a newer run superseded this one
         setResult(res);
-        setRunning(false);
+        if (silent) setSilentRefreshing(false);
+        else setRunning(false);
+        setError(null);
       } catch (err) {
         if (runIdRef.current !== myRun) return;
-        setRunning(false);
+        if (silent) setSilentRefreshing(false);
+        else setRunning(false);
         if (err instanceof DumpsysUnsupportedError) {
           setError('This device does not support shell-protocol v2 (dumpsys requires it).');
           return;
         }
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
-        showToast(`dumpsys ${id} failed: ${msg}`);
+        // Don't toast on silent refresh failures — the user might not
+        // be looking, and a recurring failure (e.g. device disconnect)
+        // would spam the toast surface.
+        if (!silent) showToast(`dumpsys ${id} failed: ${msg}`);
       }
     },
     [adb, usingFake, showToast],
@@ -127,6 +148,23 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, usingFake, adb]);
 
+  // Auto-refresh interval. Resets whenever the user picks a new preset
+  // (we want a fresh window starting from the moment they switched) or
+  // changes the interval itself.
+  useEffect(() => {
+    const ms = settings.autoRefreshMs;
+    if (!ms || ms <= 0) return;
+    const t = window.setInterval(() => {
+      // Skip the tick if a foreground run is already in flight to avoid
+      // queueing requests behind the simulator's `MIN_SPIN_MS` wait or
+      // a slow device.
+      if (runIdRef.current > 0 && (running || silentRefreshing)) return;
+      void run(selected, { silent: true });
+    }, ms);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.autoRefreshMs, selected, usingFake, adb]);
+
   const onPresetClick = useCallback(
     (id: DumpsysPresetId) => {
       setSelected(id);
@@ -135,8 +173,16 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
   );
 
   const onRefresh = useCallback(() => {
-    void run(selected);
-  }, [run, selected]);
+    // Manual refresh after the first result also goes silent so the
+    // user doesn't lose context to a spinner. The first run (no
+    // result yet) still shows the spinner.
+    void run(selected, { silent: result != null });
+  }, [run, selected, result]);
+
+  const setAutoRefreshMs = useCallback(
+    (ms: number) => setSettings({ autoRefreshMs: ms }),
+    [setSettings],
+  );
 
   const onCopy = useCallback(() => {
     if (!result) return;
@@ -168,13 +214,32 @@ export function DumpsysWidget({ tileId }: DumpsysWidgetProps) {
         </div>
         <button
           type="button"
-          className="ds-icon-btn"
+          className={
+            'ds-icon-btn' + (silentRefreshing ? ' ds-refresh-pulse' : '')
+          }
           onClick={onRefresh}
-          title="Run again"
+          title={
+            settings.autoRefreshMs > 0
+              ? `Run again (auto every ${msToLabel(settings.autoRefreshMs)})`
+              : 'Run again'
+          }
           disabled={running}
         >
           <Icons.Refresh size={13} />
         </button>
+        <select
+          className="ds-auto-refresh"
+          value={settings.autoRefreshMs}
+          onChange={(e) => setAutoRefreshMs(Number(e.target.value))}
+          title="Auto-refresh interval"
+          aria-label="Auto-refresh interval"
+        >
+          {AUTO_REFRESH_OPTIONS.map((opt) => (
+            <option key={opt.ms} value={opt.ms}>
+              {opt.ms === 0 ? 'Auto: off' : `Auto: ${opt.label}`}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           className="ds-icon-btn"
@@ -253,6 +318,11 @@ function labelFor(id: DumpsysPresetId): string {
   const p = DUMPSYS_PRESETS.find((x) => x.id === id);
   if (!p) return id;
   return p.args.join(' ');
+}
+
+function msToLabel(ms: number): string {
+  const opt = AUTO_REFRESH_OPTIONS.find((o) => o.ms === ms);
+  return opt?.label ?? `${ms}ms`;
 }
 
 function renderCards(result: DumpsysResult): ReactNode {
