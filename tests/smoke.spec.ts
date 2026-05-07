@@ -309,8 +309,9 @@ test.describe('dashboard', () => {
       const gridRect = grid ? grid.getBoundingClientRect() : null;
       const tiles = Array.from(document.querySelectorAll('.tile')).map((t) => {
         const r = t.getBoundingClientRect();
+        const el = t instanceof HTMLElement ? t : null;
         return {
-          id: (t as HTMLElement).dataset.tileId,
+          id: el ? el.dataset.tileId : null,
           x: r.x,
           y: r.y,
           w: r.width,
