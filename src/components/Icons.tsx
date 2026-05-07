@@ -63,6 +63,9 @@ export const ChevronRight = make('M9 6l6 6-6 6', 1.7);
 export const Device = make('M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm3 18h4', 1.6);
 export const Usb = make('M12 2v6m-3-3l3-3 3 3M8 11h8v3a4 4 0 0 1-4 4 4 4 0 0 1-4-4zM12 18v4', 1.6);
 export const Wand = make('M5 19l11-11 3 3-11 11zM14 5l1.5-1.5M19 10l1.5-1.5M19 4l-2 2M9 17l-1 4 4-1', 1.6);
+// Four-point sparkle. Used for the "Simulated log stream" badge —
+// reads cleanly at 12px where Wand's tiny detail strokes pixelated.
+export const Sparkle = make('M12 3l1.6 5.4 5.4 1.6-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6z');
 export const Down = make('M12 4v15m-6-6l6 6 6-6', 1.7);
 export const Lock = make('M7 10V7a5 5 0 0 1 10 0v3m-12 0h14v10H5z', 1.6);
 export const Unlock = make('M7 10V7a5 5 0 0 1 9.5-2M5 10h14v10H5z', 1.6);

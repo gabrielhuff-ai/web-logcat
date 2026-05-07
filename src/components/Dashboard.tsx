@@ -12,6 +12,7 @@ import * as Icons from './Icons';
 import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
+import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
 export interface DashboardProps {
@@ -161,7 +162,7 @@ function DashTopbar({
         type="button"
         className="dash-brand"
         onClick={onDisconnect}
-        title="Disconnect and return to the empty state"
+        title={`WebLogcat v${APP_VERSION} · click to disconnect`}
       >
         <span className="dash-brand-glyph">
           <span className="dash-brand-square s1" />
@@ -169,74 +170,77 @@ function DashTopbar({
           <span className="dash-brand-square s3" />
         </span>
         <span className="dash-brand-name">WebLogcat</span>
+        <span className="dash-brand-beta" aria-label="Beta release">beta</span>
       </button>
-
-      <div className="dash-device" onClick={() => setDevOpen((o) => !o)}>
-        <span className="dash-device-status" data-fake={usingFake}>
-          <span className="dash-device-dot" />
-        </span>
-        <Icons.Device size={13} />
-        <div className="dash-device-info">
-          <div className="dash-device-name">{device.model}</div>
-          <div className="dash-device-meta">
-            {device.serial} · Android {device.androidVersion}
-          </div>
-        </div>
-        <Icons.Chevron size={11} />
-        {devOpen && (
-          <div className="dash-device-pop" onClick={(e) => e.stopPropagation()}>
-            {devices.map((d) => (
-              <button
-                key={d.serial}
-                className={`dash-device-row ${d.serial === device.serial ? 'current' : ''}`}
-                onClick={() => {
-                  onSwitchDevice(d);
-                  setDevOpen(false);
-                }}
-              >
-                <span className={`dash-device-row-dot ${d.fake ? 'fake' : ''}`} />
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ color: 'var(--fg-0)', fontSize: 'var(--t-sm)' }}>
-                    {d.model}
-                  </div>
-                  <div
-                    style={{
-                      color: 'var(--fg-3)',
-                      fontSize: 'var(--t-xs)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    {d.serial}
-                  </div>
-                </div>
-                {d.serial === device.serial && <Icons.Check size={12} />}
-              </button>
-            ))}
-            <div className="dash-device-pop-foot">
-              <button
-                onClick={() => {
-                  onPairNew();
-                  setDevOpen(false);
-                }}
-              >
-                <Icons.Plus size={11} /> Pair new device…
-              </button>
-              <button
-                onClick={() => {
-                  onDisconnect();
-                  setDevOpen(false);
-                }}
-              >
-                <Icons.Close size={11} /> Disconnect
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
 
       <div style={{ flex: 1 }} />
 
       <div className="dash-actions">
+        <div className="dash-device" onClick={() => setDevOpen((o) => !o)}>
+          <span className="dash-device-status" data-fake={usingFake}>
+            <span className="dash-device-dot" />
+          </span>
+          <Icons.Device size={13} />
+          <div className="dash-device-info">
+            <div className="dash-device-name">{device.model}</div>
+            <div className="dash-device-meta">
+              {device.serial} · Android {device.androidVersion}
+            </div>
+          </div>
+          <Icons.Chevron size={11} />
+          {devOpen && (
+            <div className="dash-device-pop" onClick={(e) => e.stopPropagation()}>
+              {devices.map((d) => (
+                <button
+                  key={d.serial}
+                  className={`dash-device-row ${d.serial === device.serial ? 'current' : ''}`}
+                  onClick={() => {
+                    onSwitchDevice(d);
+                    setDevOpen(false);
+                  }}
+                >
+                  <span className={`dash-device-row-dot ${d.fake ? 'fake' : ''}`} />
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ color: 'var(--fg-0)', fontSize: 'var(--t-sm)' }}>
+                      {d.model}
+                    </div>
+                    <div
+                      style={{
+                        color: 'var(--fg-3)',
+                        fontSize: 'var(--t-xs)',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
+                      {d.serial}
+                    </div>
+                  </div>
+                  {d.serial === device.serial && <Icons.Check size={12} />}
+                </button>
+              ))}
+              <div className="dash-device-pop-foot">
+                <button
+                  onClick={() => {
+                    onPairNew();
+                    setDevOpen(false);
+                  }}
+                >
+                  <Icons.Plus size={11} /> Pair new device…
+                </button>
+                <button
+                  onClick={() => {
+                    onDisconnect();
+                    setDevOpen(false);
+                  }}
+                >
+                  <Icons.Close size={11} /> Disconnect
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="dash-divider" />
+
         <button className="dash-add" onClick={onAddWidget}>
           <Icons.Plus size={13} /> Add widget
         </button>
