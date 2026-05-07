@@ -61,8 +61,13 @@ export interface LogListProps {
   setAutoScroll: (v: boolean) => void;
   deviceModel: string;
   hasFilters: boolean;
+  /** Highlight this entry id and let `registerScrollToId` jump to it. */
+  activeMatchId?: number | null;
   /** Imperative API: parent calls this to scroll to a given timestamp. */
   registerScrollToTs?: (fn: (ts: number) => void) => void;
+  /** Imperative API: parent calls this to scroll a specific entry id
+   *  into the centre of the viewport (used by find-next-match). */
+  registerScrollToId?: (fn: (id: number) => void) => void;
 }
 
 interface ScrollAnchor {
@@ -88,7 +93,9 @@ export function LogList({
   setAutoScroll,
   deviceModel,
   hasFilters,
+  activeMatchId,
   registerScrollToTs,
+  registerScrollToId,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowHeight = rowHeightFor(tweaks.density);
@@ -203,6 +210,25 @@ export function LogList({
     });
   }, [entries, virtualize, virtualizer, rowHeight, setAutoScroll, registerScrollToTs]);
 
+  // Imperative jump-to-id used by find-next-match. Scrolls the
+  // matched row to the centre of the viewport. Disables autoScroll
+  // so subsequent stream batches don't yank the view.
+  useEffect(() => {
+    registerScrollToId?.((id) => {
+      const idx = entries.findIndex((l) => l.id === id);
+      if (idx < 0) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      if (virtualize) {
+        virtualizer.scrollToIndex(idx, { align: 'center' });
+      } else {
+        const target = idx * rowHeight - el.clientHeight / 2 + rowHeight / 2;
+        el.scrollTop = Math.max(0, target);
+      }
+      setAutoScroll(false);
+    });
+  }, [entries, virtualize, virtualizer, rowHeight, setAutoScroll, registerScrollToId]);
+
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -243,6 +269,7 @@ export function LogList({
       pinned={pinned.has(l.id)}
       onTogglePin={onTogglePin}
       isMatch={matchSet.has(l.id)}
+      isActiveMatch={activeMatchId === l.id}
       isCrashHead={crashHeads.has(l.id)}
       expanded={expanded.has(l.id)}
       onToggleExpand={onToggleExpand}

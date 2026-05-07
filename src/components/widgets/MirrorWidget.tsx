@@ -29,6 +29,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react';
@@ -63,6 +64,15 @@ const KEYCODE_VOLUME_UP = 24 as AndroidKeyCode;
 const KEYCODE_VOLUME_DOWN = 25 as AndroidKeyCode;
 const KEYCODE_POWER = 26 as AndroidKeyCode;
 const KEYCODE_APP_SWITCH = 187 as AndroidKeyCode;
+const KEYCODE_DEL = 67 as AndroidKeyCode;
+const KEYCODE_ENTER = 66 as AndroidKeyCode;
+const KEYCODE_TAB = 61 as AndroidKeyCode;
+const KEYCODE_DPAD_UP = 19 as AndroidKeyCode;
+const KEYCODE_DPAD_DOWN = 20 as AndroidKeyCode;
+const KEYCODE_DPAD_LEFT = 21 as AndroidKeyCode;
+const KEYCODE_DPAD_RIGHT = 22 as AndroidKeyCode;
+const KEYCODE_ESCAPE = 111 as AndroidKeyCode;
+const KEYCODE_FORWARD_DEL = 112 as AndroidKeyCode;
 
 /** Android `KeyEvent` action codes. */
 const ACTION_DOWN = 0;
@@ -337,6 +347,57 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     [usingFake, injectMotion],
   );
 
+  // ---- Keyboard → scrcpy injectText / injectKeyCode --------------------
+  // Forwards keys typed while `.mr-screen` has focus to the device.
+  // Printable characters go through `injectText` (which routes via the
+  // device's clipboard machinery); a small set of editor / nav keys map
+  // to Android keycodes so backspace, arrows, enter etc. still feel
+  // native inside text fields. Modifier-laden shortcuts (Ctrl/Cmd) are
+  // intentionally left to the host browser.
+  const onScreenKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (usingFake) return;
+      const ctrl = sessionRef.current?.control;
+      if (!ctrl) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const specialMap: Record<string, AndroidKeyCode> = {
+        Backspace: KEYCODE_DEL,
+        Delete: KEYCODE_FORWARD_DEL,
+        Enter: KEYCODE_ENTER,
+        Tab: KEYCODE_TAB,
+        ArrowUp: KEYCODE_DPAD_UP,
+        ArrowDown: KEYCODE_DPAD_DOWN,
+        ArrowLeft: KEYCODE_DPAD_LEFT,
+        ArrowRight: KEYCODE_DPAD_RIGHT,
+        Escape: KEYCODE_ESCAPE,
+      };
+      const kc = specialMap[e.key];
+      if (kc !== undefined) {
+        e.preventDefault();
+        void (async () => {
+          try {
+            await ctrl.injectKeyCode({ action: ACTION_DOWN, keyCode: kc, repeat: 0, metaState: 0 });
+            await ctrl.injectKeyCode({ action: ACTION_UP, keyCode: kc, repeat: 0, metaState: 0 });
+          } catch {
+            /* control channel closed — ignored */
+          }
+        })();
+        return;
+      }
+      // Single printable character (including Space). `e.key` for
+      // composed input is the resulting text, which is exactly what
+      // `injectText` expects.
+      if (e.key.length === 1) {
+        e.preventDefault();
+        void ctrl.injectText(e.key).catch(() => {
+          /* control channel closed — ignored */
+        });
+      }
+    },
+    [usingFake],
+  );
+
   // ---- Wheel / two-finger scroll → scrcpy injectScroll ------------------
   // Forwards mouse-wheel + trackpad scroll deltas to the device as
   // `INJECT_SCROLL` control messages. scrcpy expects scroll values in
@@ -431,6 +492,8 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       showToast('Recording unavailable: missing video metadata');
       return;
     }
+    const codedWidth = session.metadata.width;
+    const codedHeight = session.metadata.height;
 
     try {
       const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
@@ -438,8 +501,8 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         target: new ArrayBufferTarget(),
         video: {
           codec: 'avc',
-          width: session.metadata.width,
-          height: session.metadata.height,
+          width: codedWidth,
+          height: codedHeight,
         },
         fastStart: 'in-memory',
         firstTimestampBehavior: 'offset',
@@ -452,6 +515,13 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       // pipe-through and produced "stream is locked to a reader").
       let cancelled = false;
       let firstTs: number | null = null;
+      // Capture SPS/PPS from the first chunks so we can build the
+      // AVCDecoderConfigurationRecord that mp4-muxer needs at finalize
+      // time. Without it the muxer dereferences a null `decoderConfig`
+      // and throws "Cannot read properties of null (reading 'colorSpace')".
+      let sps: Uint8Array | null = null;
+      let pps: Uint8Array | null = null;
+      let configWritten = false;
 
       const unsubscribe = session.subscribeRaw((chunk) => {
         if (cancelled) return;
@@ -463,15 +533,49 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         // signals a keyframe in H.264. mp4-muxer is forgiving here —
         // any non-keyframe before the first IDR is dropped.
         const isKey = isAnnexBKeyframe(chunk);
+
+        let meta: { decoderConfig: { codec: string; description: ArrayBuffer; codedWidth: number; codedHeight: number } } | undefined;
+        if (!configWritten) {
+          if (!sps || !pps) {
+            for (const nal of findNalUnits(chunk)) {
+              if (nal.type === 7 && !sps) sps = new Uint8Array(nal.payload);
+              else if (nal.type === 8 && !pps) pps = new Uint8Array(nal.payload);
+            }
+          }
+          if (sps && pps) {
+            const cfg = buildAVCDecoderConfig(sps, pps);
+            meta = {
+              decoderConfig: {
+                codec: cfg.codec,
+                description: cfg.description.buffer.slice(
+                  cfg.description.byteOffset,
+                  cfg.description.byteOffset + cfg.description.byteLength,
+                ) as ArrayBuffer,
+                codedWidth,
+                codedHeight,
+              },
+            };
+            configWritten = true;
+          }
+        }
+
         // 16ms ≈ 60fps; the muxer just needs a non-zero duration so
         // the produced .mp4 timestamps stay strictly monotonic.
-        muxer.addVideoChunkRaw(chunk, isKey ? 'key' : 'delta', ts, 16_000);
+        muxer.addVideoChunkRaw(chunk, isKey ? 'key' : 'delta', ts, 16_000, meta);
       });
 
       recorderRef.current = {
         async stop() {
           cancelled = true;
           unsubscribe();
+          if (!configWritten) {
+            // Recording stopped before the H.264 stream produced an
+            // SPS+PPS pair (typical for sub-IDR-interval recordings).
+            // Finalising now would crash inside mp4-muxer because the
+            // track has no decoderConfig; surface a friendlier error
+            // instead.
+            throw new Error('Recording too short — try again after the first keyframe');
+          }
           muxer.finalize();
           const target = muxer.target as { buffer: ArrayBuffer };
           return new Blob([target.buffer], { type: 'video/mp4' });
@@ -686,11 +790,19 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
 
       <div
         className="mr-screen"
-        onPointerDown={onScreenPointerDown}
+        tabIndex={0}
+        onPointerDown={(e) => {
+          // Take keyboard focus on first tap so subsequent typing
+          // forwards to the device. preventScroll keeps the dashboard
+          // viewport from jumping when the screen is offscreen.
+          e.currentTarget.focus({ preventScroll: true });
+          onScreenPointerDown(e);
+        }}
         onPointerMove={onScreenPointerMove}
         onPointerUp={onScreenPointerUp}
         onPointerCancel={onScreenPointerUp}
         onWheel={onScreenWheel}
+        onKeyDown={onScreenKeyDown}
       >
         {usingFake ? (
           <MirrorAppFrame time={time} taps={taps} />
@@ -721,6 +833,72 @@ function triggerDownload(blob: Blob, filename: string): void {
   // Revoke a tick later so the browser has a chance to start the
   // download.
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Walk an AnnexB byte buffer, splitting on start codes (`0x000001` or
+ * `0x00000001`) and returning each NAL unit's type + payload (without
+ * the start code). Used to pluck SPS / PPS out of the recorded stream.
+ */
+function findNalUnits(buf: Uint8Array): { type: number; payload: Uint8Array }[] {
+  const out: { type: number; payload: Uint8Array }[] = [];
+  let i = 0;
+  while (i + 2 < buf.length) {
+    let scLen = 0;
+    if (
+      i + 3 < buf.length &&
+      buf[i] === 0 && buf[i + 1] === 0 && buf[i + 2] === 0 && buf[i + 3] === 1
+    ) {
+      scLen = 4;
+    } else if (buf[i] === 0 && buf[i + 1] === 0 && buf[i + 2] === 1) {
+      scLen = 3;
+    } else {
+      i++;
+      continue;
+    }
+    const start = i + scLen;
+    let end = buf.length;
+    for (let j = start; j + 2 < buf.length; j++) {
+      if (buf[j] === 0 && buf[j + 1] === 0) {
+        if (buf[j + 2] === 1) { end = j; break; }
+        if (buf[j + 2] === 0 && j + 3 < buf.length && buf[j + 3] === 1) { end = j; break; }
+      }
+    }
+    if (end > start) {
+      out.push({ type: buf[start] & 0x1f, payload: buf.subarray(start, end) });
+    }
+    i = end;
+  }
+  return out;
+}
+
+/**
+ * Build an AVCDecoderConfigurationRecord (the `description` blob that
+ * goes inside the MP4's `avcC` box) from a single SPS + PPS pair, plus
+ * the matching `avc1.PPCCLL` codec string. mp4-muxer needs this on the
+ * track's `decoderConfig` to produce a playable file.
+ */
+function buildAVCDecoderConfig(sps: Uint8Array, pps: Uint8Array): { codec: string; description: Uint8Array } {
+  const profile = sps[1];
+  const compat = sps[2];
+  const level = sps[3];
+  const desc = new Uint8Array(11 + sps.length + pps.length);
+  let p = 0;
+  desc[p++] = 1; // configurationVersion
+  desc[p++] = profile;
+  desc[p++] = compat;
+  desc[p++] = level;
+  desc[p++] = 0xff; // 0xFC | 3 — 4-byte NAL length prefix in AVCC samples
+  desc[p++] = 0xe1; // 0xE0 | 1 SPS
+  desc[p++] = (sps.length >> 8) & 0xff;
+  desc[p++] = sps.length & 0xff;
+  desc.set(sps, p); p += sps.length;
+  desc[p++] = 0x01; // 1 PPS
+  desc[p++] = (pps.length >> 8) & 0xff;
+  desc[p++] = pps.length & 0xff;
+  desc.set(pps, p);
+  const hex = (n: number) => n.toString(16).padStart(2, '0');
+  return { codec: `avc1.${hex(profile)}${hex(compat)}${hex(level)}`, description: desc };
 }
 
 /**

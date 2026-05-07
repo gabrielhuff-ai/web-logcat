@@ -358,6 +358,40 @@
   background: oklch(from var(--c-fg) l c h / 0.18);
   opacity: 1;
 }
+.chip { cursor: pointer; outline: none; }
+.chip:focus-visible,
+.chip.chip-active {
+  box-shadow: 0 0 0 1.5px var(--c-fg), 0 0 0 3px oklch(from var(--c-fg) l c h / 0.25);
+}
+.chip.chip-active {
+  background: oklch(from var(--c-bg) calc(l + 0.04) c h);
+}
+
+/* Active match row — distinguishes the row jumped-to by find-next
+ * from the merely-matching rows (which already use `.row.match`). */
+.row.active-match {
+  background: oklch(from var(--accent) l c h / 0.18);
+}
+.row.active-match:hover {
+  background: oklch(from var(--accent) l c h / 0.24);
+}
+.row.active-match .row-rail {
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px oklch(from var(--accent) l c h / 0.55);
+}
+
+/* Match-position counter (find-next-match — see LogcatWidget). */
+.fb-match-counter {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-2);
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  background: oklch(from var(--accent) l c h / 0.12);
+  border: 1px solid oklch(from var(--accent) l c h / 0.25);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ===== Level filter pills (in lvl-bar) ===== */
 .lvl-filter { display: flex; gap: 4px; padding: 0 8px; }

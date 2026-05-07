@@ -104,6 +104,10 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [onlyMatches, setOnlyMatches] = useState(false);
+  // Find-next-match state. `activeFilterId` selects which chip drives
+  // navigation; `activeMatchId` is the currently-highlighted entry.
+  const [activeFilterId, setActiveFilterId] = useState<number | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<number | null>(null);
   // Tracks recent mouse activity over the widget body. Drives the
   // auto-fade for the scrollbar thumbs and the Resume-tail pill so
   // the chrome only appears while the user is actually interacting,
@@ -324,6 +328,71 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const focusFilterRef = useRef<(() => void) | null>(null);
   const scrollToTsRef = useRef<((ts: number) => void) | null>(null);
+  const scrollToIdRef = useRef<((id: number) => void) | null>(null);
+
+  // ---- Find-next-match orchestration -----------------------------------
+  const activeFilter = useMemo(
+    () => filters.find((f) => f.id === activeFilterId) ?? null,
+    [filters, activeFilterId],
+  );
+  // Match list = entries (in viewport order) matching just the active
+  // filter. We compute over `filtered` so level-toggle / search /
+  // onlyMatches all narrow the navigation universe sensibly.
+  const matchEntryIds = useMemo<number[]>(() => {
+    if (!activeFilter) return [];
+    const out: number[] = [];
+    for (const e of filtered) {
+      if (entryMatches(e, [activeFilter]).length > 0) out.push(e.id);
+    }
+    return out;
+  }, [filtered, activeFilter]);
+
+  const currentMatchIndex = activeMatchId != null
+    ? matchEntryIds.indexOf(activeMatchId)
+    : -1;
+
+  // Reset the highlight when the active filter changes or when the
+  // currently-highlighted entry falls out of the match set (e.g. a
+  // level toggle hid it).
+  useEffect(() => {
+    if (activeFilter == null) {
+      setActiveMatchId(null);
+      return;
+    }
+    if (activeMatchId != null && !matchEntryIds.includes(activeMatchId)) {
+      setActiveMatchId(null);
+    }
+  }, [activeFilter, activeMatchId, matchEntryIds]);
+
+  const onAdvanceMatch = useCallback(() => {
+    if (matchEntryIds.length === 0) return;
+    const next = currentMatchIndex < 0
+      ? 0
+      : (currentMatchIndex + 1) % matchEntryIds.length;
+    const id = matchEntryIds[next];
+    setActiveMatchId(id);
+    scrollToIdRef.current?.(id);
+  }, [matchEntryIds, currentMatchIndex]);
+
+  // Re-centre the highlighted match when the user toggles "only
+  // matches" — without this the viewport often jumps the highlight
+  // out of view because the row's index in `filtered` shifts.
+  useEffect(() => {
+    if (activeMatchId == null) return;
+    scrollToIdRef.current?.(activeMatchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlyMatches]);
+
+  // Setting a filter active without a previous highlight: jump to the
+  // first match immediately so "click a chip" gives instant feedback.
+  useEffect(() => {
+    if (activeFilterId == null || activeMatchId != null) return;
+    if (matchEntryIds.length === 0) return;
+    const id = matchEntryIds[0];
+    setActiveMatchId(id);
+    scrollToIdRef.current?.(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilterId, matchEntryIds.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -451,6 +520,11 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         registerFocusHandler={(fn) => {
           focusFilterRef.current = fn;
         }}
+        activeFilterId={activeFilterId}
+        setActiveFilterId={setActiveFilterId}
+        currentMatch={currentMatchIndex >= 0 ? currentMatchIndex + 1 : 0}
+        matchCount={matchEntryIds.length}
+        onAdvanceMatch={onAdvanceMatch}
       />
 
       <LevelRow
@@ -499,8 +573,12 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           setAutoScroll={setAutoScroll}
           deviceModel={device.model}
           hasFilters={filters.length > 0}
+          activeMatchId={activeMatchId}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
+          }}
+          registerScrollToId={(fn) => {
+            scrollToIdRef.current = fn;
           }}
         />
       </div>

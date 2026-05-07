@@ -80,6 +80,7 @@ export interface LogRowProps {
   pinned: boolean;
   onTogglePin: (id: number) => void;
   isMatch: boolean;
+  isActiveMatch: boolean;
   isCrashHead: boolean;
   expanded: boolean;
   onToggleExpand: (id: number) => void;
@@ -99,6 +100,7 @@ export const LogRow = memo(function LogRow({
   pinned,
   onTogglePin,
   isMatch,
+  isActiveMatch,
   isCrashHead,
   expanded,
   onToggleExpand,
@@ -137,6 +139,7 @@ export const LogRow = memo(function LogRow({
     entry.isCrashLine ? 'crash' : '',
     pinned ? 'pinned' : '',
     isMatch ? 'match' : '',
+    isActiveMatch ? 'active-match' : '',
   ]
     .filter(Boolean)
     .join(' ');

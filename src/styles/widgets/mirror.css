@@ -64,6 +64,10 @@
   position: relative;
   cursor: crosshair;
 }
+.mr-screen:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px oklch(from var(--accent) l c h / 0.45);
+}
 .mirror-svg {
   width: 100%;
   height: 100%;
