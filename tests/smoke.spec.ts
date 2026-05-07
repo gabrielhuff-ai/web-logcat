@@ -302,8 +302,10 @@ test.describe('dashboard', () => {
     const before = await logcatTile.boundingBox();
     if (!before) throw new Error('tile has no bounding box');
 
-    // TEMP DEBUG: log layout state + tile rects so the failure mode
-    // shows up in CI logs even without trace-artifact access.
+    // TEMP DEBUG: capture layout state + tile rects + dashboard size
+    // so the failure surfaces in the assertion annotation (the only
+    // place the github-actions reporter reliably renders in the
+    // run page summary).
     const debug = await page.evaluate(() => {
       const grid = document.querySelector('.dash-grid');
       const gridRect = grid ? grid.getBoundingClientRect() : null;
@@ -322,14 +324,32 @@ test.describe('dashboard', () => {
       });
       const layout = localStorage.getItem('weblogcat-dashboard-v2');
       const dataPerf = document.documentElement.getAttribute('data-perf');
+      const handles = Array.from(
+        document.querySelectorAll('.dash-split-handle'),
+      ).map((h) => {
+        const r = h.getBoundingClientRect();
+        const el = h instanceof HTMLElement ? h : null;
+        return {
+          dir: el ? el.className : null,
+          x: r.x,
+          y: r.y,
+          w: r.width,
+          h: r.height,
+        };
+      });
       return {
         grid: gridRect ? { w: gridRect.width, h: gridRect.height } : null,
+        viewport: { w: window.innerWidth, h: window.innerHeight },
         tiles,
+        handles,
         layout,
         dataPerf,
       };
     });
-    console.log('DEBUG resize test state:', JSON.stringify(debug, null, 2));
+    // Force this through the assertion so the debug payload lands in
+    // the annotation. This *intentionally* fails — remove once the
+    // root cause is identified.
+    expect(JSON.stringify(debug)).toBe('__debug_payload__');
 
     const handle = page.locator('.dash-split-handle--row').first();
     const handleBox = await handle.boundingBox();
