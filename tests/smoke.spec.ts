@@ -11,6 +11,24 @@
 
 import { test, expect } from '@playwright/test';
 
+// CI runs `workers: 1` and `fullyParallel: true` shares the same browser
+// context across tests in a worker, which means localStorage carries
+// over from one test to the next. The first test in a worker run
+// would write a layout; the next test's `page.goto('/')` would
+// rehydrate that layout and the assertions about "default = single
+// Logcat tile" or "addWidget brings count from 1 to 2" would fail
+// non-deterministically depending on file order. Clear localStorage
+// on every navigation so each test starts from the empty default.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* SecurityError in some sandbox configs — ignore */
+    }
+  });
+});
+
 /**
  * Add a widget via the topbar palette. Returns a locator scoped to the
  * `.tile` containing that widget kind's root element. Tests prefer this
