@@ -384,9 +384,14 @@
  * became Logcat-widget-internal in v2; the scrubber was deleted in
  * Phase 1. Nothing remains for a global settings drawer to host. */
 
-/* ===== Help dialog (? shortcut) ===== */
+/* ===== Help dialog (? shortcut) =====
+ * Rendered via a portal into `document.body` and pinned to the
+ * viewport with `position: fixed` so the centring is independent of
+ * the dashboard's stacking context (the previous `position: absolute`
+ * version was anchored to the nearest positioned ancestor and could
+ * end up off-centre depending on the surrounding layout). */
 .help-scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: oklch(0 0 0 / 0.4);
   backdrop-filter: blur(2px);
@@ -394,7 +399,7 @@
   animation: fadeIn 200ms var(--ease-out) both;
 }
 .help {
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);

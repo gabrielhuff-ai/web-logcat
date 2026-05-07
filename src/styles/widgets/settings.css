@@ -283,20 +283,6 @@
 .gs-row-head { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0; }
 .gs-row-desc { font-size: var(--t-xs); color: var(--fg-3); line-height: 1.5; }
 
-/* About section in global settings. App summary on top, small mono
-   version line right-aligned at the bottom of the section. */
-.gs-about-blurb {
-  margin: 0 0 12px 0;
-  font-size: var(--t-sm);
-  color: var(--fg-2);
-  line-height: 1.5;
-}
-.gs-about-version {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  color: var(--fg-3);
-  text-align: right;
-}
 
 /* `.ws-seg` defaults to inline-flex; in stacked rows we want it to
    span the full width with each segment growing. */

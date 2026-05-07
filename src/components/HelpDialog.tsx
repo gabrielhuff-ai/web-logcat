@@ -2,6 +2,7 @@
 // in an input), closes on Esc, scrim click, or the Close button.
 
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import * as Icons from './Icons';
 
 export interface HelpDialogProps {
@@ -40,7 +41,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  return createPortal(
     <>
       <div className="help-scrim" onClick={onClose} />
       <div className="help" role="dialog" aria-label="Keyboard shortcuts">
@@ -69,6 +70,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           </table>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

@@ -68,6 +68,33 @@
   color: var(--fg-0);
   letter-spacing: -0.01em;
 }
+/* About popover — anchored to the topbar's About icon button.
+ * Reuses the device-picker popover shell (`.dash-device-pop`) and
+ * adds spacing + typography for the description card. */
+.dash-about { position: relative; }
+.dash-about-pop {
+  width: 320px;
+  padding: 14px 16px;
+}
+.dash-about-title {
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--fg-0);
+  margin-bottom: 6px;
+}
+.dash-about-blurb {
+  margin: 0 0 12px 0;
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.dash-about-version {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  text-align: right;
+}
+
 /* Tile-internal tooltips — `.tile` clips with `overflow: hidden` for
  * rounded corners, which means the default centred tooltip
  * (`left: 50%; transform: translateX(-50%)`) gets cut off whenever a
