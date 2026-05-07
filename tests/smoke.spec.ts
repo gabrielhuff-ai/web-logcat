@@ -296,16 +296,16 @@ test.describe('dashboard', () => {
     await expect(logcatTile.locator('.filter-bar')).toBeVisible();
 
     // 1st click: show → hideBars (filter bar collapses).
-    await logcatTile.getByRole('button', { name: /hide widget bar/i }).click();
+    await logcatTile.getByRole('button', { name: /^hide bar$/i }).click();
     await expect(logcatTile).toHaveClass(/bars-hidden/);
     await expect(logcatTile.locator('.filter-bar')).toBeHidden();
 
     // 2nd click: hideBars → hideHead (tile head collapses too).
-    await logcatTile.getByRole('button', { name: /hide widget chrome/i }).click();
+    await logcatTile.getByRole('button', { name: /^hide chrome$/i }).click();
     await expect(logcatTile).toHaveClass(/head-hidden/);
 
     // 3rd click: hideHead → show (everything visible again).
-    await logcatTile.getByRole('button', { name: /show widget bar/i }).click();
+    await logcatTile.getByRole('button', { name: /^show bar$/i }).click();
     await expect(logcatTile).not.toHaveClass(/bars-hidden/);
     await expect(logcatTile).not.toHaveClass(/head-hidden/);
     await expect(logcatTile.locator('.filter-bar')).toBeVisible();
