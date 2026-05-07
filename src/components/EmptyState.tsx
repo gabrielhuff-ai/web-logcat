@@ -57,7 +57,9 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
           <DeviceIllustration phase={step} />
         </div>
 
-        <div className="empty-eyebrow">WEBLOGCAT</div>
+        <div className="empty-eyebrow">
+          WEBLOGCAT <span className="empty-alpha" aria-label="Alpha release">alpha</span>
+        </div>
         <h1 className="empty-title">No device connected</h1>
         <p className="empty-sub">
           Plug an Android device via USB and accept the debugging prompt. We'll stream logcat

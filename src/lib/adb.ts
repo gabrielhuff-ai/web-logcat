@@ -147,6 +147,35 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
   return { device, stream, adb };
 }
 
+/**
+ * Map a raw connect-time error to a user-friendly toast string.
+ * The browser's native `transferIn` / `transferOut` failures bubble up
+ * with a flat "A transfer error has occurred" message that doesn't
+ * help the user choose what to try next; this helper substitutes a
+ * short, actionable line for the common shapes (USB transfer, device
+ * disconnect, picker dismissal, claim-blocked) and falls back to the
+ * raw message otherwise.
+ */
+export function friendlyConnectError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/No device selected/i.test(raw)) return 'No device selected.';
+  if (/transferIn|transferOut/i.test(raw) && /transfer error/i.test(raw)) {
+    return (
+      "USB transfer failed mid-handshake. Try unplugging and replugging the device, then accept the on-device debugging prompt. (If it keeps failing, swap the USB cable — flaky cables are the most common cause.)"
+    );
+  }
+  if (/disconnected/i.test(raw)) {
+    return 'Device disconnected. Replug the cable and try again.';
+  }
+  if (/claim.*interface|protected interface/i.test(raw)) {
+    return (
+      "Couldn't claim the USB interface — another app or the OS is holding it. On macOS / Linux make sure no other adb / Android Studio is running; on Windows replace the WinUSB driver if needed."
+    );
+  }
+  if (/WebUSB is not available/i.test(raw)) return raw; // already friendly
+  return raw;
+}
+
 async function safeGetProp(adb: Adb, key: string): Promise<string> {
   try {
     return (await adb.getProp(key)).trim() || 'unknown';
@@ -237,16 +266,25 @@ export function parseLogcatLine(
   const pid = Number(pidStr);
   const trimmedTag = tag.trim();
   const level = levelStr as LogLevel;
-  // Android emits the entire FATAL EXCEPTION block under
-  // tag=`AndroidRuntime` at level E (the header line `FATAL
-  // EXCEPTION: <thread>`, the `Process: ...` line, the throwable
-  // class + message, every `\tat ...` frame, and any `Caused by:`
-  // chain). Flagging the whole block as `isCrashLine` lets
-  // `LogcatWidget`'s `crashHeads` detector and the LogList's
-  // collapsed-stack-frame UI work on real devices the same way they
-  // already do on the simulator (where `logGenerator.ts` sets the
-  // flag explicitly).
-  const isCrashLine = trimmedTag === 'AndroidRuntime' && level === 'E';
+  // Stack-trace detection. The `AndroidRuntime` + level-E case covers
+  // the canonical "FATAL EXCEPTION" block — `logGenerator.ts` already
+  // emits that shape on the simulator. But real devices emit plenty
+  // of stack traces under other tags (system_server's
+  // `HealthPackageChangesMonitor`, `PackageManager`, individual app
+  // tags, …) and the user expectation is "every Java-style stack
+  // trace folds into the crash widget". We supplement the tag check
+  // with a content-based one that looks for any of the syntactic
+  // markers a JVM stack trace exhibits:
+  //   - `\tat <fqcn>.<method>(File.java:42)` — frames
+  //   - `Caused by: …` — chained throwables
+  //   - `… 27 more` — frame elision
+  //   - `<package>.<Throwable>: <message>` — the throwable header
+  // Combined with the `crashHeads` detector in `<LogcatWidget/>`
+  // (first contiguous-run match becomes the head, rest collapse
+  // under it), this is enough to fold typical real-device traces.
+  const isCrashLine =
+    level === 'E' &&
+    (trimmedTag === 'AndroidRuntime' || looksLikeStackTrace(message));
   return {
     id: ++_id,
     ts: Date.now(),
@@ -258,4 +296,18 @@ export function parseLogcatLine(
     message,
     isCrashLine,
   };
+}
+
+const STACK_FRAME_RE = /^\s*at\s+[\w$.]+(?:\.<init>)?\(/;
+const CAUSED_BY_RE = /^\s*Caused by:/;
+const FRAME_ELISION_RE = /^\s*\.\.\.\s*\d+\s+(?:more|common\s+frames)/;
+const THROWABLE_HEADER_RE = /^[\w$.]+(?:Exception|Error|Throwable)(?::\s|$)/;
+
+function looksLikeStackTrace(message: string): boolean {
+  return (
+    STACK_FRAME_RE.test(message) ||
+    CAUSED_BY_RE.test(message) ||
+    FRAME_ELISION_RE.test(message) ||
+    THROWABLE_HEADER_RE.test(message)
+  );
 }

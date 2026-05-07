@@ -114,10 +114,10 @@ export function App() {
   const connectReal = useCallback(
     async (setStep?: (step: ConnectStep) => void) => {
       try {
-        const { connectDevice } = await import('../lib/adb');
+        const { connectDevice, friendlyConnectError } = await import('../lib/adb');
         const result = await connectDevice({
           onEntry: (e) => queueEntries([e]),
-          onError: (err) => showToast(err.message),
+          onError: (err) => showToast(friendlyConnectError(err)),
           onPhase: (phase) => {
             if (phase === 'requesting') setStep?.(1);
             else if (phase === 'authenticating') setStep?.(2);
@@ -147,8 +147,8 @@ export function App() {
         setAdb(result.adb);
         showToast(`Connected to ${result.device.model}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to connect';
-        showToast(msg);
+        const { friendlyConnectError } = await import('../lib/adb');
+        showToast(friendlyConnectError(err));
         throw err;
       }
     },

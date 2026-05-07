@@ -171,7 +171,7 @@ function DashTopbar({
           <span className="dash-brand-square s3" />
         </span>
         <span className="dash-brand-name">WebLogcat</span>
-        <span className="dash-brand-beta" aria-label="Beta release">beta</span>
+        <span className="dash-brand-beta" aria-label="Alpha release">alpha</span>
       </button>
 
       <div style={{ flex: 1 }} />
