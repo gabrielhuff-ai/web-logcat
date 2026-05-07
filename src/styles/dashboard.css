@@ -196,9 +196,15 @@
 [data-compact="on"] .dash-grid { --tile-radius: 0px; }
 
 /* The seam between two siblings — drag to resize. The handle's own
-   bounding box stretches across the gap; on hover / drag a thin 2px
-   line paints centred along the seam (rather than filling the whole
-   10px gap, which read as "covering the right tile"). */
+   bounding box stretches across the gap (10px in normal mode, ~6px
+   hit-zone in compact mode); on hover / drag a thin 2px line paints
+   centred along the seam.
+   We use a `linear-gradient` rather than a positioned 2px-wide box
+   because the latter rendered as a fat solid block in the row case
+   (likely a sub-pixel quirk where `width: 2px` + `left: calc(50% -
+   1px)` resolved to a wider extent on certain DPRs). The gradient
+   draws an explicit 2px-wide solid slice on a transparent background
+   and is bullet-proof. */
 .dash-split-handle {
   background: transparent;
   z-index: 2;
@@ -209,25 +215,30 @@
 .dash-split-handle::before {
   content: "";
   position: absolute;
+  inset: 0;
   background: transparent;
   transition: background 120ms;
   pointer-events: none;
 }
-.dash-split-handle.row::before {
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 1px);
-  width: 2px;
+.dash-split-handle.row:hover::before,
+.dash-grid.dragging .dash-split-handle.row::before {
+  background: linear-gradient(
+    to right,
+    transparent calc(50% - 1px),
+    var(--accent) calc(50% - 1px),
+    var(--accent) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
 }
-.dash-split-handle.col::before {
-  left: 0;
-  right: 0;
-  top: calc(50% - 1px);
-  height: 2px;
-}
-.dash-split-handle:hover::before,
-.dash-grid.dragging .dash-split-handle::before {
-  background: var(--accent);
+.dash-split-handle.col:hover::before,
+.dash-grid.dragging .dash-split-handle.col::before {
+  background: linear-gradient(
+    to bottom,
+    transparent calc(50% - 1px),
+    var(--accent) calc(50% - 1px),
+    var(--accent) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
 }
 
 /* === Tile === */
@@ -284,7 +295,17 @@
   background: oklch(from var(--accent) calc(l - 0.15) c h / 0.14);
   border-bottom-color: oklch(from var(--accent) l c h / 0.35);
 }
-.tile.focused .tile-icon { color: var(--fg-0); }
+.tile.focused .tile-icon,
+.tile.focused .tile-title,
+.tile.focused .tile-grip { color: var(--fg-0); opacity: 1; }
+/* Match the title's contrast on the chrome action buttons too —
+   default `var(--fg-3)` was hard to see against the accent-tinted
+   focused head bar. */
+.tile.focused .tile-btn { color: var(--fg-0); }
+.tile.focused .tile-btn:hover {
+  background: oklch(from var(--accent) calc(l - 0.2) c h / 0.25);
+  color: var(--fg-0);
+}
 .tile.max {
   border-radius: 0;
   margin: 0;
@@ -383,8 +404,19 @@
 .tile.head-hidden .mr-toolbar,
 .tile.head-hidden .filter-bar { display: none !important; }
 
+/* Reveal-zone overlay for the head-hidden tristate. We *used* to put
+   this strip in the flex flow (`flex: 0 0 6px`), which left a 6px
+   empty band at the top of every chrome-hidden tile. Switching to
+   absolute positioning + `pointer-events: none` outside the strip
+   leaves the body free to use the full tile height; the 6px strip
+   only catches hover, then the head slides back in via flex flow
+   (still pushing the body down — no overlay during display). */
 .tile-reveal {
-  flex: 0 0 6px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
   background: transparent;
   cursor: ns-resize;
   z-index: 3;

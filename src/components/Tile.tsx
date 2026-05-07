@@ -81,17 +81,23 @@ export function Tile({
     .filter(Boolean)
     .join(' ');
 
-  // Eye-button label / icon depend on the *next* state. With the bar:
-  // show → hideBars → hideHead → show. Without: show ↔ hideHead.
+  // Eye-button tooltip describes the *next* state the click will land
+  // on. Cycle:
+  //   - widget with bar:    show → hideBars → hideHead → show
+  //   - widget without bar: show ↔ hideHead
+  // Labels are deliberately short (≤ 11 chars) so the `tt::after`
+  // tooltip never gets clipped by the tile's `overflow: hidden` when
+  // the eye sits near a tile edge — that was breaking the tooltip on
+  // the 'hideBars' state for narrow tiles.
   const hasBar = def.hasControlBar !== false;
   const eyeLabel =
     barMode === 'show'
       ? hasBar
-        ? 'Hide widget bar'
-        : 'Hide widget chrome'
+        ? 'Hide bar'
+        : 'Hide chrome'
       : barMode === 'hideBars'
-        ? 'Hide widget chrome'
-        : 'Show widget bar';
+        ? 'Hide chrome'
+        : 'Show bar';
   const EyeIcon = barMode === 'show' ? Icons.Eye : Icons.EyeOff;
 
   return (

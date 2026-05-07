@@ -51,6 +51,7 @@ import {
   MAX_RATIO,
 } from '../lib/layout';
 import { useDashboardChrome } from '../lib/dashboardChrome';
+import { scheduleUrlUpdate } from '../lib/urlState';
 import type { LayoutState, WidgetKind } from '../types';
 
 /** Inter-tile gap in pixels (also the seam-handle thickness). */
@@ -203,6 +204,10 @@ export function TileGrid({
   useEffect(() => {
     saveLayout(layout);
     onLayoutChange?.(layout);
+    // Reflect the new layout in the URL so sharing / pasting copies it
+    // verbatim. `scheduleUrlUpdate` debounces internally, so rapid
+    // consecutive changes (e.g. mid-resize) only produce one URL write.
+    scheduleUrlUpdate();
   }, [layout, onLayoutChange]);
 
   // ---- Topbar imperatives ------------------------------------------------

@@ -24,6 +24,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAdb } from './adbContext';
+import { scheduleUrlUpdate } from './urlState';
 import type { WidgetKind } from '../types';
 
 // ---- Storage key helpers ---------------------------------------------------
@@ -247,6 +248,12 @@ export function useTileSettings<T extends object>(
         const next = { ...prev, ...patch };
         writeSettings(key, next);
         notify(key);
+        // Per-tile preferences (filter chips, density, font size,
+        // …) are part of the dashboard's serialised state, so any
+        // edit also schedules a URL update. The writer is debounced
+        // internally — fast successive `set()` calls (e.g. dragging
+        // a font-size slider) collapse to one URL write.
+        scheduleUrlUpdate();
         return next;
       });
     },
