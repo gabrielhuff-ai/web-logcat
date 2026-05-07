@@ -29,7 +29,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { CSSProperties } from 'react';
 import * as Icons from '../Icons';
@@ -45,6 +45,7 @@ import {
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
 import type { ScrcpySession } from '../../lib/scrcpy';
+import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
 import type { AndroidKeyCode } from '@yume-chan/scrcpy';
 
 export interface MirrorWidgetProps {
@@ -67,8 +68,9 @@ const ACTION_DOWN = 0;
 const ACTION_UP = 1;
 
 /** Android `MotionEvent` action codes used for touch injection. */
-const MOTION_DOWN = 0;
-const MOTION_UP = 1;
+const MOTION_DOWN = AndroidMotionEventAction.Down;
+const MOTION_UP = AndroidMotionEventAction.Up;
+const MOTION_MOVE = AndroidMotionEventAction.Move;
 
 /** scrcpy `setScreenPowerMode` modes. */
 const POWER_MODE_OFF = 0;
@@ -242,55 +244,96 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     };
   }, [adb, usingFake, showToast]);
 
-  // ---- Click on screen → tap (real or simulated) -----------------------
-  const handleTap = useCallback(
-    (e: ReactMouseEvent<HTMLDivElement>) => {
-      const stage = e.currentTarget;
-      const rect = stage.getBoundingClientRect();
-      const fracX = (e.clientX - rect.left) / rect.width;
-      const fracY = (e.clientY - rect.top) / rect.height;
+  // ---- Pointer drag → MOTION_DOWN / MOVE / UP --------------------------
+  // The previous version only emitted DOWN+UP back to back, so the
+  // device only ever saw single taps — scroll, swipe, long-press all
+  // resolved to a no-op tap on the centre of whatever the user touched.
+  // Pointer events let us forward MOVE deltas while the pointer is
+  // pressed, so dragging a finger across the screen surface produces
+  // a real fling on the device.
+  const dragRef = useRef<{ pointerId: bigint; lastX: number; lastY: number } | null>(null);
 
-      if (usingFake) {
-        // Simulator path — append a tap ripple in SVG coordinates.
-        const id = ++tapIdRef.current;
-        setTaps((prev) => [...prev, { id, x: fracX * 360, y: fracY * 760, r: 8, op: 0.9 }]);
-        return;
-      }
+  const screenFrac = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      fracX: (e.clientX - rect.left) / rect.width,
+      fracY: (e.clientY - rect.top) / rect.height,
+    };
+  }, []);
 
-      const session = sessionRef.current;
-      const ctrl = session?.control;
+  const injectMotion = useCallback(
+    async (action: AndroidMotionEventAction, fracX: number, fracY: number) => {
+      const ctrl = sessionRef.current?.control;
       const src = srcSizeRef.current;
       if (!ctrl || src.width === 0 || src.height === 0) return;
-
-      // Inject DOWN + UP back to back. scrcpy treats this as a tap.
-      // The control message carries the *video* size (i.e. the
-      // dimensions of the H.264 stream), which is what the device
-      // measures pointer coordinates against.
       const videoWidth = src.width;
       const videoHeight = src.height;
       const x = Math.round(fracX * videoWidth);
       const y = Math.round(fracY * videoHeight);
-      // -2n is `Finger` in scrcpy's PointerId convention; using a
-      // distinct id from -1n (mouse) avoids collision with the host
-      // mouse pointer when both are simultaneously injected.
-      const pointerId = -2n;
-      const baseMsg = {
-        pointerId,
-        pointerX: x,
-        pointerY: y,
-        videoWidth,
-        videoHeight,
-        actionButton: 0,
-        buttons: 0,
-      };
-      void ctrl
-        .injectTouch({ ...baseMsg, action: MOTION_DOWN, pressure: 1 })
-        .then(() => ctrl.injectTouch({ ...baseMsg, action: MOTION_UP, pressure: 0 }))
-        .catch(() => {
-          /* control channel closed — ignored */
+      // -2n = scrcpy's `Finger` PointerId, distinct from -1n (mouse).
+      try {
+        await ctrl.injectTouch({
+          pointerId: -2n,
+          pointerX: x,
+          pointerY: y,
+          videoWidth,
+          videoHeight,
+          actionButton: 0,
+          buttons: 0,
+          action,
+          pressure: action === MOTION_UP ? 0 : 1,
         });
+      } catch {
+        /* control channel closed — ignored */
+      }
     },
-    [usingFake],
+    [],
+  );
+
+  const onScreenPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const { fracX, fracY } = screenFrac(e);
+      // Capture the pointer so we keep getting events even when the
+      // cursor leaves the screen surface mid-swipe.
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragRef.current = { pointerId: -2n, lastX: fracX, lastY: fracY };
+      if (usingFake) {
+        const id = ++tapIdRef.current;
+        setTaps((prev) => [...prev, { id, x: fracX * 360, y: fracY * 760, r: 8, op: 0.9 }]);
+        return;
+      }
+      void injectMotion(MOTION_DOWN, fracX, fracY);
+    },
+    [usingFake, screenFrac, injectMotion],
+  );
+
+  const onScreenPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!dragRef.current) return;
+      const { fracX, fracY } = screenFrac(e);
+      dragRef.current.lastX = fracX;
+      dragRef.current.lastY = fracY;
+      if (usingFake) return;
+      void injectMotion(MOTION_MOVE, fracX, fracY);
+    },
+    [usingFake, screenFrac, injectMotion],
+  );
+
+  const onScreenPointerUp = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!dragRef.current) return;
+      const last = dragRef.current;
+      dragRef.current = null;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore — capture may already be released */
+      }
+      if (usingFake) return;
+      void injectMotion(MOTION_UP, last.lastX, last.lastY);
+    },
+    [usingFake, injectMotion],
   );
 
   // ---- Hardware-button helpers -----------------------------------------
@@ -614,7 +657,13 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         <span style={{ flex: 1 }} />
       </div>
 
-      <div className="mr-screen" onClick={handleTap}>
+      <div
+        className="mr-screen"
+        onPointerDown={onScreenPointerDown}
+        onPointerMove={onScreenPointerMove}
+        onPointerUp={onScreenPointerUp}
+        onPointerCancel={onScreenPointerUp}
+      >
         {usingFake ? (
           <MirrorAppFrame time={time} taps={taps} />
         ) : (
