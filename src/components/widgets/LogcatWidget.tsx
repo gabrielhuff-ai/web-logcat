@@ -374,6 +374,16 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     scrollToIdRef.current?.(id);
   }, [matchEntryIds, currentMatchIndex]);
 
+  const onRetreatMatch = useCallback(() => {
+    if (matchEntryIds.length === 0) return;
+    const prev = currentMatchIndex <= 0
+      ? matchEntryIds.length - 1
+      : currentMatchIndex - 1;
+    const id = matchEntryIds[prev];
+    setActiveMatchId(id);
+    scrollToIdRef.current?.(id);
+  }, [matchEntryIds, currentMatchIndex]);
+
   // Re-centre the highlighted match when the user toggles "only
   // matches" — without this the viewport often jumps the highlight
   // out of view because the row's index in `filtered` shifts.
@@ -525,6 +535,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         currentMatch={currentMatchIndex >= 0 ? currentMatchIndex + 1 : 0}
         matchCount={matchEntryIds.length}
         onAdvanceMatch={onAdvanceMatch}
+        onRetreatMatch={onRetreatMatch}
       />
 
       <LevelRow

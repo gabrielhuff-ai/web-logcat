@@ -162,6 +162,17 @@ export function createSync(adb: Adb | null): SyncFs {
  * the device or transport closes the sync socket mid-response (no FAIL
  * frame). The user's only signal is the toast, so spell out what to try.
  */
+/**
+ * Wrap `s` in POSIX-shell single quotes, escaping any internal
+ * single quotes. Required because `AdbShellProtocolSubprocessService`
+ * joins argv with spaces, so a path like `Foo Bar.pdf` reaches the
+ * device as three tokens unless we quote it. Single quotes also
+ * neutralise every other shell metacharacter (`$`, `;`, `&`, etc.).
+ */
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
 function annotateSyncError(e: unknown, op: 'push' | 'pull', path: string): Error {
   const original = e instanceof Error ? e : new Error(String(e));
   if (/ExactReadable ended/i.test(original.message)) {
@@ -306,7 +317,7 @@ function createRealSync(adb: Adb): SyncFs {
       // — `-p` is a no-op when the path already exists, which matches
       // the widget's "create folder" UX (idempotent on retries).
       const sp = adb.subprocess.shellProtocol;
-      const cmd = ['mkdir', '-p', path];
+      const cmd = ['mkdir', '-p', shellQuote(path)];
       if (sp) {
         const proc = await sp.spawn(cmd);
         const code = await proc.exited;
@@ -325,7 +336,7 @@ function createRealSync(adb: Adb): SyncFs {
       // missing-target / permission errors so a refresh-then-delete
       // race doesn't crash the widget.
       const sp = adb.subprocess.shellProtocol;
-      const cmd = ['rm', '-rf', path];
+      const cmd = ['rm', '-rf', shellQuote(path)];
       if (sp) {
         const proc = await sp.spawn(cmd);
         const code = await proc.exited;
@@ -338,37 +349,38 @@ function createRealSync(adb: Adb): SyncFs {
     },
 
     async open(path) {
-      // APKs get the `pm install -r` treatment: matches what tapping
-      // an .apk in the device's stock Files app does (PackageInstaller
-      // dialog over ADB's shell uid grant). The plain `am start
-      // VIEW file://…apk` route triggers the FileUriExposedException
-      // on modern Android, which is why it never worked previously.
+      // Both APKs and other files go through `am start` as a
+      // fire-and-forget intent: the system's PackageInstaller (or
+      // the user's chosen viewer) takes over from there. We can't
+      // observe install completion this way — the user explicitly
+      // accepted that trade-off — so we just need `am start` to
+      // launch the intent without an exit-code error. Quoting the
+      // path is essential because shellProtocol joins argv with
+      // spaces, so any embedded space silently truncates the URI.
       const mime = mimeForExtension(path);
       const isApk = path.toLowerCase().endsWith('.apk');
-      const cmd = isApk
-        ? ['pm', 'install', '-r', '-t', '-d', path]
-        : [
-            'am',
-            'start',
-            '-a',
-            'android.intent.action.VIEW',
-            '-d',
-            `file://${path}`,
-            '-t',
-            mime,
-          ];
+      const intentMime = isApk
+        ? 'application/vnd.android.package-archive'
+        : mime;
+      const fileUri = `file://${path}`;
+      const cmd = [
+        'am',
+        'start',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        shellQuote(fileUri),
+        '-t',
+        intentMime,
+        '--grant-read-uri-permission',
+      ];
       try {
         const sp = adb.subprocess.shellProtocol;
         if (sp) {
           const proc = await sp.spawn(cmd);
           const code = await proc.exited;
           if (code !== 0) {
-            return {
-              ok: false,
-              reason: isApk
-                ? `pm install exit ${code}`
-                : `am start exit ${code}`,
-            };
+            return { ok: false, reason: `am start exit ${code}` };
           }
           return { ok: true };
         }

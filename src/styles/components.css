@@ -380,12 +380,36 @@
   box-shadow: 0 0 6px 1px oklch(from var(--accent) l c h / 0.55);
 }
 
-/* Match-position counter (find-next-match — see LogcatWidget). */
+/* Match navigation cluster (find-next-match — see LogcatWidget).
+ * Up/down step buttons sit next to the X/Y counter. */
+.fb-match-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.fb-match-step {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid oklch(from var(--accent) l c h / 0.25);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.fb-match-step:hover {
+  background: oklch(from var(--accent) l c h / 0.12);
+  color: var(--fg-1);
+}
 .fb-match-counter {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   color: var(--fg-2);
   padding: 2px 8px;
+  margin-left: 4px;
   border-radius: var(--r-sm);
   background: oklch(from var(--accent) l c h / 0.12);
   border: 1px solid oklch(from var(--accent) l c h / 0.25);
@@ -465,8 +489,16 @@
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
   z-index: 201;
-  animation: slideUp 240ms var(--ease-spring) both;
+  /* Custom keyframes that preserve the centring transform —
+   * the shared `slideUp` keyframe ends at `transform: translateY(0)`,
+   * which would clobber `translate(-50%, -50%)` and dump the dialog
+   * into the lower-right quadrant. */
+  animation: helpAppear 240ms var(--ease-spring) both;
   overflow: hidden;
+}
+@keyframes helpAppear {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
 }
 .help-head {
   display: flex;
