@@ -4,7 +4,7 @@ The Screen Mirror widget is a scrcpy-style live screen of the device,
 decoded in the browser via **WebCodecs**. It's capped at one instance
 per dashboard so two Mirror tiles can't fight for the same H.264 stream.
 
-![Screen Mirror tile](./img/mirror-default.png)
+<ThemeImage src-dark="/img/features/mirror-default.png" src-light="/img/features/mirror-default-light.png" alt="Screen Mirror tile" />
 
 ## How it works
 

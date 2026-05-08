@@ -6,7 +6,7 @@ synthetic event stream, Shell answers a few common commands from a
 host-side fake, Dumpsys serves canned output, Files browses an in-memory
 tree, and Mirror renders a static device home screen.
 
-![Simulator empty state](./img/simulator-empty.png)
+<ThemeImage src-dark="/img/features/simulator-empty.png" src-light="/img/features/simulator-empty-light.png" alt="Simulator landing" />
 
 ## Why use it
 

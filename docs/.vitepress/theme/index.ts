@@ -6,6 +6,7 @@
 
 import type { EnhanceAppContext } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
+import ThemeImage from './components/ThemeImage.vue';
 import './style.css';
 
 /**
@@ -69,7 +70,11 @@ function fixAppLinks(): void {
 
 export default {
   extends: DefaultTheme,
-  enhanceApp({ router }: EnhanceAppContext) {
+  enhanceApp({ app, router }: EnhanceAppContext) {
+    // Register globally so feature/*.md can use it as
+    // `<ThemeImage src-dark="..." src-light="..." alt="..." />`
+    // without per-file imports.
+    app.component('ThemeImage', ThemeImage);
     if (typeof window === 'undefined') return;
     // Run on initial paint…
     if (document.readyState === 'loading') {

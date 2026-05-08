@@ -19,7 +19,7 @@ on-device authorisation prompt.
 
 ## The flow
 
-![Connecting flow](./img/empty-state.png)
+<ThemeImage src-dark="/img/features/empty-state.png" src-light="/img/features/empty-state-light.png" alt="Connecting flow" />
 
 1. Plug the device in with a data-capable USB cable.
 2. Click **Connect a device**. The browser shows its device chooser; pick

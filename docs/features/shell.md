@@ -4,7 +4,7 @@ The Shell widget is an interactive ADB shell tied to one tile. Each tile
 owns its own channel — opening two Shell tiles gives you two independent
 sessions, with separate working directories and history.
 
-![Shell tile](./img/shell-default.png)
+<ThemeImage src-dark="/img/features/shell-default.png" src-light="/img/features/shell-default-light.png" alt="Shell tile" />
 
 ## Running commands
 
