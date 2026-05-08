@@ -49,6 +49,7 @@ jobs:
             # automatically — Vite hashes filenames, so bloat is bounded.
             echo "name=production" >> "$GITHUB_OUTPUT"
             echo "base=/web-logcat/" >> "$GITHUB_OUTPUT"
+            echo "docs_base=/web-logcat/docs/" >> "$GITHUB_OUTPUT"
             echo "destination_dir=." >> "$GITHUB_OUTPUT"
             echo "keep_files=true" >> "$GITHUB_OUTPUT"
           else
@@ -57,14 +58,20 @@ jobs:
             # isn't touched because destination_dir scopes the wipe.
             echo "name=staging" >> "$GITHUB_OUTPUT"
             echo "base=/web-logcat/staging/" >> "$GITHUB_OUTPUT"
+            echo "docs_base=/web-logcat/staging/docs/" >> "$GITHUB_OUTPUT"
             echo "destination_dir=staging" >> "$GITHUB_OUTPUT"
             echo "keep_files=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build (${{ steps.env.outputs.name }})
-        run: npm run build
+      - name: Build app + docs (${{ steps.env.outputs.name }})
+        # `build:all` runs the main app build first, then the docs
+        # build. The docs config writes into dist/docs/ (relative to
+        # the repo root), so the publish step picks both up in one
+        # shot. See docs/devs/deployment.md.
+        run: npm run build:all
         env:
           BASE_PATH: ${{ steps.env.outputs.base }}
+          DOCS_BASE_PATH: ${{ steps.env.outputs.docs_base }}
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4

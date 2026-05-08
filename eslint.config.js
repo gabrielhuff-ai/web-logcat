@@ -4,7 +4,12 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
-  { ignores: ['dist', 'design', '.claude'] },
+  // `docs/` and `scripts/` are out of scope for the app's lint config —
+  // they ship under their own toolchains (VitePress and the screenshot
+  // Playwright config) and use TypeScript syntax that the default
+  // JS parser can't handle. `.vitepress/cache` is the VitePress dep
+  // cache that materialises whenever a docs command runs.
+  { ignores: ['dist', 'design', '.claude', 'docs', 'scripts', '.vitepress'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['src/**/*.{ts,tsx}'],

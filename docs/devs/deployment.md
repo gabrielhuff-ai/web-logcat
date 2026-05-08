@@ -4,12 +4,14 @@
 
 GitHub Pages, two environments served from the same Pages site:
 
-| Environment | URL                                        | Source branch | Triggered by      |
-| ----------- | ------------------------------------------ | ------------- | ----------------- |
-| Staging     | `https://<owner>.github.io/web-logcat/staging/` | `main`        | every push        |
-| Production  | `https://<owner>.github.io/web-logcat/`    | `release`     | every push / merge |
+| Environment | App URL                                         | Docs URL                                                  | Source branch | Triggered by       |
+| ----------- | ----------------------------------------------- | --------------------------------------------------------- | ------------- | ------------------ |
+| Staging     | `https://<owner>.github.io/web-logcat/staging/` | `https://<owner>.github.io/web-logcat/staging/docs/`      | `main`        | every push         |
+| Production  | `https://<owner>.github.io/web-logcat/`         | `https://<owner>.github.io/web-logcat/docs/`              | `release`     | every push / merge |
 
-Both environments are HTTPS by default — required for WebUSB.
+Both environments are HTTPS by default — required for WebUSB. The docs
+site is a separate [VitePress](https://vitepress.dev/) app emitted into
+`dist/docs/`, so it ships in the same publish step as the main app.
 
 ## How it works
 
@@ -17,15 +19,21 @@ The `gh-pages` branch is the published-site source of truth.
 [`peaceiris/actions-gh-pages`](https://github.com/peaceiris/actions-gh-pages)
 writes into a subdirectory keyed by the triggering branch:
 
-- Push to `main` → build with `BASE_PATH=/web-logcat/staging/` → deploy
+- Push to `main` → build the app with `BASE_PATH=/web-logcat/staging/`
+  and the docs with `DOCS_BASE_PATH=/web-logcat/staging/docs/` → deploy
   to `gh-pages:/staging/`. `keep_files: false` so stale staging assets
   are cleaned. The branch root is untouched.
-- Push to `release` → build with `BASE_PATH=/web-logcat/` → deploy to
+- Push to `release` → build the app with `BASE_PATH=/web-logcat/` and
+  the docs with `DOCS_BASE_PATH=/web-logcat/docs/` → deploy to
   `gh-pages:/` (root). `keep_files: true` so the existing `/staging/`
-  subtree is preserved. Stale production assets aren't pruned, but Vite's
-  hashed filenames keep the bloat bounded.
+  subtree is preserved. Stale production assets aren't pruned, but
+  Vite's hashed filenames keep the bloat bounded.
 
-Workflow lives in [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml).
+Both builds happen via `npm run build:all`, which runs the app build
+followed by the docs build. The docs output lands at `dist/docs/`,
+which the publish step picks up alongside the rest of `dist/`.
+
+Workflow lives in [`.github/workflows/deploy.yml`](https://github.com/gabrielhuff/web-logcat/blob/main/.github/workflows/deploy.yml).
 
 ## One-time setup
 
@@ -64,6 +72,9 @@ git push -u origin release
 - **Stale prod assets piling up** — once a year (or whenever it bothers
   someone), force-rebuild prod with a clean tree by deleting `gh-pages`
   branch and re-running both deploys.
+- **Docs 404 after a rename** — VitePress's `cleanUrls` strips the
+  `.html` suffix in URLs. If you renamed a feature page, sweep the
+  inbound links and re-deploy; the previous URL won't redirect.
 
 ## Why GitHub Pages and not X?
 
