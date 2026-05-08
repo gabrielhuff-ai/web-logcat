@@ -298,33 +298,47 @@
 .fx-tile[draggable='true']:active { cursor: grabbing; }
 
 /* ===== View-mode segmented control =======================================
- * Two-button toggle in the toolbar to switch between list and icons. */
+ * Macos-style pill: a darker recessed track with a single highlighted
+ * "thumb" marking the active segment. Distinct enough from the
+ * neighbouring `.icon-btn` row that it doesn't read as another pair
+ * of buttons. */
 .fx-view-seg {
   display: inline-flex;
-  margin-left: 4px;
-  border: 1px solid oklch(from var(--accent) l c h / 0.25);
-  border-radius: var(--r-sm);
-  overflow: hidden;
+  padding: 2px;
+  background: oklch(from var(--bg-0) calc(l - 0.02) c h);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  gap: 2px;
 }
 .fx-view-btn {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  color: var(--fg-2);
+  color: var(--fg-3);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+  border-radius: 999px;
+  transition: background var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
 }
-.fx-view-btn:hover {
-  background: oklch(from var(--accent) l c h / 0.12);
-  color: var(--fg-1);
-}
+.fx-view-btn:hover { color: var(--fg-1); }
 .fx-view-btn.active {
-  background: oklch(from var(--accent) l c h / 0.25);
-  color: var(--fg-0);
+  background: var(--bg-1);
+  color: var(--accent);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.25);
+}
+
+/* Vertical separator between toolbar action groups. */
+.fx-actions-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+  flex-shrink: 0;
 }
 .fx-link { color: var(--fg-3); font-style: italic; margin-left: 4px; }
 
