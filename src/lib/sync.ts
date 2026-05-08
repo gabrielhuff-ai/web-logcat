@@ -351,12 +351,14 @@ function createRealSync(adb: Adb): SyncFs {
     async open(path) {
       // APKs use `pm install` over the shell channel: the shell uid
       // has install privilege, so the install proceeds without any
-      // device-side dialog. We fire-and-forget by intentionally NOT
-      // awaiting `proc.exited` — installs can take 30 s+, and the
-      // user feedback was that any progress UI we show during that
-      // window feels broken (#65 had a hung-looking strip). Returning
-      // ok as soon as the spawn succeeds means the toast lands while
-      // the install completes in the background.
+      // device-side dialog. We now fully drain the process — capture
+      // stdout / stderr / exit code — and surface real failures as
+      // toasts. PR #67's fire-and-forget version was producing
+      // silent toasts when `pm install` itself was reporting
+      // `Failure [INSTALL_FAILED_*]`, because nobody was reading
+      // its output. The latency cost (a few seconds for typical
+      // APKs) is the right trade for actually knowing whether the
+      // install happened.
       //
       // Non-APK files still go through an `am start VIEW` intent so
       // the device shows the user's chosen viewer.
@@ -367,13 +369,26 @@ function createRealSync(adb: Adb): SyncFs {
         if (isApk) {
           const cmd = ['pm', 'install', '-r', '-t', '-d', shellQuote(path)];
           if (sp) {
-            // Spawn resolves once the process is running; we
-            // deliberately don't await `.exited`.
-            await sp.spawn(cmd);
-          } else {
-            // Old shell-v1 path can't avoid waiting; accept the
-            // longer toast latency on that branch.
-            await adb.subprocess.noneProtocol.spawnWaitText(cmd);
+            const res = await sp.spawnWaitText(cmd);
+            const out = `${res.stdout ?? ''}${res.stderr ?? ''}`.trim();
+            // pm install sometimes exits 0 even on failure — it
+            // signals failure by printing `Failure [INSTALL_FAILED_*]`.
+            // Treat any "Failure" token in the combined output as an
+            // error so the user sees the real reason.
+            if (res.exitCode !== 0 || /Failure/i.test(out)) {
+              return {
+                ok: false,
+                reason:
+                  out ||
+                  `pm install exit ${res.exitCode}`,
+              };
+            }
+            return { ok: true };
+          }
+          // Shell-v1 fallback: combined stdout+stderr only, no exit code.
+          const text = await adb.subprocess.noneProtocol.spawnWaitText(cmd);
+          if (/Failure/i.test(text)) {
+            return { ok: false, reason: text.trim() };
           }
           return { ok: true };
         }

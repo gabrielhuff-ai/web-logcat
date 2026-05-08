@@ -324,16 +324,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           ? entry.linkTarget
           : joinPath(path, entry.name);
       const isApk = target.toLowerCase().endsWith('.apk');
-      // The intent (`am start VIEW`) is fire-and-forget — the device
-      // shows the PackageInstaller / file viewer dialog and we have
-      // no easy way to observe whether the user follows through.
-      // Toast that the request was dispatched; that's all we can
-      // honestly claim from here.
+      // For APKs, `fs.open` now waits for `pm install` to actually
+      // exit and returns the real Failure / Success message — see the
+      // matching code in lib/sync.ts. Surface a neutral "Installing…"
+      // toast so the user knows something is happening during the
+      // 5–30 s install window; the result toast lands when the call
+      // resolves.
+      if (isApk) showToast(`Installing ${entry.name}…`);
       const res = await fs.open(target);
       if (res.ok) {
         showToast(
           isApk
-            ? `Install requested for ${entry.name}`
+            ? `Installed ${entry.name}`
             : `Opened ${entry.name} on device`,
         );
       } else {
