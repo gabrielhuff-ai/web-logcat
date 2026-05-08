@@ -13,13 +13,17 @@
 }
 
 /* Empty-state-style grid pattern, dimmed and centred via a radial mask
- * so the edges fade into the background gradient. The dashboard's
- * tile chrome (`.tile`, `.tile-head`) is already translucent + blurred,
- * so a busy backdrop is what makes the glass effect actually visible.
- * Disabled under perf mode (see `[data-perf="on"] .dash::before` below). */
-.dash::before {
+ * so the edges fade into the background gradient. Painted on
+ * `.dash-grid` rather than `.dash` so it sits in the same stacking
+ * context as the tiles — `.dash-grid` sets `position: relative;
+ * z-index: 1` which would otherwise hide a `.dash::before` backdrop
+ * from the tile's `backdrop-filter`. The tile chrome
+ * (`.tile`, `.tile-head`) is already translucent + blurred, so a busy
+ * backdrop in the same stacking context is what makes the glass
+ * effect visible. Disabled under perf mode further down. */
+.dash-grid::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
@@ -29,7 +33,10 @@
   mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 85%);
   -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 85%);
   opacity: 0.55;
-  z-index: 0;
+  /* No explicit z-index: positioned tiles (`position: relative` later
+   * in document order) render above this `::before` automatically,
+   * which keeps both inside the same stacking context so the tile's
+   * `backdrop-filter` can pick the grid up as part of its backdrop. */
 }
 
 /* === Topbar === */
@@ -696,7 +703,7 @@
  * coherent (no transparency without the blur, otherwise the topbar would
  * become fully see-through).
  */
-[data-perf="on"] .dash::before { display: none; }
+[data-perf="on"] .dash-grid::before { display: none; }
 [data-perf="on"] .dash-top { backdrop-filter: none; background: var(--bg-0); }
 [data-perf="on"] .dash-device-pop {
   backdrop-filter: none;
