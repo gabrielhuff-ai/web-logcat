@@ -64,60 +64,74 @@
 
 /* ---- Landing hero ---------------------------------------------------- */
 
-/* The default VPHero is a side-by-side flex with the screenshot
-   capped around 256–320px on the right and an absolutely-positioned
-   image-container that's hard to override cleanly. Instead of
-   fighting the absolute positioning, we restack the hero vertically:
-   title + actions on top, hero screenshot below at the full
-   container width. The capture has space to breathe and the title
-   gets its own block.
+/* The default VPHero is a flex layout (row at desktop, column on
+   mobile). To stack hero text + image cleanly and centre everything
+   horizontally on the page, switch the relevant nodes to plain
+   block + text-align so centring is unambiguous. Without this,
+   the default `.heading { display: flex; flex-wrap: wrap }` breaks
+   the heading into one flex-row per visual line and aligns each
+   line independently, making "WebLogcat" sit at a different
+   horizontal centre than the multi-line text below it.
    `!important` because the default rules are scoped via
    `[data-v-...]` attribute selectors that out-specify ours otherwise. */
 .VPHome .VPHero .container {
-  flex-direction: column !important;
-  align-items: stretch !important;
+  display: block !important;
 }
 .VPHome .VPHero .main {
+  display: block !important;
   text-align: center !important;
   max-width: 1100px !important;
   margin: 0 auto !important;
 }
 .VPHome .VPHero .heading {
-  justify-content: center !important;
-  /* `text-wrap: balance` makes the heading fall on roughly equal
-     line lengths instead of leaving a short orphan tail. Without
-     it, "Android device inspector in the browser." would split
-     into "Android device" / "inspector in the" / "browser." with
-     visibly different line widths from "WebLogcat" above; with
-     balance the two blocks line up. Supported in Chromium 114+,
-     Firefox 121+; older browsers fall back to the default wrap
-     and the heading still reads, just less symmetrically. */
-  text-wrap: balance;
+  /* Replace the default flex with a block so `text-align: center`
+     governs every line. Each line's centre then sits on the same
+     vertical axis — the heading reads as a single coherent block
+     instead of a stack of independently-centred segments. */
+  display: block !important;
+  text-align: center !important;
 }
 .VPHome .VPHero .heading .name,
 .VPHome .VPHero .heading .text {
-  text-wrap: balance;
+  /* Force the spans to fill the heading so text-align: center
+     resolves against the same width every line. Without
+     `max-width: none`, the .name span gets an implicit cap from
+     Chromium's text-wrap algorithm (~576px on a 1100px container),
+     which leaves "WebLogcat" sitting at a different horizontal
+     centre than the wrapped lines below it.
+     `text-wrap: pretty` is purely a hyphenation hint with no
+     width-shrinkage side effect (unlike `balance`), so we keep it
+     for nicer line breaks where supported. */
+  display: block !important;
+  text-align: center !important;
+  width: 100% !important;
+  max-width: none !important;
+  text-wrap: pretty;
+}
+.VPHome .VPHero .tagline {
+  text-align: center !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 .VPHome .VPHero .actions {
+  display: flex !important;
   justify-content: center !important;
+  flex-wrap: wrap !important;
 }
 .VPHome .VPHero .image {
-  /* Reset the absolute-position dance and let the image flow as a
-     normal block below the title. The default VitePress rules at
-     ≥960px force `min-height: 100%`, `flex-grow: 1`, and
-     translate(-32px, -32px) on the inner container — explicitly
-     undo all of them. */
+  /* Now that `.container` is `display: block`, the image flows as
+     a normal block under `.main`. Centre it via `margin: 0 auto`
+     and explicitly undo every flex/positioning artefact the default
+     VitePress rules left behind (min-height: 100%, flex-grow: 1,
+     translate(-32px, -32px), order, etc.). */
+  display: block !important;
   position: static !important;
-  order: 2 !important;
   margin: 36px auto 0 !important;
   width: 100% !important;
   max-width: 1100px !important;
   min-height: 0 !important;
   height: auto !important;
-  flex-grow: 0 !important;
-  flex-shrink: 1 !important;
-  flex-basis: auto !important;
-  align-self: center !important;
 }
 .VPHome .VPHero .image-container {
   position: relative !important;
