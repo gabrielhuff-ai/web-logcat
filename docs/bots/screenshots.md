@@ -74,9 +74,11 @@ The seeded state:
 - **Layout** — Mirror left (≈32% width), then a column split on the
   right with Logcat on top (≈62% height) and Shell | Dumpsys at the
   bottom (50/50).
-- **Simulator hints** — unlike the cleaner feature shots, the hero
-  *keeps* the "Simulated log stream" badge. Readers landing from the
-  README see the same affordance the live simulator session shows.
+- **Simulator hints** — same convention as the feature shots: the
+  "Using simulated log data" toast is waited out and the
+  "Simulated log stream" badge is hidden via an injected
+  `display:none` rule before the screenshot fires. Readers shouldn't
+  mistake those onboarding affordances for product chrome.
 
 Re-run only the hero without churning the other PNGs:
 

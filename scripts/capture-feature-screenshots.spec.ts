@@ -133,11 +133,6 @@ test.describe('feature screenshots', () => {
   // depend on the dwindle's split-direction heuristic and isn't
   // bit-stable. Seed localStorage directly so the same composition
   // lands every regen.
-  //
-  // Unlike the cleaner feature shots, this one *keeps* the
-  // "Simulated log stream" badge visible — readers landing from the
-  // README see the same affordance the live simulator session shows,
-  // which matches the README's "no phone? simulated stream" framing.
   test('README hero shot', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.clear();
@@ -204,8 +199,13 @@ test.describe('feature screenshots', () => {
         .locator('.ds-card-head')
         .first(),
     ).toContainText(/charge/i);
-    // Wait out the connect-toast (the badge stays — see comment above).
+    // Hide the simulator hints (toast + lower-left badge) — same
+    // convention the feature shots use; readers shouldn't mistake
+    // them for product chrome.
     await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
+    await page.addStyleTag({
+      content: '.fake-badge,.toast{display:none!important}',
+    });
     await page.screenshot({ path: HERO_PATH, fullPage: false });
   });
 
