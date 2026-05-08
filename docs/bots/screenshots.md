@@ -69,7 +69,8 @@ before navigating, so the shot is bit-stable across regens.
 
 The seeded state:
 
-- **Tweaks** — `accent: 'teal'`, `compactMode: true`,
+- **Tweaks** — `accent: 'indigo'` (matches the docs site's brand
+  colour at hue 268), `compactMode: true`,
   `performanceMode: 'on'`.
 - **Layout** — Mirror left (≈32% width), then a column split on the
   right with Logcat on top (≈62% height) and Shell | Dumpsys at the
