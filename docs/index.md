@@ -10,9 +10,15 @@ hero:
     src: /screenshot.png
     alt: WebLogcat dashboard with Mirror + Logcat + Shell + Dumpsys tiles
   actions:
+    # The brand action's `link` is a sentinel that the runtime theme
+    # rewrites to the live app URL on the same host (see
+    # docs/.vitepress/theme/index.ts). `target: _blank` so VitePress
+    # doesn't intercept the click via Vue Router.
     - theme: brand
       text: Open WebLogcat ↗
-      link: ../
+      link: /__open_app__
+      target: _blank
+      rel: noopener
     - theme: alt
       text: Browse features
       link: /features/

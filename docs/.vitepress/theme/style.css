@@ -35,7 +35,12 @@
   --vp-button-brand-active-text: #ffffff;
 
   /* Mono family: JetBrains Mono, loaded from Google Fonts via the
-     <link> tags in config.ts. */
+     <link> tags in config.ts. Setting both --vp-font-family-base
+     and --vp-font-family-mono so the entire docs site renders in
+     mono, matching the in-app Logcat view's typography. */
+  --vp-font-family-base:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, 'Liberation Mono', monospace;
   --vp-font-family-mono:
     'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
     Consolas, 'Liberation Mono', monospace;
@@ -44,11 +49,17 @@
 .dark {
   /* In dark mode lift the lightness so the indigo reads against
      the near-black surface — same shift the app does for
-     `data-theme=dark`. */
+     `data-theme=dark`. The button text colour also flips to a
+     near-black so we keep ~7:1 contrast against the lighter brand
+     bg (white text on oklch 0.74 indigo only hits ~3.5:1, which
+     fails WCAG AA for body text). */
   --vp-c-brand-1: oklch(0.74 0.16 268);
   --vp-c-brand-2: oklch(0.80 0.14 268);
   --vp-c-brand-3: oklch(0.86 0.12 268);
   --vp-c-brand-soft: oklch(0.74 0.16 268 / 0.18);
+  --vp-button-brand-text: oklch(0.16 0.04 268);
+  --vp-button-brand-hover-text: oklch(0.16 0.04 268);
+  --vp-button-brand-active-text: oklch(0.16 0.04 268);
 }
 
 /* ---- Landing hero ---------------------------------------------------- */
@@ -68,11 +79,24 @@
 }
 .VPHome .VPHero .main {
   text-align: center !important;
-  max-width: 880px !important;
+  max-width: 1100px !important;
   margin: 0 auto !important;
 }
 .VPHome .VPHero .heading {
   justify-content: center !important;
+  /* `text-wrap: balance` makes the heading fall on roughly equal
+     line lengths instead of leaving a short orphan tail. Without
+     it, "Android device inspector in the browser." would split
+     into "Android device" / "inspector in the" / "browser." with
+     visibly different line widths from "WebLogcat" above; with
+     balance the two blocks line up. Supported in Chromium 114+,
+     Firefox 121+; older browsers fall back to the default wrap
+     and the heading still reads, just less symmetrically. */
+  text-wrap: balance;
+}
+.VPHome .VPHero .heading .name,
+.VPHome .VPHero .heading .text {
+  text-wrap: balance;
 }
 .VPHome .VPHero .actions {
   justify-content: center !important;
