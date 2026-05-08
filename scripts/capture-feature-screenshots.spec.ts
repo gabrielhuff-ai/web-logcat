@@ -54,6 +54,17 @@ async function bootSimulator(page: Page): Promise<void> {
   // Wait for the dashboard to settle before snapshotting.
   await expect(page.locator('.dash-brand-name')).toBeVisible();
   await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+  // The dashboard ships two onboarding affordances that mark the
+  // session as fake — the bottom-centre "Using simulated log data"
+  // toast (auto-dismisses after ~1.8 s) and the lower-right
+  // "Simulated log stream" badge that stays for the duration of the
+  // session. Both are useful in the live app and confusing in
+  // captured screenshots, so we wait for the toast and hide the
+  // badge before any caller takes a shot.
+  await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
+  await page.addStyleTag({
+    content: '.fake-badge,.toast{display:none!important}',
+  });
 }
 
 async function addWidget(
@@ -77,7 +88,7 @@ test.describe('feature screenshots', () => {
     await page.screenshot({ path: out('empty-state'), fullPage: false });
   });
 
-  test('simulator empty state (badge visible)', async ({ page }) => {
+  test('simulator landing', async ({ page }) => {
     await bootSimulator(page);
     await page.screenshot({ path: out('simulator-empty'), fullPage: false });
   });
