@@ -21,6 +21,9 @@ mirror of most of this material. The rules here apply to you too.
 - [Screenshot pipeline](./screenshots) — how to refresh the docs and
   README screenshots on demand. Use this when a UI change affects
   imagery or when the user asks for a fresh shot.
+- [Maintaining `bots/`](./maintaining) — how to fold your own
+  learnings back into this directory without making it worse. Read
+  before editing anything under `bots/`.
 
 ## Working principles (do these every time)
 

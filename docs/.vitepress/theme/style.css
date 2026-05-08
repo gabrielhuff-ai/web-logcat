@@ -1,0 +1,153 @@
+/*
+ * WebLogcat docs theme overrides.
+ *
+ * Three things going on here:
+ *   1. Brand accent — match the main app's indigo (oklch hue 268).
+ *      VitePress's default brand is a muted blue; we want the docs
+ *      and the app's UI to feel like the same product.
+ *   2. JetBrains Mono — the same family the in-app Logcat view uses.
+ *      Loaded via <link> in the head; we just point the mono token
+ *      at it here.
+ *   3. Landing tweaks — make the hero screenshot bigger and give the
+ *      feature-card icons a brand-coloured outline-style appearance
+ *      so the docs landing isn't a row of emoji.
+ */
+
+:root {
+  /* Brand: indigo to match the app's --accent-hue: 268.
+     `oklch(L C H)` mirrors the in-app token system so light + dark
+     modes shift lightness without re-picking hue. */
+  --vp-c-brand-1: oklch(0.62 0.18 268);
+  --vp-c-brand-2: oklch(0.56 0.20 268);
+  --vp-c-brand-3: oklch(0.50 0.22 268);
+  --vp-c-brand-soft: oklch(0.62 0.18 268 / 0.16);
+  --vp-c-brand-1-rgb: 95 84 229; /* fallback for older Safari */
+
+  /* Hero CTA "brand" button color → use the indigo above. */
+  --vp-button-brand-bg: var(--vp-c-brand-1);
+  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-active-bg: var(--vp-c-brand-3);
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  /* Mono family: JetBrains Mono, loaded from Google Fonts via the
+     <link> tags in config.ts. */
+  --vp-font-family-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, 'Liberation Mono', monospace;
+}
+
+.dark {
+  /* In dark mode lift the lightness so the indigo reads against
+     the near-black surface — same shift the app does for
+     `data-theme=dark`. */
+  --vp-c-brand-1: oklch(0.74 0.16 268);
+  --vp-c-brand-2: oklch(0.80 0.14 268);
+  --vp-c-brand-3: oklch(0.86 0.12 268);
+  --vp-c-brand-soft: oklch(0.74 0.16 268 / 0.18);
+}
+
+/* ---- Landing hero ---------------------------------------------------- */
+
+/* The default VPHero is a side-by-side flex with the screenshot
+   capped around 256–320px on the right and an absolutely-positioned
+   image-container that's hard to override cleanly. Instead of
+   fighting the absolute positioning, we restack the hero vertically:
+   title + actions on top, hero screenshot below at the full
+   container width. The capture has space to breathe and the title
+   gets its own block.
+   `!important` because the default rules are scoped via
+   `[data-v-...]` attribute selectors that out-specify ours otherwise. */
+.VPHome .VPHero .container {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+.VPHome .VPHero .main {
+  text-align: center !important;
+  max-width: 880px !important;
+  margin: 0 auto !important;
+}
+.VPHome .VPHero .heading {
+  justify-content: center !important;
+}
+.VPHome .VPHero .actions {
+  justify-content: center !important;
+}
+.VPHome .VPHero .image {
+  /* Reset the absolute-position dance and let the image flow as a
+     normal block below the title. The default VitePress rules at
+     ≥960px force `min-height: 100%`, `flex-grow: 1`, and
+     translate(-32px, -32px) on the inner container — explicitly
+     undo all of them. */
+  position: static !important;
+  order: 2 !important;
+  margin: 36px auto 0 !important;
+  width: 100% !important;
+  max-width: 1100px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  flex-grow: 0 !important;
+  flex-shrink: 1 !important;
+  flex-basis: auto !important;
+  align-self: center !important;
+}
+.VPHome .VPHero .image-container {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+}
+.VPHome .VPHero .image-bg {
+  display: none !important;
+}
+.VPHome .VPHero .image-src,
+.VPHome .VPHero .VPImage {
+  position: static !important;
+  /* The default `.image-src` applies `transform: translate(-50%, -50%)`
+     paired with `position: absolute; top:50%; left:50%` to centre the
+     image in its container. We removed the absolute positioning, so
+     the translate is no longer the centring trick — it's a -550px
+     shift that lands the image off-screen left. Reset it. */
+  transform: none !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  border-radius: 14px;
+  box-shadow:
+    0 20px 60px -20px oklch(0.20 0.02 268 / 0.55),
+    0 6px 20px -10px oklch(0.10 0.02 268 / 0.55);
+}
+
+/* ---- Landing feature icons ------------------------------------------ */
+
+/* `feature.icon` is rendered as raw HTML by VitePress when it's a
+   string starting with `<` — see VPFeatures.vue. Our index.md
+   passes inline SVGs that use `currentColor` on the stroke, so
+   colouring the surrounding box with the brand colour propagates.
+   The 1.6px stroke matches the in-app icon set's weight. */
+.VPHome .VPFeature .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: 0;
+}
+.VPHome .VPFeature .icon svg {
+  width: 26px;
+  height: 26px;
+}

@@ -272,12 +272,6 @@ function DashTopbar({
           <Icons.Clear size={13} />
         </button>
         <div className="dash-divider" />
-        <AppearanceButton
-          tweaks={tweaks}
-          setTweaks={setTweaks}
-          open={appearanceOpen}
-          setOpen={setAppearanceOpen}
-        />
         <a
           className="icon-btn tt"
           data-tt="View source on GitHub"
@@ -288,14 +282,6 @@ function DashTopbar({
         >
           <Icons.Github size={14} />
         </a>
-        <button
-          className="icon-btn tt"
-          data-tt="Global settings"
-          onClick={onOpenGlobalSettings}
-          aria-label="Global settings"
-        >
-          <Icons.Settings size={13} />
-        </button>
         <a
           className="icon-btn tt"
           data-tt="Open docs"
@@ -311,6 +297,21 @@ function DashTopbar({
         >
           <Icons.Book size={13} />
         </a>
+        <div className="dash-divider" />
+        <AppearanceButton
+          tweaks={tweaks}
+          setTweaks={setTweaks}
+          open={appearanceOpen}
+          setOpen={setAppearanceOpen}
+        />
+        <button
+          className="icon-btn tt"
+          data-tt="Global settings"
+          onClick={onOpenGlobalSettings}
+          aria-label="Global settings"
+        >
+          <Icons.Settings size={13} />
+        </button>
       </div>
     </div>
   );
