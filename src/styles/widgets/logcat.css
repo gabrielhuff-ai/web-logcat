@@ -76,6 +76,12 @@
   max-width: 50%;
 }
 
+/* Drop the `.log-scroll`'s solid `--bg-0` fill (declared in the
+ * design original `app.css`) so the tile's glass + the dashboard
+ * grid behind it show through. The auto-hide scrollbar rules below
+ * still work because they target `::-webkit-scrollbar-thumb`. */
+.lc-widget .log-scroll { background: transparent; }
+
 /* ===== Auto-hide scrollbars on `.log-scroll` =====
  * The `.lc-widget` toggles `data-active="true"` while the user is
  * moving the mouse over the widget (or scrolling), and back to
