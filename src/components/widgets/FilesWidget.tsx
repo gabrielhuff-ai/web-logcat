@@ -111,6 +111,11 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const [showHidden, setShowHidden] = useState(false);
 
   const [transfer, setTransfer] = useState<Transfer | null>(null);
+  // Name of the APK currently being installed, or null. Drives the
+  // indeterminate progress strip that mirrors the push / pull
+  // transfer rail. `pm install` blocks for 5–30 s so without an
+  // in-progress affordance the click feels like a no-op.
+  const [installing, setInstalling] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
   // Dialog state — replaces window.confirm / window.prompt with the
   // material-style overlays defined in `ConfirmDialog.tsx`.
@@ -324,14 +329,14 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           ? entry.linkTarget
           : joinPath(path, entry.name);
       const isApk = target.toLowerCase().endsWith('.apk');
-      // For APKs, `fs.open` now waits for `pm install` to actually
-      // exit and returns the real Failure / Success message — see the
-      // matching code in lib/sync.ts. Surface a neutral "Installing…"
-      // toast so the user knows something is happening during the
-      // 5–30 s install window; the result toast lands when the call
-      // resolves.
-      if (isApk) showToast(`Installing ${entry.name}…`);
+      // `fs.open` now blocks until `pm install` (or `am start`) has
+      // exited — see the matching code in lib/sync.ts. Show the same
+      // indeterminate progress strip we use for push / pull during
+      // the wait, so the user has a visible signal that something is
+      // happening during the 5–30 s install window.
+      if (isApk) setInstalling(entry.name);
       const res = await fs.open(target);
+      if (isApk) setInstalling(null);
       if (res.ok) {
         showToast(
           isApk
@@ -339,7 +344,17 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
             : `Opened ${entry.name} on device`,
         );
       } else {
-        showToast(res.reason ?? 'Open failed');
+        // pm install / am start error messages can be hundreds of
+        // chars (full Java stack traces) — useless in a toast and
+        // they bury the dashboard chrome. Keep the toast short and
+        // generic; log the full reason to the console for anyone
+        // debugging.
+        console.error(`[Files] open failed for ${target}:`, res.reason);
+        showToast(
+          isApk
+            ? `Install failed for ${entry.name}`
+            : `Open failed for ${entry.name}`,
+        );
       }
     },
     [path, showToast],
@@ -873,6 +888,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         />
       </div>
 
+      {installing && (
+        <div className="fx-xfer fx-xfer-busy" role="status" aria-live="polite">
+          <span className="fx-xfer-icon">
+            <Icons.Refresh size={12} />
+          </span>
+          <span className="fx-xfer-name">Installing · {installing}</span>
+          <div className="fx-xfer-bar">
+            <div className="fx-xfer-indeterminate" />
+          </div>
+          <span className="fx-xfer-pct">…</span>
+        </div>
+      )}
       {transfer && (
         <div className={`fx-xfer ${transfer.done ? 'done' : ''}`}>
           <span className="fx-xfer-icon">
