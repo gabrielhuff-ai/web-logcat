@@ -349,16 +349,20 @@ function createRealSync(adb: Adb): SyncFs {
     },
 
     async open(path) {
-      // APKs use `pm install` over the shell channel: the shell uid
-      // has install privilege, so the install proceeds without any
-      // device-side dialog. We now fully drain the process — capture
-      // stdout / stderr / exit code — and surface real failures as
-      // toasts. PR #67's fire-and-forget version was producing
-      // silent toasts when `pm install` itself was reporting
-      // `Failure [INSTALL_FAILED_*]`, because nobody was reading
-      // its output. The latency cost (a few seconds for typical
-      // APKs) is the right trade for actually knowing whether the
-      // install happened.
+      // APKs use `pm install` over the shell channel. On Android 14+,
+      // SELinux blocks `system_server` (which actually runs the
+      // install) from reading FUSE-mounted /sdcard paths — the
+      // device error spelled it out:
+      //
+      //   avc: denied { read } for ... tcontext=u:object_r:fuse:s0
+      //   Consider using a file under /data/local/tmp/
+      //
+      // So we stage the APK into `/data/local/tmp` (where the shell
+      // uid can write and `system_server` can read), run `pm install`
+      // from there, capture pm install's exit code, then clean up —
+      // all in a single shell call so we don't pay three round-trip
+      // latencies. `rc=$? ; rm -f ... ; exit $rc` preserves pm
+      // install's exit code while still removing the staging copy.
       //
       // Non-APK files still go through an `am start VIEW` intent so
       // the device shows the user's chosen viewer.
@@ -367,7 +371,20 @@ function createRealSync(adb: Adb): SyncFs {
       const sp = adb.subprocess.shellProtocol;
       try {
         if (isApk) {
-          const cmd = ['pm', 'install', '-r', '-t', '-d', shellQuote(path)];
+          const slash = path.lastIndexOf('/');
+          const basename = slash >= 0 ? path.substring(slash + 1) : path;
+          const tmpPath = `/data/local/tmp/${basename}`;
+          const inner =
+            `cp ${shellQuote(path)} ${shellQuote(tmpPath)} && ` +
+            `pm install -r -t -d ${shellQuote(tmpPath)} ; ` +
+            `rc=$? ; ` +
+            `rm -f ${shellQuote(tmpPath)} ; ` +
+            `exit $rc`;
+          // yume-chan joins argv with spaces, so wrap the whole
+          // inner script in a single-quoted token that survives the
+          // join intact. `shellQuote` does the `'\''`-style escape
+          // we need.
+          const cmd = ['sh', '-c', shellQuote(inner)];
           if (sp) {
             const res = await sp.spawnWaitText(cmd);
             const out = `${res.stdout ?? ''}${res.stderr ?? ''}`.trim();
