@@ -296,6 +296,21 @@ function DashTopbar({
         >
           <Icons.Settings size={13} />
         </button>
+        <a
+          className="icon-btn tt"
+          data-tt="Open docs"
+          // Vite injects the deploy base path here, so the link
+          // resolves correctly under both `/web-logcat/` (production)
+          // and `/web-logcat/staging/` (staging) without any baked-in
+          // owner string. `target="_blank"` opens the docs site in a
+          // new tab so the user's session in this tab keeps streaming.
+          href={`${import.meta.env.BASE_URL}docs/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open documentation"
+        >
+          <Icons.Book size={13} />
+        </a>
       </div>
     </div>
   );

@@ -26,7 +26,20 @@ export default defineConfig({
     // real users — the toggle only affects this headless context.
     reducedMotion: 'reduce',
   },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        // Allow overriding the browser binary so the suite runs in
+        // restricted environments where Playwright can't fetch its
+        // pinned Chromium build (CHROMIUM_PATH=/path/to/chrome npm run e2e).
+        ...(process.env.CHROMIUM_PATH
+          ? { launchOptions: { executablePath: process.env.CHROMIUM_PATH } }
+          : {}),
+      },
+    },
+  ],
   webServer: {
     // `npm run preview` serves whatever is in `dist/`. The CI workflow
     // does a separate `npm run build` ahead of `npm run e2e` so the

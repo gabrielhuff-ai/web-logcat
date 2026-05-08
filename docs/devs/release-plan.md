@@ -51,16 +51,14 @@ This is recorded for completeness; the actions are already on `main`.
   - `docs/LEARNINGS.md` (operational notes from initial development).
   - `design/` (handoff prototypes — historical reference, no longer
     needed).
-- [x] Public docs reorganised:
+- [x] Public docs reorganised into a published site:
   - `README.md` is user-first (live URL, supported browsers,
-    one-line pitch, screenshot, feature list).
-  - `CONTRIBUTING.md` covers dev / build / lint / test for outside
-    contributors.
-  - `docs/ARCHITECTURE.md`, `docs/WIDGETS.md`, `docs/DEPLOYMENT.md`
-    are the reference set (humans + agents).
-  - `CLAUDE.md` at the root is the agent entry-point. Future
-    agent-only deep-dive docs live under `docs/ai/`; everything
-    else under `docs/` is for both humans and agents.
+    one-line pitch, screenshot, pointer to the docs site).
+  - `docs/` is a VitePress app published at `<base>/docs/` with three
+    audience-segmented sections: `features/` for end users, `devs/`
+    for contributors (this page included), and `bots/` for AI agents.
+  - `CLAUDE.md` at the root is the agent entry-point and points into
+    `docs/bots/` for the operational contracts.
 - [x] CI surface in place:
   - `ci.yml` (typecheck / lint / unit / build / e2e on every PR).
   - `version-bump.yml` (auto-increments patch on `main` pushes via

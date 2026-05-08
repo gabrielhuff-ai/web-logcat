@@ -130,6 +130,14 @@ export const Record = make(
 );
 export const Stop = make('M5 5h14v14H5z', 1.7);
 
+// Open-book glyph for the topbar "Docs" link. Two facing pages with a
+// centre spine — reads as "documentation" at 13px without leaning on
+// strokes thinner than the rest of the v2 icon set.
+export const Book = make(
+  'M4 5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z',
+  1.6,
+);
+
 // GitHub mark — solid silhouette at 24px viewBox so it sits on the
 // topbar at the same visual weight as the other icon-button glyphs.
 export const Github = make(

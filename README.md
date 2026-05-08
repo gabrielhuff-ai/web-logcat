@@ -6,8 +6,9 @@ get a draggable dashboard of widgets in the browser, no `adb` install
 and no Android Studio.
 
 **▶ Live at <https://gabrielhuff.github.io/web-logcat/>**
+&nbsp;·&nbsp; **📚 Docs at <https://gabrielhuff.github.io/web-logcat/docs/>**
 
-![web-logcat dashboard with the default Mirror + Logcat + Shell + Dumpsys layout against the simulated stream](docs/screenshot.png)
+![web-logcat dashboard with the default Mirror + Logcat + Shell + Dumpsys layout against the simulated stream](docs/public/screenshot.png)
 
 ## Use it
 
@@ -17,10 +18,10 @@ and no Android Studio.
 2. Plug in an Android device with USB debugging enabled.
 3. Click **Connect a device** and accept the on-device authorisation
    prompt the first time.
-4. The dashboard mounts with the default layout: a Screen Mirror tile on
-   the left, a Logcat tile top-right, plus Shell and Dumpsys tiles
-   below. Click **+ Add widget** in the topbar to drop a fifth widget
-   (Files, a second Logcat, etc.) onto the grid.
+4. The dashboard mounts with a single Logcat tile filling the viewport.
+   Use **+ Add widget** in the topbar to grow the layout — Shell,
+   Dumpsys, Files, Screen Mirror, or another Logcat. Each new widget
+   splits the focused tile.
 
 The browser remembers the trust the same way it remembers any WebUSB
 permission — the second connect from the same browser+device pair is
@@ -118,20 +119,16 @@ Press `?` in-app for the always-current list.
 
 ## Repository
 
-Code overview, deployment, and contribution guidance each live in their
-own document — these are the source of truth, this README just points
-at them.
+The published [docs site](https://gabrielhuff.github.io/web-logcat/docs/)
+is the source of truth for everything below. This README just points at
+the relevant section.
 
-| Document | Use it for |
+| Section | Use it for |
 | --- | --- |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, top-level state shape, perf notes |
-| [docs/WIDGETS.md](docs/WIDGETS.md) | Widget conventions for adding a new kind |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Staging vs production, the `gh-pages` deploy mechanic |
-| [docs/TASKS.md](docs/TASKS.md) | Phased backlog (mostly checked off; reference for what's intentionally not built) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch strategy, dev / lint / test commands, deploy gates |
-| [CLAUDE.md](CLAUDE.md) | Implicit prompt for AI agents continuing the work |
-| [design/v2/HANDOFF.md](design/v2/HANDOFF.md) | Current Claude Design brief — multi-widget dashboard (Logcat, Shell, Dumpsys, Files, Mirror) |
-| [design/v1/HANDOFF.md](design/v1/HANDOFF.md) | Original v1 brief — single-purpose logcat viewer (already implemented) |
+| [Features](https://gabrielhuff.github.io/web-logcat/docs/features/) (`docs/features/`) | Per-widget user docs — usage, shortcuts, screenshots |
+| [Contributing](https://gabrielhuff.github.io/web-logcat/docs/devs/) (`docs/devs/`) | Architecture, deployment, release plan, contributing guide, docs conventions |
+| [For agents](https://gabrielhuff.github.io/web-logcat/docs/bots/) (`docs/bots/`) | Widget contract, doc-sync rules, test-sync rules |
+| [`CLAUDE.md`](CLAUDE.md) | Implicit prompt for AI agents continuing the work — points into `docs/bots/` |
 
 Stack at a glance: Vite + React + TypeScript, CSS custom properties
 with `oklch()`, [`@yume-chan/adb`](https://github.com/yume-chan/ya-webadb)
