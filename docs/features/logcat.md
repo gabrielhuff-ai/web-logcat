@@ -4,7 +4,7 @@ The Logcat widget streams the device's system log live. Multiple Logcat
 tiles can co-exist on the same device with independent filter and pin
 state, so you can keep a global view alongside a tag-scoped one.
 
-![Logcat tile](./img/logcat-default.png)
+<ThemeImage src-dark="/img/features/logcat-default.png" src-light="/img/features/logcat-default-light.png" alt="Logcat tile" />
 
 ## Filter chips
 
@@ -24,7 +24,7 @@ filter types appear as discoverable starters:
 first chip auto-enables *show only matches*; clear all chips to see
 everything again.
 
-![Filter chips](./img/logcat-chips.png)
+<ThemeImage src-dark="/img/features/logcat-chips.png" src-light="/img/features/logcat-chips-light.png" alt="Filter chips" />
 
 ## Level pills
 
@@ -46,7 +46,7 @@ Hover a row and click the pin icon to stick it to the top of the log.
 Pinned rows survive scrolling and stay visible even when their original
 position scrolls off-screen. Click the pin again to unpin.
 
-![Pinned rows](./img/logcat-pinned.png)
+<ThemeImage src-dark="/img/features/logcat-pinned.png" src-light="/img/features/logcat-pinned-light.png" alt="Pinned rows" />
 
 ## Crash collapse
 

@@ -6,7 +6,7 @@ The Dumpsys widget wraps the most common services in **presets**, runs
 the underlying command, and renders the result as either parsed cards or
 the raw output.
 
-![Dumpsys tile](./img/dumpsys-default.png)
+<ThemeImage src-dark="/img/features/dumpsys-default.png" src-light="/img/features/dumpsys-default-light.png" alt="Dumpsys tile" />
 
 ## Presets
 

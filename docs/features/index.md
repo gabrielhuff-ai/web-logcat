@@ -19,7 +19,7 @@ No phone handy? Click **fake data** instead — the dashboard runs against a
 [simulated stream](./simulator) so you can poke around every widget without
 touching real hardware.
 
-![WebLogcat dashboard](/screenshot.png)
+<ThemeImage src-dark="/screenshot.png" src-light="/screenshot-light.png" alt="WebLogcat dashboard with the Mirror, Logcat, Shell, and Dumpsys tiles" />
 
 ## In this section
 

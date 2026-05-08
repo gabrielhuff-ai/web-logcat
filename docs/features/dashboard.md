@@ -5,7 +5,7 @@ same family of layouts you'd find in tiling window managers like Hyprland.
 Every tile has the same chrome — a header, an optional toolbar, the widget
 itself, and a corner grip — and they share every pixel of available space.
 
-![Dashboard layout](./img/dashboard-multi.png)
+<ThemeImage src-dark="/img/features/dashboard-multi.png" src-light="/img/features/dashboard-multi-light.png" alt="Dashboard layout" />
 
 ## Adding and removing widgets
 

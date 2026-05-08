@@ -4,7 +4,7 @@ WebLogcat's chrome is intentionally small — most state belongs to
 individual widgets. Two places carry global preferences: the
 **appearance** popover and the **global settings** modal.
 
-![Topbar](./img/topbar.png)
+<ThemeImage src-dark="/img/features/topbar.png" src-light="/img/features/topbar-light.png" alt="Topbar" />
 
 ## Appearance popover
 

@@ -5,7 +5,7 @@ protocol** — the same protocol `adb push` and `adb pull` use under the
 hood. Browse the device, pull files out by drag-and-drop, push files in
 by dropping them onto the pane.
 
-![Files tile](./img/files-default.png)
+<ThemeImage src-dark="/img/features/files-default.png" src-light="/img/features/files-default-light.png" alt="Files tile" />
 
 ## Browsing
 

@@ -111,19 +111,19 @@
 
 /* Brand-mark gradient on the .name "WebLogcat".
    The dashboard's brand glyph (src/styles/dashboard.css) is three
-   indigo squares at 100% / 70% / 40% opacity; the favicon mirrors
-   that with `#8b85f2` (oklch ~0.66 0.14 270) at the same opacities.
-   Translate the ramp into a solid linear gradient — darkest
-   indigo on the LEFT, brightest on the RIGHT — so reading
-   left-to-right walks from the dimmer to the brighter shade.
+   indigo squares at 100% / 70% / 40% opacity; the gradient walks
+   the same hue from a heavily-saturated deep indigo on the LEFT
+   to a pale, low-chroma indigo on the RIGHT — high contrast end
+   to end so the wordmark reads as a true brand element rather
+   than tinted text.
    `.clip` is the VitePress class on `.name` that opts the text in
    to background-clip: text; we override only the `background`
    gradient (the rest of the clip plumbing stays). */
 .VPHome .VPHero .heading .name.clip {
   background: linear-gradient(
     90deg,
-    oklch(0.40 0.18 268) 0%,
-    oklch(0.62 0.18 268) 100%
+    oklch(0.50 0.25 268) 0%,
+    oklch(0.85 0.05 270) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -131,13 +131,14 @@
   color: transparent;
 }
 .dark .VPHome .VPHero .heading .name.clip {
-  /* Lift both endpoints so the gradient reads against the dark
-     surface — same shift the rest of the brand colours do under
-     the .dark scope. */
+  /* Both endpoints lifted in lightness so the gradient reads
+     against the near-black surface. The left stays heavily
+     saturated to hold the "indigo" brand feel; the right fades to
+     a near-white pale indigo. */
   background: linear-gradient(
     90deg,
-    oklch(0.55 0.16 268) 0%,
-    oklch(0.85 0.16 268) 100%
+    oklch(0.62 0.22 268) 0%,
+    oklch(0.94 0.04 270) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;

@@ -22,10 +22,20 @@ and a UI change can land without a forced regen.
 
 ## Outputs
 
+Every shot is captured **twice** — once in dark mode, once in light.
+The dark variant lands at the canonical filename; the light variant
+is suffixed with `-light`.
+
 | Output path | Used by |
 | --- | --- |
-| `docs/features/img/<slug>.png` | The matching `docs/features/<slug>.md` page on the docs site |
-| `docs/public/screenshot.png` | `README.md` hero image **and** `docs/index.md` hero block (single source of truth — the docs hero composition is also the README composition) |
+| `docs/public/img/features/<slug>.png` | `<ThemeImage src-dark="...">` in the matching `docs/features/<slug>.md` page (dark theme) |
+| `docs/public/img/features/<slug>-light.png` | `<ThemeImage src-light="...">` in the same page (light theme) |
+| `docs/public/screenshot.png` | README hero image **and** the docs `image.dark` hero (single source of truth) |
+| `docs/public/screenshot-light.png` | The docs `image.light` hero — VitePress swaps to it when the reader toggles light mode |
+
+The dual-theme capture exists so feature pages render coherently for
+readers regardless of which appearance they pick. Don't ship one
+variant without the other; reviewers will bounce single-theme PRs.
 
 ## Refreshing screenshots
 
@@ -48,77 +58,113 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 The script:
 
 1. Boots `vite preview` on port 4173.
-2. Loads the app, clicks **fake data** to drop into the simulator.
-3. For each capture, waits for the relevant DOM to settle, then
-   writes the PNG to `docs/features/img/<slug>.png`.
-4. The `dashboard-multi` capture additionally writes the same frame
-   to `docs/public/screenshot.png` so the README hero stays in
-   lockstep.
+2. For each `(feature, theme)` pair (the script wraps every feature
+   capture in a `for theme of ['dark', 'light']` loop), seeds
+   `localStorage` with `theme: <theme>` + `accent: 'indigo'` +
+   `performanceMode: 'on'`, then loads the app and clicks **fake
+   data** to drop into the simulator.
+3. Asserts `<html data-theme=<theme>>` so the page actually rendered
+   in the requested theme before snapshotting (Playwright's
+   `addInitScript` runs before page scripts; if the seed didn't
+   stick, this assertion catches it).
+4. Writes the PNG to `docs/public/img/features/<slug>.png` (dark) or
+   `…/<slug>-light.png` (light).
 
-After it runs, **review every changed PNG** before committing — open
-each one and confirm it shows what you expect (right widget, no error
-overlay, no clipped content, no console-error toast bleeding through).
+After it runs, **review every changed PNG** in *both* themes — open
+each pair and confirm:
+
+- The right widget rendered.
+- No error overlay, no clipped content, no console-error toast
+  bleeding through.
+- The light variant actually reads as light (the dashboard's light
+  theme has rough edges in some chrome — see
+  [test-sync](./test-sync) if you find a regression worth fixing in
+  the app itself rather than the docs).
+
 The script asserts that the canonical DOM elements rendered, but it
 can't tell you whether the composition is aesthetically right.
 
-## Refreshing only the README hero
+## Refreshing only the hero
 
-The hero comes out of a dedicated `README hero shot` capture that
-seeds `localStorage` with a deterministic four-widget composition
-before navigating, so the shot is bit-stable across regens.
+The hero comes out of a dedicated `hero shot` capture that seeds
+`localStorage` with a deterministic four-widget composition before
+navigating, so the shot is bit-stable across regens. Two variants
+ship — `screenshot.png` (dark) and `screenshot-light.png` (light).
 
 The seeded state:
 
-- **Tweaks** — `accent: 'indigo'` (matches the docs site's brand
-  colour at hue 268), `compactMode: true`,
+- **Tweaks** — `theme: <dark|light>`, `accent: 'indigo'` (matches the
+  docs site's brand at hue 268), `compactMode: true`,
   `performanceMode: 'on'`.
 - **Layout** — Mirror left (≈32% width), then a column split on the
   right with Logcat on top (≈62% height) and Shell | Dumpsys at the
   bottom (50/50).
 - **Simulator hints** — same convention as the feature shots: the
-  "Using simulated log data" toast is waited out and the
-  "Simulated log stream" badge is hidden via an injected
-  `display:none` rule before the screenshot fires. Readers shouldn't
-  mistake those onboarding affordances for product chrome.
+  "Using simulated log data" toast is waited out and the "Simulated
+  log stream" badge is hidden via an injected `display:none` rule
+  before the screenshot fires. Readers shouldn't mistake those
+  onboarding affordances for product chrome.
 
-Re-run only the hero without churning the other PNGs:
+Re-run only the heroes without churning the other PNGs:
 
 ```bash
 CHROMIUM_PATH=... npx playwright test \
   --config=playwright.screenshots.config.ts \
-  -g 'README hero'
+  -g 'hero shot'
 ```
 
-It writes to `docs/public/screenshot.png`, which the README and the
-docs landing both reference. If the user asks specifically for *the
-README screenshot*, that's this one.
+It writes both variants. If the user asks specifically for *the
+README screenshot*, both files are in scope — the same composition
+is used for the docs landing.
 
 To change the composition (different widgets, different ratios, a
 different accent), edit the `localStorage.setItem` block in
 `scripts/capture-feature-screenshots.spec.ts` under the
-`README hero shot` test. Layout payload shape lives in
+`hero shot` test. Layout payload shape lives in
 [`src/lib/layout.ts`](https://github.com/gabrielhuff/web-logcat/blob/main/src/lib/layout.ts)
 (`weblogcat-dashboard-v2`); tweak shape lives in
 [`src/lib/tweaks.ts`](https://github.com/gabrielhuff/web-logcat/blob/main/src/lib/tweaks.ts)
 (`weblogcat:tweaks:v1`).
 
+## Authoring a feature page
+
+Reference both variants via the global `<ThemeImage>` Vue component
+(registered by `docs/.vitepress/theme/index.ts`):
+
+```md
+<ThemeImage
+  src-dark="/img/features/<slug>.png"
+  src-light="/img/features/<slug>-light.png"
+  alt="..."
+/>
+```
+
+The component reads `useData().isDark` and renders the right
+variant; both src paths are absolute paths into `docs/public/`,
+piped through `withBase()` so the rendered href is correct under
+production / staging / local-dev base paths. Don't reach for the
+plain markdown `![](./img/...)` syntax — the docs site's convention
+is dual-theme.
+
 ## Adding a new capture
 
-Follow the existing pattern in
-`scripts/capture-feature-screenshots.spec.ts`:
+Add a `test('<short description>', …)` block **inside** the existing
+`for (const theme of ['dark', 'light'])` describe loop in
+`scripts/capture-feature-screenshots.spec.ts`. The harness then
+captures it for both themes automatically. The pattern:
 
-1. Add a `test('<short description>', async ({ page }) => { … })`
-   block.
-2. Boot the simulator with `await bootSimulator(page);`.
-3. Add the widget if needed via `await addWidget(page, /Name/,
-   '.<kind>-widget');`.
-4. Drive the widget to the state you want to capture; **wait on a
-   DOM signal** that proves the state arrived (don't `setTimeout` —
-   it'll flake).
-5. Write the file via `await tile.screenshot({ path: out('<slug>') });`
-   (tile-scoped) or `await page.screenshot({ path: out('<slug>'),
-   fullPage: false });` (full viewport).
-6. Reference the new PNG from the matching `docs/features/<page>.md`.
+```ts
+test('my new capture', async ({ page }) => {
+  await bootSimulator(page, theme);
+  // …drive the widget to the state you want to capture;
+  // **wait on a DOM signal** that proves the state arrived
+  // (don't `setTimeout` — it'll flake).
+  await tile.screenshot({ path: out(theme, 'my-new-slug') });
+});
+```
+
+Then reference both PNGs from the matching `docs/features/<page>.md`
+via `<ThemeImage>`.
 
 ## Real-device-only flows
 
@@ -129,5 +175,5 @@ These cannot be captured by the script:
 - The WebUSB pairing dialog — Chromium chrome, not part of the page.
 
 For these, capture manually against a real device and commit the PNG
-under `docs/features/img/`. Flag the source in the alt-text so a
-future regen doesn't quietly replace it.
+pair (one per theme) under `docs/public/img/features/`. Flag the
+source in the alt-text so a future regen doesn't quietly replace it.
