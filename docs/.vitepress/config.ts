@@ -35,6 +35,18 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
     ['meta', { name: 'color-scheme', content: 'dark light' }],
+    // JetBrains Mono — same family the main app uses. The docs theme
+    // overrides --vp-font-family-mono in style.css so code blocks
+    // render in the same monospace as the in-app log view.
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    [
+      'link',
+      {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap',
+      },
+    ],
   ],
   themeConfig: {
     logo: '/favicon.svg',
@@ -47,11 +59,13 @@ export default defineConfig({
       {
         text: 'Open WebLogcat ↗',
         link: appHref,
-        target: '_self',
-        // Dummy so the link renders as "external" (the arrow icon is
-        // the affordance — same tab so the user can come back via
-        // the browser back button).
-        rel: '',
+        // `target: '_blank'` so VitePress treats this as an external
+        // link (skipping client-side routing — the docs site has no
+        // route at `appHref`, so internal navigation would 404). The
+        // live app opens in a new tab; readers can come back via
+        // their tab bar.
+        target: '_blank',
+        rel: 'noopener',
       },
     ],
 
@@ -95,6 +109,7 @@ export default defineConfig({
             { text: 'Doc-sync rules', link: '/bots/doc-sync' },
             { text: 'Test-sync rules', link: '/bots/test-sync' },
             { text: 'Screenshot pipeline', link: '/bots/screenshots' },
+            { text: 'Maintaining bots/', link: '/bots/maintaining' },
           ],
         },
       ],

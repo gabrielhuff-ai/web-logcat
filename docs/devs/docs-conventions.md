@@ -88,6 +88,14 @@ Concretely:
 The agent-facing version of this contract lives at
 [bots/doc-sync](../bots/doc-sync) — it's the one a bot will read first.
 
+::: tip Editing the agent contracts themselves
+The `bots/` directory is meant to grow with the codebase as agents
+fold their learnings in. The rules for doing that safely (what to
+update, what's load-bearing, the size budget) live in
+[bots/maintaining](../bots/maintaining). Read it before pushing
+changes under `bots/`.
+:::
+
 ## Building locally
 
 ```bash

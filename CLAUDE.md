@@ -31,6 +31,11 @@ site with three audience-segmented sections. Use them like this:
     the existing simulator-driven coverage current. **New behaviour
     ships with new tests; existing tests get updated when the
     behaviour underneath them moves.**
+  - [`docs/bots/maintaining.md`](docs/bots/maintaining.md) — how
+    to fold your own learnings back into `bots/` without making it
+    worse (protected directives that must not be deleted, size
+    budget per file, append-don't-fork rule). Read before editing
+    anything under `bots/`.
 - **Contributor reference** (humans + bots):
   - [`docs/devs/architecture.md`](docs/devs/architecture.md) —
     module map.
