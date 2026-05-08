@@ -63,19 +63,41 @@ can't tell you whether the composition is aesthetically right.
 
 ## Refreshing only the README hero
 
-The hero comes out of the `dashboard multi-widget layout (hero shot)`
-test, which writes both `dashboard-multi.png` and `screenshot.png`.
-Re-run only that one to refresh the README without churning the other
-PNGs:
+The hero comes out of a dedicated `README hero shot` capture that
+seeds `localStorage` with a deterministic four-widget composition
+before navigating, so the shot is bit-stable across regens.
+
+The seeded state:
+
+- **Tweaks** — `accent: 'teal'`, `compactMode: true`,
+  `performanceMode: 'on'`.
+- **Layout** — Mirror left (≈32% width), then a column split on the
+  right with Logcat on top (≈62% height) and Shell | Dumpsys at the
+  bottom (50/50).
+- **Simulator hints** — unlike the cleaner feature shots, the hero
+  *keeps* the "Simulated log stream" badge. Readers landing from the
+  README see the same affordance the live simulator session shows.
+
+Re-run only the hero without churning the other PNGs:
 
 ```bash
 CHROMIUM_PATH=... npx playwright test \
   --config=playwright.screenshots.config.ts \
-  -g 'hero shot'
+  -g 'README hero'
 ```
 
-If the user asks specifically for *the README screenshot*, that's
-this one.
+It writes to `docs/public/screenshot.png`, which the README and the
+docs landing both reference. If the user asks specifically for *the
+README screenshot*, that's this one.
+
+To change the composition (different widgets, different ratios, a
+different accent), edit the `localStorage.setItem` block in
+`scripts/capture-feature-screenshots.spec.ts` under the
+`README hero shot` test. Layout payload shape lives in
+[`src/lib/layout.ts`](https://github.com/gabrielhuff/web-logcat/blob/main/src/lib/layout.ts)
+(`weblogcat-dashboard-v2`); tweak shape lives in
+[`src/lib/tweaks.ts`](https://github.com/gabrielhuff/web-logcat/blob/main/src/lib/tweaks.ts)
+(`weblogcat:tweaks:v1`).
 
 ## Adding a new capture
 

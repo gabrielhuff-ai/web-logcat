@@ -123,9 +123,89 @@ test.describe('feature screenshots', () => {
         .first(),
     ).toContainText(/charge/i);
     await page.screenshot({ path: out('dashboard-multi'), fullPage: false });
-    // The hero shot is the same composition — write it a second time
-    // to docs/public/screenshot.png so README.md and the VitePress
-    // landing page stay in lockstep with the multi-widget capture.
+  });
+
+  // README hero composition.
+  //
+  // The hero needs a deterministic layout (Mirror left full-height,
+  // Logcat top-right, Shell + Dumpsys bottom-right), the teal accent,
+  // and compact mode — building it via "+ Add widget" clicks would
+  // depend on the dwindle's split-direction heuristic and isn't
+  // bit-stable. Seed localStorage directly so the same composition
+  // lands every regen.
+  //
+  // Unlike the cleaner feature shots, this one *keeps* the
+  // "Simulated log stream" badge visible — readers landing from the
+  // README see the same affordance the live simulator session shows,
+  // which matches the README's "no phone? simulated stream" framing.
+  test('README hero shot', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.clear();
+      // Tweaks: teal accent + compact mode, performance mode on so
+      // tile transitions don't render mid-easing.
+      localStorage.setItem(
+        'weblogcat:tweaks:v1',
+        JSON.stringify({
+          accent: 'teal',
+          compactMode: true,
+          performanceMode: 'on',
+        }),
+      );
+      // Dashboard layout: Mirror left (~32%), then a column split on
+      // the right with Logcat on top (~62%) and Shell|Dumpsys at the
+      // bottom (50/50).
+      localStorage.setItem(
+        'weblogcat-dashboard-v2',
+        JSON.stringify({
+          tiles: {
+            w_mirror: { id: 'w_mirror', kind: 'mirror' },
+            w_logcat: { id: 'w_logcat', kind: 'logcat' },
+            w_shell: { id: 'w_shell', kind: 'shell' },
+            w_dumpsys: { id: 'w_dumpsys', kind: 'dumpsys' },
+          },
+          tree: {
+            type: 'split',
+            dir: 'row',
+            ratio: 0.32,
+            a: { type: 'leaf', id: 'w_mirror' },
+            b: {
+              type: 'split',
+              dir: 'col',
+              ratio: 0.62,
+              a: { type: 'leaf', id: 'w_logcat' },
+              b: {
+                type: 'split',
+                dir: 'row',
+                ratio: 0.5,
+                a: { type: 'leaf', id: 'w_shell' },
+                b: { type: 'leaf', id: 'w_dumpsys' },
+              },
+            },
+          },
+          focusId: 'w_logcat',
+        }),
+      );
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    // Four tiles, in the configured composition.
+    await expect(page.locator('.tile')).toHaveCount(4);
+    await expect(page.locator('.lc-widget')).toBeVisible();
+    await expect(page.locator('.mr-widget')).toBeVisible();
+    await expect(page.locator('.sh-widget')).toBeVisible();
+    await expect(page.locator('.ds-widget')).toBeVisible();
+    // Wait for the log stream to start so the Logcat tile isn't empty.
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    // Settle Dumpsys' default preset.
+    await expect(
+      page.locator('.tile')
+        .filter({ has: page.locator('.ds-widget') })
+        .locator('.ds-card-head')
+        .first(),
+    ).toContainText(/charge/i);
+    // Wait out the connect-toast (the badge stays — see comment above).
+    await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
     await page.screenshot({ path: HERO_PATH, fullPage: false });
   });
 
