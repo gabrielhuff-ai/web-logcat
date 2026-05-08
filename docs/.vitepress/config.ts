@@ -14,11 +14,18 @@ import { defineConfig } from 'vitepress';
 
 const base = process.env.DOCS_BASE_PATH ?? '/';
 
-// `appHref` is the URL of the *main app* relative to the docs site —
-// always one level up from `base`. Used by the "Open WebLogcat" button
-// in the navbar so it round-trips between the docs and the live app
-// without depending on absolute production URLs.
-const appHref = base === '/' ? '/' : base.replace(/docs\/?$/, '');
+// Placeholder href for "Open WebLogcat" links. The real URL of the
+// live app depends on the *current* page (relative `../` from the
+// docs root vs `../../` from a feature page) and on the deploy
+// environment (production vs staging vs local dev), so we can't
+// hard-code it in the static VitePress config. Instead, every
+// "Open WebLogcat" anchor ships with this sentinel as its href and
+// gets rewritten at runtime by `theme/index.ts`'s `fixAppLinks()`
+// to `<window-host>/<app-base>/`. The sentinel itself is a 404 if
+// clicked before the rewrite runs — but the rewrite happens on
+// initial paint and after every route change, so the window is
+// well under a second.
+const APP_LINK = '/__open_app__';
 
 export default defineConfig({
   title: 'WebLogcat',
@@ -58,12 +65,7 @@ export default defineConfig({
       { text: 'For agents', link: '/bots/', activeMatch: '/bots/' },
       {
         text: 'Open WebLogcat ↗',
-        link: appHref,
-        // `target: '_blank'` so VitePress treats this as an external
-        // link (skipping client-side routing — the docs site has no
-        // route at `appHref`, so internal navigation would 404). The
-        // live app opens in a new tab; readers can come back via
-        // their tab bar.
+        link: APP_LINK,
         target: '_blank',
         rel: 'noopener',
       },

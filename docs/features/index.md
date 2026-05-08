@@ -6,8 +6,9 @@ you need on a single screen.
 
 ## Quick start
 
-1. Open the [live app](../) in Chrome, Edge, or another Chromium-based browser
-   — WebUSB is required and Firefox / Safari don't ship it.
+1. Open the <a data-app-link href="../../">live app</a> in Chrome, Edge, or another
+   Chromium-based browser — WebUSB is required and Firefox / Safari
+   don't ship it.
 2. Plug in an Android device with USB debugging enabled.
 3. Click **Connect a device** and accept the on-device authorisation prompt.
 4. The dashboard mounts with a single Logcat tile filling the viewport. Use
