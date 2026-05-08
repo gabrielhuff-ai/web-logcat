@@ -273,13 +273,14 @@ export function FilterBar({
         </div>
       </div>
 
-      {activeFilterId !== null && matchCount > 0 && (
+      {activeFilterId !== null && (
         <div className="fb-match-nav">
           <button
             type="button"
             className="fb-match-step"
             aria-label="Previous match"
-            title="Previous match"
+            title="Previous match (⇧⌘G)"
+            disabled={matchCount === 0}
             onClick={() => onRetreatMatch?.()}
           >
             <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
@@ -290,7 +291,8 @@ export function FilterBar({
             type="button"
             className="fb-match-step"
             aria-label="Next match"
-            title="Next match"
+            title="Next match (⌘G)"
+            disabled={matchCount === 0}
             onClick={() => onAdvanceMatch?.()}
           >
             <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">

@@ -425,6 +425,16 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         e.preventDefault();
         setSearchOpen(true);
       }
+      // ⌘G / ⌘⇧G — find-next / find-previous (mirrors browsers,
+      // editors, and Finder). Only fires while a chip is the active
+      // filter — otherwise there's no "find" to step through.
+      if (e.key.toLowerCase() === 'g' && (e.metaKey || e.ctrlKey)) {
+        if (activeFilterId !== null) {
+          e.preventDefault();
+          if (e.shiftKey) onRetreatMatch();
+          else onAdvanceMatch();
+        }
+      }
       if (e.key === 'Escape') {
         if (searchOpen) {
           setSearchOpen(false);
@@ -438,7 +448,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchOpen, onClear, setPaused]);
+  }, [searchOpen, onClear, setPaused, activeFilterId, onAdvanceMatch, onRetreatMatch]);
 
   const onMouseDownWidget = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const root = rootRef.current;

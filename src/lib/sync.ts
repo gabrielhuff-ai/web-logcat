@@ -349,33 +349,46 @@ function createRealSync(adb: Adb): SyncFs {
     },
 
     async open(path) {
-      // Both APKs and other files go through `am start` as a
-      // fire-and-forget intent: the system's PackageInstaller (or
-      // the user's chosen viewer) takes over from there. We can't
-      // observe install completion this way — the user explicitly
-      // accepted that trade-off — so we just need `am start` to
-      // launch the intent without an exit-code error. Quoting the
-      // path is essential because shellProtocol joins argv with
-      // spaces, so any embedded space silently truncates the URI.
+      // APKs use `pm install` over the shell channel: the shell uid
+      // has install privilege, so the install proceeds without any
+      // device-side dialog. We fire-and-forget by intentionally NOT
+      // awaiting `proc.exited` — installs can take 30 s+, and the
+      // user feedback was that any progress UI we show during that
+      // window feels broken (#65 had a hung-looking strip). Returning
+      // ok as soon as the spawn succeeds means the toast lands while
+      // the install completes in the background.
+      //
+      // Non-APK files still go through an `am start VIEW` intent so
+      // the device shows the user's chosen viewer.
       const mime = mimeForExtension(path);
       const isApk = path.toLowerCase().endsWith('.apk');
-      const intentMime = isApk
-        ? 'application/vnd.android.package-archive'
-        : mime;
-      const fileUri = `file://${path}`;
-      const cmd = [
-        'am',
-        'start',
-        '-a',
-        'android.intent.action.VIEW',
-        '-d',
-        shellQuote(fileUri),
-        '-t',
-        intentMime,
-        '--grant-read-uri-permission',
-      ];
+      const sp = adb.subprocess.shellProtocol;
       try {
-        const sp = adb.subprocess.shellProtocol;
+        if (isApk) {
+          const cmd = ['pm', 'install', '-r', '-t', '-d', shellQuote(path)];
+          if (sp) {
+            // Spawn resolves once the process is running; we
+            // deliberately don't await `.exited`.
+            await sp.spawn(cmd);
+          } else {
+            // Old shell-v1 path can't avoid waiting; accept the
+            // longer toast latency on that branch.
+            await adb.subprocess.noneProtocol.spawnWaitText(cmd);
+          }
+          return { ok: true };
+        }
+        const fileUri = `file://${path}`;
+        const cmd = [
+          'am',
+          'start',
+          '-a',
+          'android.intent.action.VIEW',
+          '-d',
+          shellQuote(fileUri),
+          '-t',
+          mime,
+          '--grant-read-uri-permission',
+        ];
         if (sp) {
           const proc = await sp.spawn(cmd);
           const code = await proc.exited;

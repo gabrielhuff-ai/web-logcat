@@ -525,43 +525,52 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
 
       const unsubscribe = session.subscribeRaw((chunk) => {
         if (cancelled) return;
+        // Walk the NAL list once: capture SPS/PPS for the decoder
+        // config and decide whether this chunk is config-only (no
+        // slice NALs). Config-only chunks must be skipped — feeding
+        // them to mp4-muxer as samples produces an unplayable file
+        // because the muxer treats them as frames.
+        let hasSlice = false;
+        for (const nal of findNalUnits(chunk)) {
+          if (nal.type === 1 || nal.type === 5) hasSlice = true;
+          if (nal.type === 7 && !sps) sps = new Uint8Array(nal.payload);
+          else if (nal.type === 8 && !pps) pps = new Uint8Array(nal.payload);
+        }
+        if (!hasSlice) return;
+
         const now = performance.now() * 1000; // microseconds
         if (firstTs == null) firstTs = now;
         const ts = Math.round(now - firstTs);
-        // Heuristic key-frame detection on the AnnexB stream: scrcpy
-        // produces NAL-unit boundaries at 0x00000001; type 5 (IDR)
-        // signals a keyframe in H.264. mp4-muxer is forgiving here —
-        // any non-keyframe before the first IDR is dropped.
+        // NAL type 5 (IDR) signals a keyframe in H.264. mp4-muxer is
+        // forgiving here — any non-keyframe before the first IDR is
+        // dropped.
         const isKey = isAnnexBKeyframe(chunk);
 
         let meta: { decoderConfig: { codec: string; description: ArrayBuffer; codedWidth: number; codedHeight: number } } | undefined;
-        if (!configWritten) {
-          if (!sps || !pps) {
-            for (const nal of findNalUnits(chunk)) {
-              if (nal.type === 7 && !sps) sps = new Uint8Array(nal.payload);
-              else if (nal.type === 8 && !pps) pps = new Uint8Array(nal.payload);
-            }
-          }
-          if (sps && pps) {
-            const cfg = buildAVCDecoderConfig(sps, pps);
-            meta = {
-              decoderConfig: {
-                codec: cfg.codec,
-                description: cfg.description.buffer.slice(
-                  cfg.description.byteOffset,
-                  cfg.description.byteOffset + cfg.description.byteLength,
-                ) as ArrayBuffer,
-                codedWidth,
-                codedHeight,
-              },
-            };
-            configWritten = true;
-          }
+        if (!configWritten && sps && pps) {
+          const cfg = buildAVCDecoderConfig(sps, pps);
+          meta = {
+            decoderConfig: {
+              codec: cfg.codec,
+              description: cfg.description.buffer.slice(
+                cfg.description.byteOffset,
+                cfg.description.byteOffset + cfg.description.byteLength,
+              ) as ArrayBuffer,
+              codedWidth,
+              codedHeight,
+            },
+          };
+          configWritten = true;
         }
 
-        // 16ms ≈ 60fps; the muxer just needs a non-zero duration so
-        // the produced .mp4 timestamps stay strictly monotonic.
-        muxer.addVideoChunkRaw(chunk, isKey ? 'key' : 'delta', ts, 16_000, meta);
+        // MP4 stores AVC samples in AVCC (length-prefixed) form, not
+        // AnnexB (start codes). Without this conversion the resulting
+        // file plays at the right duration / aspect but the contents
+        // are completely black because the demuxer can't find sample
+        // boundaries. 16ms ≈ 60fps; the muxer just needs a non-zero
+        // duration so timestamps stay strictly monotonic.
+        const avccChunk = annexbToAvcc(chunk);
+        muxer.addVideoChunkRaw(avccChunk, isKey ? 'key' : 'delta', ts, 16_000, meta);
       });
 
       recorderRef.current = {
@@ -899,6 +908,32 @@ function buildAVCDecoderConfig(sps: Uint8Array, pps: Uint8Array): { codec: strin
   desc.set(pps, p);
   const hex = (n: number) => n.toString(16).padStart(2, '0');
   return { codec: `avc1.${hex(profile)}${hex(compat)}${hex(level)}`, description: desc };
+}
+
+/**
+ * Convert an AnnexB byte stream to AVCC: replace each NAL's start
+ * code (`0x000001` or `0x00000001`) with a 4-byte big-endian length
+ * prefix. MP4 stores AVC samples in AVCC form; without this conversion
+ * the resulting file plays at the right duration / aspect but the
+ * picture is solid black because the demuxer can't find NAL
+ * boundaries.
+ */
+function annexbToAvcc(buf: Uint8Array): Uint8Array {
+  const nals = findNalUnits(buf);
+  let total = 0;
+  for (const n of nals) total += 4 + n.payload.length;
+  const out = new Uint8Array(total);
+  let p = 0;
+  for (const n of nals) {
+    const len = n.payload.length;
+    out[p++] = (len >>> 24) & 0xff;
+    out[p++] = (len >>> 16) & 0xff;
+    out[p++] = (len >>> 8) & 0xff;
+    out[p++] = len & 0xff;
+    out.set(n.payload, p);
+    p += len;
+  }
+  return out;
 }
 
 /**

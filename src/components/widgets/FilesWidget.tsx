@@ -29,6 +29,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
+import { ConfirmDialog, PromptDialog } from '../ConfirmDialog';
 import * as Icons from '../Icons';
 import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
@@ -111,6 +112,10 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
 
   const [transfer, setTransfer] = useState<Transfer | null>(null);
   const [dropping, setDropping] = useState(false);
+  // Dialog state — replaces window.confirm / window.prompt with the
+  // material-style overlays defined in `ConfirmDialog.tsx`.
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
 
   // Tree pane owns its own expanded set so opening a directory in the
   // list pane doesn't auto-expand the tree (matches Finder / VS Code).
@@ -533,15 +538,14 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   };
 
   // ---- mkdir -------------------------------------------------------------
-  const onNewFolder = useCallback(async () => {
+  const onNewFolder = useCallback(() => {
+    setNewFolderOpen(true);
+  }, []);
+
+  const submitNewFolder = useCallback(async (name: string) => {
+    setNewFolderOpen(false);
     const fs = fsRef.current;
-    if (!fs) return;
-    const name = window.prompt('New folder name');
-    if (!name) return;
-    if (name.includes('/')) {
-      showToast('Folder name cannot contain "/"');
-      return;
-    }
+    if (!fs || !name) return;
     try {
       await fs.mkdir(joinPath(path, name));
       await reload();
@@ -553,15 +557,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
 
   // ---- delete ------------------------------------------------------------
   const removeEntries = useCallback(
+    (names: string[]) => {
+      if (names.length === 0) return;
+      setConfirmDelete(names);
+    },
+    [],
+  );
+
+  const performDelete = useCallback(
     async (names: string[]) => {
+      setConfirmDelete(null);
       const fs = fsRef.current;
       if (fs == null || names.length === 0) return;
-      const label =
-        names.length === 1 ? names[0] : `${names.length} items`;
-      const ok = window.confirm(
-        `Delete ${label}? This cannot be undone.`,
-      );
-      if (!ok) return;
       let failures = 0;
       for (const n of names) {
         try {
@@ -1092,6 +1099,39 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           }}
         />
       )}
+
+      <PromptDialog
+        open={newFolderOpen}
+        title="New folder"
+        label="Folder name"
+        placeholder="my-folder"
+        okLabel="Create"
+        validate={(v) => {
+          if (!v.trim()) return 'Name cannot be empty';
+          if (v.includes('/')) return 'Folder name cannot contain "/"';
+          return null;
+        }}
+        onSubmit={(v) => void submitNewFolder(v.trim())}
+        onCancel={() => setNewFolderOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={
+          confirmDelete && confirmDelete.length === 1
+            ? 'Delete file'
+            : 'Delete files'
+        }
+        message={
+          confirmDelete && confirmDelete.length === 1
+            ? `Delete "${confirmDelete[0]}"? This cannot be undone.`
+            : `Delete ${confirmDelete?.length ?? 0} items? This cannot be undone.`
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => confirmDelete && void performDelete(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }
