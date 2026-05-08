@@ -7,7 +7,10 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: oklch(from var(--bg-0) calc(l - 0.02) c h);
+  /* No own background — let the tile's translucent fill + the
+   * dashboard grid show through. Was a solid bg-0 derivative which
+   * made the shell tile fully opaque even though the tile chrome
+   * is glass. */
   cursor: text;
   outline: none;
 }

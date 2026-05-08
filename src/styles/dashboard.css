@@ -321,7 +321,7 @@
   display: flex;
   flex-direction: column;
   background: oklch(from var(--bg-1) l c h / 0.55);
-  backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(2px) saturate(1.2);
   border: 1px solid var(--glass-line);
   border-radius: var(--tile-radius, var(--r-lg));
   /* Establish a size container so widget content can adapt to the
