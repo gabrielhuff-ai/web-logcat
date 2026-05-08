@@ -400,9 +400,13 @@
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
-.fb-match-step:hover {
+.fb-match-step:hover:not(:disabled) {
   background: oklch(from var(--accent) l c h / 0.12);
   color: var(--fg-1);
+}
+.fb-match-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .fb-match-counter {
   font-family: var(--font-mono);
@@ -499,6 +503,122 @@
 @keyframes helpAppear {
   from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
   to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+/* ===== Material-style confirm / prompt dialogs ============================
+ * Replaces window.confirm / window.prompt, which look out of place
+ * inside the dashboard chrome. Same scrim + centring structure as the
+ * help dialog. */
+.md-scrim {
+  position: fixed;
+  inset: 0;
+  background: oklch(0 0 0 / 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 250;
+  animation: fadeIn 200ms var(--ease-out) both;
+}
+.md-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  z-index: 251;
+  animation: helpAppear 220ms var(--ease-spring) both;
+  overflow: hidden;
+}
+.md-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.md-dialog-head h2 {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--fg-0);
+}
+.md-dialog-body {
+  padding: 16px 18px;
+  font-size: var(--t-sm);
+  color: var(--fg-1);
+  line-height: 1.5;
+}
+.md-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: oklch(from var(--bg-0) l c h / 0.4);
+}
+.md-btn {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+  font-size: var(--t-sm);
+}
+.md-btn-text {
+  background: transparent;
+  color: var(--fg-1);
+}
+.md-btn-text:hover {
+  background: var(--bg-2);
+}
+.md-btn-primary {
+  background: var(--accent);
+  color: oklch(0.99 0 0);
+  font-weight: 500;
+}
+.md-btn-primary:hover {
+  background: oklch(from var(--accent) calc(l + 0.04) c h);
+}
+.md-btn-destructive {
+  background: var(--lvl-e-fg);
+  color: oklch(0.99 0 0);
+  font-weight: 500;
+}
+.md-btn-destructive:hover {
+  background: oklch(from var(--lvl-e-fg) calc(l + 0.04) c h);
+}
+.md-prompt-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--t-xs);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.md-prompt-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--fg-0);
+  font: inherit;
+  font-size: var(--t-sm);
+  outline: none;
+}
+.md-prompt-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px oklch(from var(--accent) l c h / 0.25);
+}
+.md-prompt-error {
+  margin-top: 6px;
+  font-size: var(--t-xs);
+  color: var(--lvl-e-fg);
 }
 .help-head {
   display: flex;

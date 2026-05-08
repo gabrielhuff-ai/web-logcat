@@ -36,10 +36,11 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
     >
       {/* Pixel home-screen screenshot. `xlinkHref` for broader SVG-1.1
           tooling, `href` for SVG 2; both are accepted by browsers.
-          `slice` makes the PNG fill the entire SVG viewBox (no inner
-          letterboxing) — the outer SVG itself uses `meet`, so the
-          widget body shows through above/below when the tile is
-          taller than the SVG aspect, instead of cropping the image. */}
+          `meet` here too: any aspect mismatch between the PNG and the
+          SVG viewBox (e.g. a 9:20 PNG inside a 360×760 viewBox) leaves
+          slim transparent slack instead of clipping the status bar
+          or nav buttons. The slack reveals the widget body since
+          `.mr-screen` is transparent. */}
       <image
         href={HOME_IMG}
         xlinkHref={HOME_IMG}
@@ -47,7 +48,7 @@ export function MirrorAppFrame({ time, taps }: MirrorAppFrameProps) {
         y={0}
         width={VIEWBOX_W}
         height={VIEWBOX_H}
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="xMidYMid meet"
       />
 
       {/* Live status-bar clock overlay. The screenshot has its own

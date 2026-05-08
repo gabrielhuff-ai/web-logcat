@@ -105,9 +105,15 @@ export function App() {
     const sim = simulatorRef.current;
     hubRef.current.reset(sim.seedHistory(60, 5));
     setDevice(FAKE_DEVICE);
-    setDevices([FAKE_DEVICE]);
+    // Preserve any already-paired real devices in the picker so the
+    // user can flip back without re-pairing. The real ADB connection
+    // and log stream stay live in the background; switching back is
+    // handled by `switchDevice`.
+    setDevices((prev) => {
+      const reals = prev.filter((d) => !d.fake);
+      return [...reals, FAKE_DEVICE];
+    });
     setUsingFake(true);
-    setAdb(null);
     showToast('Using simulated log data');
   }, [resetIngest, showToast]);
 
@@ -185,11 +191,17 @@ export function App() {
         void connectFake();
         return;
       }
+      // Re-attach the real-device stream into the hub. `connectFake`
+      // reseeded the buffer with simulated history, so we wipe it
+      // before un-pausing — otherwise the user would see fake logs
+      // intermixed with the real device's output.
+      resetIngest();
+      hubRef.current.reset([]);
       setDevice(d);
       setUsingFake(false);
       showToast(`Switched to ${d.model}`);
     },
-    [connectFake, showToast],
+    [connectFake, resetIngest, showToast],
   );
 
   // ---- Global keyboard shortcuts -----------------------------------------

@@ -155,6 +155,28 @@ function DashTopbar({
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const devRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape dismiss for the device picker. Was missing
+  // entirely — the previous behaviour required clicking the chip again
+  // to close, which was disorienting.
+  useEffect(() => {
+    if (!devOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const root = devRef.current;
+      if (!root) return;
+      if (!root.contains(e.target as Node)) setDevOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDevOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [devOpen]);
 
   return (
     <div className="dash-top">
@@ -176,7 +198,7 @@ function DashTopbar({
       <div style={{ flex: 1 }} />
 
       <div className="dash-actions">
-        <div className="dash-device" onClick={() => setDevOpen((o) => !o)}>
+        <div className="dash-device" ref={devRef} onClick={() => setDevOpen((o) => !o)}>
           <span className="dash-device-status" data-fake={usingFake}>
             <span className="dash-device-dot" />
           </span>
