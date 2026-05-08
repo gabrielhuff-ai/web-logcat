@@ -12,31 +12,39 @@
   overflow: hidden;
 }
 
-/* Empty-state-style grid pattern, dimmed and centred via a radial mask
- * so the edges fade into the background gradient. Painted on
- * `.dash-grid` rather than `.dash` so it sits in the same stacking
- * context as the tiles — `.dash-grid` sets `position: relative;
- * z-index: 1` which would otherwise hide a `.dash::before` backdrop
- * from the tile's `backdrop-filter`. The tile chrome
- * (`.tile`, `.tile-head`) is already translucent + blurred, so a busy
- * backdrop in the same stacking context is what makes the glass
- * effect visible. Disabled under perf mode further down. */
-.dash-grid::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+/* Empty-state-style grid pattern, painted directly on `.dash-grid`'s
+ * own background (rather than on a positioned `::before`) so it
+ * unambiguously sits behind every descendant in `.dash-grid`'s
+ * paint order. The tile's `backdrop-filter` was failing to capture
+ * a positioned `::before` sibling — Chromium's backdrop-filter
+ * implementation only reliably blurs the host element's painted
+ * backgrounds, not its absolutely-positioned siblings.
+ *
+ * The `radial-gradient` mask applied at the bottom of the
+ * background stack fades the grid out toward the edges so it
+ * blends with the existing accent washes on `.dash`. Disabled
+ * under perf mode. */
+.dash-grid {
+  --tile-radius: var(--r-lg);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* Grid lines + a radial overlay that fades the lines toward the
+   * edges. The radial gradient is layered ABOVE the grid so it
+   * "covers" the grid where it transitions from transparent (centre,
+   * lets the grid show) to `--bg-0` (edges, hides the grid by
+   * painting over it). Doing it this way avoids `mask-image`, which
+   * would clip the absolutely-positioned tile children too. */
   background-image:
+    radial-gradient(
+      ellipse 70% 70% at 50% 50%,
+      transparent 30%,
+      var(--bg-0) 85%
+    ),
     linear-gradient(var(--line-soft) 1px, transparent 1px),
     linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 85%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 85%);
-  opacity: 0.55;
-  /* No explicit z-index: positioned tiles (`position: relative` later
-   * in document order) render above this `::before` automatically,
-   * which keeps both inside the same stacking context so the tile's
-   * `backdrop-filter` can pick the grid up as part of its backdrop. */
+  background-size: 100% 100%, 32px 32px, 32px 32px;
 }
 
 /* === Topbar === */
@@ -242,14 +250,15 @@
  * directly inside `.dash-grid`. The flat React tree means widgets
  * survive add/remove/swap without remounting.
  */
-.dash-grid {
-  --tile-radius: var(--r-lg);
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
+/* Layout-only properties for `.dash-grid` — the visual properties
+ * (background grid pattern + radial mask) are declared on the
+ * earlier rule near the top of this file. Splitting them keeps the
+ * "where the glass backdrop lives" logic readable. Note: no
+ * `z-index: 1` here. The original was leftover from when the noise
+ * overlay sat on `.dash::before` and tiles needed to stack above it.
+ * Without it, `.dash-grid` does NOT create a stacking context, so
+ * the tile's `backdrop-filter` can capture `.dash-grid`'s painted
+ * background as part of its backdrop. */
 .dash-grid.dragging,
 .dash-grid.swap-dragging { cursor: grabbing; user-select: none; }
 
@@ -703,7 +712,7 @@
  * coherent (no transparency without the blur, otherwise the topbar would
  * become fully see-through).
  */
-[data-perf="on"] .dash-grid::before { display: none; }
+[data-perf="on"] .dash-grid { background-image: none; }
 [data-perf="on"] .dash-top { backdrop-filter: none; background: var(--bg-0); }
 [data-perf="on"] .dash-device-pop {
   backdrop-filter: none;
