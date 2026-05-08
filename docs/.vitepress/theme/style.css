@@ -108,11 +108,65 @@
   max-width: none !important;
   text-wrap: pretty;
 }
+
+/* Brand-mark gradient on the .name "WebLogcat".
+   The dashboard's brand glyph (src/styles/dashboard.css) is three
+   indigo squares at 100% / 70% / 40% opacity; the favicon mirrors
+   that with `#8b85f2` (oklch ~0.66 0.14 270) at the same opacities.
+   Translate the ramp into a solid linear gradient — darkest
+   indigo on the LEFT, brightest on the RIGHT — so reading
+   left-to-right walks from the dimmer to the brighter shade.
+   `.clip` is the VitePress class on `.name` that opts the text in
+   to background-clip: text; we override only the `background`
+   gradient (the rest of the clip plumbing stays). */
+.VPHome .VPHero .heading .name.clip {
+  background: linear-gradient(
+    90deg,
+    oklch(0.40 0.18 268) 0%,
+    oklch(0.62 0.18 268) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.dark .VPHome .VPHero .heading .name.clip {
+  /* Lift both endpoints so the gradient reads against the dark
+     surface — same shift the rest of the brand colours do under
+     the .dark scope. */
+  background: linear-gradient(
+    90deg,
+    oklch(0.55 0.16 268) 0%,
+    oklch(0.85 0.16 268) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
 .VPHome .VPHero .tagline {
+  /* User-requested 16px tagline. The default scales up to 22-24px
+     on desktop; downsizing keeps the screenshot the visual focus. */
+  font-size: 16px !important;
+  line-height: 1.55 !important;
   text-align: center !important;
-  max-width: 100% !important;
+  max-width: 800px !important;
   margin-left: auto !important;
   margin-right: auto !important;
+}
+/* Inline-code styling inside the tagline. `<code>adb</code>` is
+   authored directly in the YAML hero.tagline (VitePress renders
+   that field via v-html, so HTML is honoured). The pill is the
+   brand soft fill + brand-1 text, matching the in-app filter
+   chip aesthetic. */
+.VPHome .VPHero .tagline code {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  padding: 0.1em 0.45em;
+  border-radius: 6px;
+  font-size: 0.95em;
+  font-weight: 500;
 }
 .VPHome .VPHero .actions {
   display: flex !important;
@@ -161,10 +215,24 @@
   height: auto !important;
   max-width: 100% !important;
   max-height: none !important;
-  border-radius: 14px;
+  border-radius: 30px;
+  /* Pronounced drop shadow with a hairline brand-tinted ring so
+     the screenshot reads as a floating plate even on the lightest
+     surfaces. Two-layer shadow: a long soft ambient + a short
+     contact shadow + a 1px ring. Light mode uses a brand-tinted
+     soft shadow; dark mode uses near-black to read against the
+     near-black surface. */
   box-shadow:
-    0 20px 60px -20px oklch(0.20 0.02 268 / 0.55),
-    0 6px 20px -10px oklch(0.10 0.02 268 / 0.55);
+    0 36px 80px -24px oklch(0.30 0.06 268 / 0.35),
+    0 14px 32px -10px oklch(0.20 0.06 268 / 0.30),
+    0 0 0 1px oklch(0.20 0.04 268 / 0.10);
+}
+.dark .VPHome .VPHero .image-src,
+.dark .VPHome .VPHero .VPImage {
+  box-shadow:
+    0 40px 100px -24px oklch(0 0 0 / 0.7),
+    0 20px 40px -12px oklch(0 0 0 / 0.55),
+    0 0 0 1px oklch(0.30 0.04 268 / 0.25);
 }
 
 /* ---- Landing feature icons ------------------------------------------ */

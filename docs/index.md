@@ -4,10 +4,10 @@ title: WebLogcat documentation
 
 hero:
   name: WebLogcat
-  text: Android device inspector in the browser.
-  tagline: Logcat, Shell, Dumpsys, Files, and Screen Mirror — all over WebUSB. Plug in a phone and get a draggable dashboard, no `adb` install required.
+  tagline: 'Android device inspector in the browser. Includes Logcat, Shell, Screen Mirror and others — no <code>adb</code> install required.'
   image:
-    src: /screenshot.png
+    light: /screenshot-light.png
+    dark: /screenshot.png
     alt: WebLogcat dashboard with Mirror + Logcat + Shell + Dumpsys tiles
   actions:
     # The brand action's `link` is a sentinel that the runtime theme

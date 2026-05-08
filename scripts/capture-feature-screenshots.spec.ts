@@ -24,8 +24,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const IMG_DIR = path.resolve(here, '..', 'docs', 'features', 'img');
 // Hero shot consumed by both README.md and docs/index.md. Lives under
 // docs/public/ so VitePress serves it at the docs site root, and is
-// referenced from README.md by relative path.
+// referenced from README.md by relative path. Two variants: a dark
+// hero (the README + docs default) and a light hero used by
+// VitePress's `image.light` mapping when the docs reader has light
+// mode active.
 const HERO_PATH = path.resolve(here, '..', 'docs', 'public', 'screenshot.png');
+const HERO_LIGHT_PATH = path.resolve(
+  here,
+  '..',
+  'docs',
+  'public',
+  'screenshot-light.png',
+);
 
 function out(name: string): string {
   return path.join(IMG_DIR, `${name}.png`);
@@ -125,90 +135,104 @@ test.describe('feature screenshots', () => {
     await page.screenshot({ path: out('dashboard-multi'), fullPage: false });
   });
 
-  // README hero composition.
+  // README + docs hero composition.
   //
   // The hero needs a deterministic layout (Mirror left full-height,
-  // Logcat top-right, Shell + Dumpsys bottom-right), the teal accent,
-  // and compact mode — building it via "+ Add widget" clicks would
-  // depend on the dwindle's split-direction heuristic and isn't
-  // bit-stable. Seed localStorage directly so the same composition
-  // lands every regen.
-  test('README hero shot', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      // Tweaks: indigo accent (matches the docs site's primary
-      // brand colour at hue 268) + compact mode, performance mode
-      // on so tile transitions don't render mid-easing.
-      localStorage.setItem(
-        'weblogcat:tweaks:v1',
-        JSON.stringify({
-          accent: 'indigo',
-          compactMode: true,
-          performanceMode: 'on',
-        }),
-      );
-      // Dashboard layout: Mirror left (~32%), then a column split on
-      // the right with Logcat on top (~62%) and Shell|Dumpsys at the
-      // bottom (50/50).
-      localStorage.setItem(
-        'weblogcat-dashboard-v2',
-        JSON.stringify({
-          tiles: {
-            w_mirror: { id: 'w_mirror', kind: 'mirror' },
-            w_logcat: { id: 'w_logcat', kind: 'logcat' },
-            w_shell: { id: 'w_shell', kind: 'shell' },
-            w_dumpsys: { id: 'w_dumpsys', kind: 'dumpsys' },
-          },
-          tree: {
-            type: 'split',
-            dir: 'row',
-            ratio: 0.32,
-            a: { type: 'leaf', id: 'w_mirror' },
-            b: {
+  // Logcat top-right, Shell + Dumpsys bottom-right), the indigo
+  // accent (matches the docs site's brand at hue 268), and compact
+  // mode. Seed localStorage directly so the same composition lands
+  // every regen, parameterised by theme so we capture both a dark
+  // and a light variant.
+  //
+  // The dark capture writes to docs/public/screenshot.png (the
+  // README hero); the light capture writes to
+  // docs/public/screenshot-light.png and is referenced by the docs
+  // landing page's `image.light` field — VitePress swaps the two
+  // with the user's appearance toggle.
+  for (const theme of ['dark', 'light'] as const) {
+    test(`hero shot (${theme})`, async ({ page }) => {
+      await page.addInitScript((themeArg: 'dark' | 'light') => {
+        localStorage.clear();
+        localStorage.setItem(
+          'weblogcat:tweaks:v1',
+          JSON.stringify({
+            theme: themeArg,
+            accent: 'indigo',
+            compactMode: true,
+            performanceMode: 'on',
+          }),
+        );
+        // Dashboard layout: Mirror left (~32%), then a column split
+        // on the right with Logcat on top (~62%) and Shell|Dumpsys
+        // at the bottom (50/50).
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: {
+              w_mirror: { id: 'w_mirror', kind: 'mirror' },
+              w_logcat: { id: 'w_logcat', kind: 'logcat' },
+              w_shell: { id: 'w_shell', kind: 'shell' },
+              w_dumpsys: { id: 'w_dumpsys', kind: 'dumpsys' },
+            },
+            tree: {
               type: 'split',
-              dir: 'col',
-              ratio: 0.62,
-              a: { type: 'leaf', id: 'w_logcat' },
+              dir: 'row',
+              ratio: 0.32,
+              a: { type: 'leaf', id: 'w_mirror' },
               b: {
                 type: 'split',
-                dir: 'row',
-                ratio: 0.5,
-                a: { type: 'leaf', id: 'w_shell' },
-                b: { type: 'leaf', id: 'w_dumpsys' },
+                dir: 'col',
+                ratio: 0.62,
+                a: { type: 'leaf', id: 'w_logcat' },
+                b: {
+                  type: 'split',
+                  dir: 'row',
+                  ratio: 0.5,
+                  a: { type: 'leaf', id: 'w_shell' },
+                  b: { type: 'leaf', id: 'w_dumpsys' },
+                },
               },
             },
-          },
-          focusId: 'w_logcat',
-        }),
-      );
-    });
+            focusId: 'w_logcat',
+          }),
+        );
+      }, theme);
 
-    await page.goto('/');
-    await page.getByRole('button', { name: /fake data/i }).click();
-    // Four tiles, in the configured composition.
-    await expect(page.locator('.tile')).toHaveCount(4);
-    await expect(page.locator('.lc-widget')).toBeVisible();
-    await expect(page.locator('.mr-widget')).toBeVisible();
-    await expect(page.locator('.sh-widget')).toBeVisible();
-    await expect(page.locator('.ds-widget')).toBeVisible();
-    // Wait for the log stream to start so the Logcat tile isn't empty.
-    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
-    // Settle Dumpsys' default preset.
-    await expect(
-      page.locator('.tile')
-        .filter({ has: page.locator('.ds-widget') })
-        .locator('.ds-card-head')
-        .first(),
-    ).toContainText(/charge/i);
-    // Hide the simulator hints (toast + lower-left badge) — same
-    // convention the feature shots use; readers shouldn't mistake
-    // them for product chrome.
-    await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
-    await page.addStyleTag({
-      content: '.fake-badge,.toast{display:none!important}',
+      await page.goto('/');
+      await page.getByRole('button', { name: /fake data/i }).click();
+      // Four tiles, in the configured composition.
+      await expect(page.locator('.tile')).toHaveCount(4);
+      await expect(page.locator('.lc-widget')).toBeVisible();
+      await expect(page.locator('.mr-widget')).toBeVisible();
+      await expect(page.locator('.sh-widget')).toBeVisible();
+      await expect(page.locator('.ds-widget')).toBeVisible();
+      // Wait for the log stream to start so the Logcat tile isn't empty.
+      await expect(page.locator('.row').first()).toBeVisible({
+        timeout: 10_000,
+      });
+      // Settle Dumpsys' default preset.
+      await expect(
+        page
+          .locator('.tile')
+          .filter({ has: page.locator('.ds-widget') })
+          .locator('.ds-card-head')
+          .first(),
+      ).toContainText(/charge/i);
+      // Confirm the theme was actually applied — the simulator boot
+      // path resets some state, so we double-check the document
+      // attribute matches before snapshotting.
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      // Hide the simulator hints (toast + lower-left badge) — same
+      // convention the feature shots use; readers shouldn't mistake
+      // them for product chrome.
+      await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
+      await page.addStyleTag({
+        content: '.fake-badge,.toast{display:none!important}',
+      });
+      const path = theme === 'dark' ? HERO_PATH : HERO_LIGHT_PATH;
+      await page.screenshot({ path, fullPage: false });
     });
-    await page.screenshot({ path: HERO_PATH, fullPage: false });
-  });
+  }
 
   test('logcat tile (default)', async ({ page }) => {
     await bootSimulator(page);
