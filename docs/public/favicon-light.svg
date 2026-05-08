@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <!-- Light-mode variant of favicon.svg. The dark-mode mark uses
+       `oklch(0.74 0.16 268)` (#80a4ff) which becomes washed-out on
+       a near-white surface; the light-mode accent in the app drops
+       to `oklch(0.50 0.16 268)` (#3d5abd) — a deeper indigo that
+       reads cleanly against the docs site's light background. The
+       three-square / 100-70-40 opacity composition is unchanged. -->
+  <rect x="0"  y="0"  width="8" height="8" rx="1.5" fill="#3d5abd" />
+  <rect x="12" y="0"  width="8" height="8" rx="1.5" fill="#3d5abd" fill-opacity="0.7" />
+  <rect x="6"  y="12" width="8" height="8" rx="1.5" fill="#3d5abd" fill-opacity="0.4" />
+</svg>

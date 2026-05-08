@@ -56,7 +56,14 @@ export default defineConfig({
     ],
   ],
   themeConfig: {
-    logo: '/favicon.svg',
+    // Theme-aware logo: the in-app brand glyph is the indigo accent
+    // at the active theme's lightness (oklch 0.74 in dark, 0.50 in
+    // light). Mirroring that here keeps the navbar mark readable on
+    // both surfaces — the bright `#80a4ff` washes out on the
+    // light-mode near-white background, and the deep `#3d5abd`
+    // disappears on dark. VitePress swaps the two when the user
+    // toggles appearance.
+    logo: { light: '/favicon-light.svg', dark: '/favicon.svg' },
     siteTitle: 'WebLogcat docs',
 
     nav: [
