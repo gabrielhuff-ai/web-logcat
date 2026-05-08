@@ -41,6 +41,67 @@ Do **not** update `bots/` when:
 - It's contributor-facing prose for humans — that belongs in
   `devs/`.
 
+## When to remove or trim
+
+`bots/` decays if it only ever grows. **A shorter, accurate
+directory is worth more than a long, decaying one** — be willing to
+delete, not just rewrite. Remove or trim content when **any** of the
+following is true:
+
+- **The claim is wrong.** A directive contradicts the code as it
+  ships today. Read the code; either fix it to match the doc, or
+  delete the doc. Don't leave both versions in place hoping a
+  reviewer notices.
+- **The advice is obsolete.** A "watch out for X" warning whose
+  underlying cause has been fixed (a dependency upgrade, a
+  refactor, a deprecated API removed). Future agents will read it
+  and waste effort handling a problem they don't have.
+- **The "rule" was always a one-off.** A line that documents a
+  specific PR's choice rather than a general invariant.
+  ("In PR #42 we used Y" — delete.) The git history is the right
+  place for those.
+- **It's duplicated.** The same directive appears in two files.
+  Keep one canonical copy; replace the other with a one-line
+  pointer (`see [X](./x)`) or delete entirely if the pointer adds
+  nothing.
+- **The matching code was removed.** A widget contract section
+  references a deleted helper or a CSS class no widget carries any
+  more. The doc must follow.
+- **The page exceeded its budget for a non-load-bearing reason.**
+  Tangents, rationale paragraphs, "by the way" notes that aren't
+  contracts — fair game for cutting. Keep imperative directives;
+  cut explanatory prose if it isn't earning its lines.
+- **A previous agent made it worse.** See the [recovery
+  section](#what-to-do-if-a-previous-agent-made-it-worse) below.
+
+How to remove safely:
+
+1. **Check the [protected directives list](#protected-directives--do-not-delete-or-weaken)
+   first.** If what you're about to remove is on it, stop — restore
+   from git history instead and flag in the PR. If what you're
+   removing is itself a protected-directive entry, it must not
+   leave; only the *content describing* that entry can be edited
+   for clarity.
+2. **Grep for inbound links.** A directive may be referenced by
+   `CLAUDE.md`, `devs/docs-conventions.md`, or a sibling page in
+   `bots/`. Update or remove those references in the same diff so
+   the docs site doesn't ship dead links.
+   ```bash
+   git grep -n 'old-thing'
+   ```
+3. **Prefer edit over delete-and-rewrite.** If a directive needs
+   sharpening, edit it in place — don't add a contradicting one
+   below and leave the original. `git log -p docs/bots/<file>.md`
+   should read as a coherent series of refinements, not a stack of
+   half-corrected positions.
+4. **Summarise the cut in the PR description.** One line, e.g.
+   `Removed obsolete WebUSB-on-localhost note — fixed in @yume-chan/adb 2.6.`
+   Reviewers can't catch silent regressions in agent contracts
+   otherwise.
+5. **If you're unsure, ask.** Removal is harder to undo than
+   addition — when in doubt, surface the call to the user rather
+   than guessing.
+
 ## Where to write
 
 **Append to an existing file before creating a new one.** Each file
@@ -144,12 +205,19 @@ list if the repair revealed a new invariant worth pinning.
 ## Checklist before shipping a `bots/` change
 
 - [ ] The change is something **future agents** would have wanted
-      to know — not a one-off.
-- [ ] You appended to an existing page rather than creating a new
-      one (unless the new page genuinely doesn't fit).
-- [ ] No protected directive was deleted or softened.
-- [ ] The file is still ≤ ~400 lines (or you split it).
+      to know (additive change) — or actively wastes their time
+      today (trim/remove change). Not a one-off.
+- [ ] If adding: you appended to an existing page rather than
+      creating a new one (unless the new page genuinely doesn't
+      fit).
+- [ ] If removing: you grepped for inbound links and updated or
+      cleaned them up in the same diff.
+- [ ] No protected directive was deleted, softened, or moved.
+- [ ] The file is still ≤ ~400 lines (or you split it). Be
+      especially willing to cut explanatory prose to stay under
+      budget — keep imperative directives.
 - [ ] Style is terse: tables / bullets / imperative voice.
 - [ ] You added a one-line note in the PR description summarising
-      what learning got folded in. (Reviewers won't catch silent
-      regressions in agent contracts otherwise.)
+      what learning got folded in *or* what was cut and why.
+      Reviewers won't catch silent regressions in agent contracts
+      otherwise.
