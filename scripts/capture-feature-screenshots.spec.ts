@@ -136,12 +136,13 @@ test.describe('feature screenshots', () => {
   test('README hero shot', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.clear();
-      // Tweaks: teal accent + compact mode, performance mode on so
-      // tile transitions don't render mid-easing.
+      // Tweaks: indigo accent (matches the docs site's primary
+      // brand colour at hue 268) + compact mode, performance mode
+      // on so tile transitions don't render mid-easing.
       localStorage.setItem(
         'weblogcat:tweaks:v1',
         JSON.stringify({
-          accent: 'teal',
+          accent: 'indigo',
           compactMode: true,
           performanceMode: 'on',
         }),
