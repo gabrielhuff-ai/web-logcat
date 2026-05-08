@@ -2,10 +2,16 @@
 
 import { registerSettingsMigration } from '../../../lib/tileSettings';
 
+export type FilesViewMode = 'list' | 'icons';
+
 export interface FilesSettings {
   fontSize: number;
   /** Path used when the widget mounts and no other cwd is recorded. */
   startingPath: string;
+  /** Whether the left tree pane is visible. */
+  treeVisible: boolean;
+  /** List (Finder rows) vs Icons (Finder grid) layout for the file area. */
+  viewMode: FilesViewMode;
 }
 
 export const FILES_DEFAULTS: FilesSettings = {
@@ -15,6 +21,8 @@ export const FILES_DEFAULTS: FilesSettings = {
   // common landing spot for user-generated content. Users see content
   // immediately on first mount instead of an empty list of subdirs.
   startingPath: '/sdcard/Download',
+  treeVisible: true,
+  viewMode: 'list',
 };
 
 // Legacy key: `weblogcat:files:<serial>:<tileId>:cwd` → settings.startingPath
