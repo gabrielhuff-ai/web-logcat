@@ -247,6 +247,85 @@
 .fx-cell.name { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .fx-cell.num { color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .fx-cell.mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
+
+/* ===== Icons view ========================================================
+ * Finder-style grid: large file icon above the name. Auto-fills the
+ * available width with as many tiles as fit. */
+.fx-list.fx-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px;
+  padding: 12px;
+  align-content: start;
+}
+.fx-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: var(--r-sm);
+  cursor: default;
+  text-align: center;
+  user-select: none;
+}
+.fx-tile:hover { background: oklch(from var(--bg-1) l c h / 0.5); }
+.fx-tile.sel {
+  background: oklch(from var(--accent) l c h / 0.22);
+  color: var(--fg-0);
+}
+.fx-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+}
+.fx-tile-name {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--fg-1);
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
+}
+.fx-tile.dir .fx-tile-name { color: var(--fg-0); font-weight: 500; }
+.fx-tile.link .fx-tile-name { color: oklch(0.78 0.13 220); font-style: italic; }
+.fx-tile[draggable='true'] { cursor: grab; }
+.fx-tile[draggable='true']:active { cursor: grabbing; }
+
+/* ===== View-mode segmented control =======================================
+ * Two-button toggle in the toolbar to switch between list and icons. */
+.fx-view-seg {
+  display: inline-flex;
+  margin-left: 4px;
+  border: 1px solid oklch(from var(--accent) l c h / 0.25);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.fx-view-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.fx-view-btn:hover {
+  background: oklch(from var(--accent) l c h / 0.12);
+  color: var(--fg-1);
+}
+.fx-view-btn.active {
+  background: oklch(from var(--accent) l c h / 0.25);
+  color: var(--fg-0);
+}
 .fx-link { color: var(--fg-3); font-style: italic; margin-left: 4px; }
 
 .fx-empty {

@@ -186,7 +186,19 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
       const list = await fs.list(dirPath);
       setTreeChildren((prev) => {
         const next = new Map(prev);
-        next.set(dirPath, list.filter((e) => e.type === 'dir'));
+        next.set(
+          dirPath,
+          list
+            // Hide `.` / `..` (the synthetic entries Linux readdir
+            // returns for self / parent — they're not useful in a
+            // tree view) and keep only actual directories. Sort
+            // alphabetically so the tree is browsable instead of
+            // appearing in inode order.
+            .filter(
+              (e) => e.type === 'dir' && e.name !== '.' && e.name !== '..',
+            )
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
         return next;
       });
     } catch {
@@ -211,14 +223,18 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   }, [loadTreeChildren]);
 
   // Auto-expand the ancestors of `path` so the tree shows where we
-  // are. Walks `/`, `/sdcard`, `/sdcard/Download`, ...
+  // are. Walks `/`, `/sdcard`, `/sdcard/Download`, ... — but
+  // intentionally stops one level short so the *current* directory
+  // doesn't auto-expand. Otherwise arrow-down navigation in the tree
+  // would unfold every directory it walks past.
   useEffect(() => {
     if (path === '/') return;
     const parts = path.split('/').filter(Boolean);
-    let acc = '';
     const ancestors: string[] = ['/'];
-    for (const p of parts) {
-      acc = (acc === '' ? '' : acc) + '/' + p;
+    let acc = '';
+    // Stop at parts.length - 1 so `path` itself is not added.
+    for (let i = 0; i < parts.length - 1; i++) {
+      acc = acc + '/' + parts[i];
       ancestors.push(acc);
     }
     setTreeExpanded((prev) => {
@@ -363,17 +379,32 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const onRowDouble = (entry: SyncEntry) => {
     if (entry.type === 'dir') {
       navigate(joinPath(path, entry.name));
-    } else if (entry.type === 'link' && entry.linkTarget) {
-      // Symlinks: navigate INTO if it points at a directory, otherwise
-      // ask the device to open the resolved file. Lacking a stat call
-      // here, we treat any non-absolute-dir-looking target as a file.
-      const isDir = entry.linkTarget.endsWith('/');
-      if (isDir) navigate(entry.linkTarget);
-      else void openOnDevice(entry);
-    } else {
-      // Plain file → ask the device to open it with its default app.
-      void openOnDevice(entry);
+      return;
     }
+    if (entry.type === 'link' && entry.linkTarget) {
+      // Symlinks: probe with `list()` to determine if the target is a
+      // directory. The previous `endsWith('/')` heuristic was wrong
+      // for the common `/sdcard → /storage/self/primary` case where
+      // the resolved path has no trailing slash. We resolve to the
+      // link's target rather than navigating into the link's source
+      // path so the breadcrumb reflects the real device location.
+      const target = entry.linkTarget;
+      void (async () => {
+        const fs = fsRef.current;
+        if (!fs) return;
+        try {
+          await fs.list(target);
+          navigate(target);
+        } catch {
+          // Not a directory — fall back to the device's default
+          // viewer for the link target.
+          void openOnDevice(entry);
+        }
+      })();
+      return;
+    }
+    // Plain file → ask the device to open it with its default app.
+    void openOnDevice(entry);
   };
 
   // ---- Push (upload) -----------------------------------------------------
@@ -877,6 +908,36 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           >
             {showHidden ? <Icons.Eye size={14} /> : <Icons.EyeOff size={14} />}
           </button>
+          <button
+            className={`icon-btn tt ${settings.treeVisible ? 'active' : ''}`}
+            data-tt={settings.treeVisible ? 'Hide tree pane' : 'Show tree pane'}
+            onClick={() => setSettings({ treeVisible: !settings.treeVisible })}
+            aria-label="Toggle tree pane"
+          >
+            <SidebarIcon size={14} />
+          </button>
+          <div className="fx-view-seg" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`fx-view-btn ${settings.viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setSettings({ viewMode: 'list' })}
+              title="List view"
+              aria-label="List view"
+              aria-pressed={settings.viewMode === 'list'}
+            >
+              <ListViewIcon size={14} />
+            </button>
+            <button
+              type="button"
+              className={`fx-view-btn ${settings.viewMode === 'icons' ? 'active' : ''}`}
+              onClick={() => setSettings({ viewMode: 'icons' })}
+              title="Icons view"
+              aria-label="Icons view"
+              aria-pressed={settings.viewMode === 'icons'}
+            >
+              <IconsViewIcon size={14} />
+            </button>
+          </div>
         </div>
 
         <input
@@ -937,39 +998,41 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
       )}
 
       <div className="fx-body">
-        <div
-          className="fx-tree"
-          role="tree"
-          tabIndex={0}
-          ref={treeScrollRef}
-          onKeyDown={onTreeKeyDown}
-          onClick={() => {
-            if (!treeScrollRef.current?.contains(document.activeElement)) {
-              treeScrollRef.current?.focus({ preventScroll: true });
-            }
-          }}
-        >
-          <FxTree
-            path={ROOT}
-            label="/"
-            depth={0}
-            currentPath={path}
-            expanded={treeExpanded}
-            children_={treeChildren}
-            onToggle={(p) => {
-              setTreeExpanded((prev) => {
-                const next = new Set(prev);
-                if (next.has(p)) next.delete(p);
-                else {
-                  next.add(p);
-                  void loadTreeChildren(p);
-                }
-                return next;
-              });
+        {settings.treeVisible && (
+          <div
+            className="fx-tree"
+            role="tree"
+            tabIndex={0}
+            ref={treeScrollRef}
+            onKeyDown={onTreeKeyDown}
+            onClick={() => {
+              if (!treeScrollRef.current?.contains(document.activeElement)) {
+                treeScrollRef.current?.focus({ preventScroll: true });
+              }
             }}
-            onSelect={(p) => navigate(p)}
-          />
-        </div>
+          >
+            <FxTree
+              path={ROOT}
+              label="/"
+              depth={0}
+              currentPath={path}
+              expanded={treeExpanded}
+              children_={treeChildren}
+              onToggle={(p) => {
+                setTreeExpanded((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(p)) next.delete(p);
+                  else {
+                    next.add(p);
+                    void loadTreeChildren(p);
+                  }
+                  return next;
+                });
+              }}
+              onSelect={(p) => navigate(p)}
+            />
+          </div>
+        )}
         <div
           className="fx-list-pane"
           tabIndex={0}
@@ -990,38 +1053,40 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
             }
           }}
         >
-          <div className="fx-listhead" role="row">
-            <button
-              className={`fx-h ${sortBy === 'name' ? 'on ' + sortDir : ''}`}
-              onClick={() => toggleSort('name')}
-              style={{ flex: 2 }}
-            >
-              Name
-            </button>
-            <button
-              className={`fx-h ${sortBy === 'size' ? 'on ' + sortDir : ''}`}
-              onClick={() => toggleSort('size')}
-              style={{ width: 80 }}
-            >
-              Size
-            </button>
-            <button
-              className={`fx-h ${sortBy === 'perms' ? 'on ' + sortDir : ''}`}
-              onClick={() => toggleSort('perms')}
-              style={{ width: 110 }}
-            >
-              Permissions
-            </button>
-            <button
-              className={`fx-h ${sortBy === 'mtime' ? 'on ' + sortDir : ''}`}
-              onClick={() => toggleSort('mtime')}
-              style={{ width: 140 }}
-            >
-              Modified
-            </button>
-          </div>
+          {settings.viewMode === 'list' && (
+            <div className="fx-listhead" role="row">
+              <button
+                className={`fx-h ${sortBy === 'name' ? 'on ' + sortDir : ''}`}
+                onClick={() => toggleSort('name')}
+                style={{ flex: 2 }}
+              >
+                Name
+              </button>
+              <button
+                className={`fx-h ${sortBy === 'size' ? 'on ' + sortDir : ''}`}
+                onClick={() => toggleSort('size')}
+                style={{ width: 80 }}
+              >
+                Size
+              </button>
+              <button
+                className={`fx-h ${sortBy === 'perms' ? 'on ' + sortDir : ''}`}
+                onClick={() => toggleSort('perms')}
+                style={{ width: 110 }}
+              >
+                Permissions
+              </button>
+              <button
+                className={`fx-h ${sortBy === 'mtime' ? 'on ' + sortDir : ''}`}
+                onClick={() => toggleSort('mtime')}
+                style={{ width: 140 }}
+              >
+                Modified
+              </button>
+            </div>
+          )}
 
-          <div className="fx-list">
+          <div className={`fx-list ${settings.viewMode === 'icons' ? 'fx-icons' : ''}`}>
             {loading ? (
               <div className="fx-empty">
                 <span>Loading…</span>
@@ -1035,6 +1100,37 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
                 <Icons.Folder size={28} />
                 <span>Empty directory</span>
               </div>
+            ) : settings.viewMode === 'icons' ? (
+              sorted.map((entry) => (
+                <div
+                  key={entry.name}
+                  data-fx-row={entry.name}
+                  className={`fx-tile ${selected.has(entry.name) ? 'sel ' : ''}${entry.type}`}
+                  onClick={(e) => onRowClick(e, entry.name)}
+                  onDoubleClick={() => onRowDouble(entry)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (!selected.has(entry.name)) {
+                      setSelected(new Set([entry.name]));
+                      lastClickedRef.current = entry.name;
+                    }
+                    setContextMenu({ x: e.clientX, y: e.clientY, entry });
+                  }}
+                  draggable={entry.type === 'file'}
+                  onDragStart={(e) => onRowDragStart(e, entry.name)}
+                  onDragEnd={(e) => onRowDragEnd(e, entry.name)}
+                  title={
+                    entry.type === 'link' && entry.linkTarget
+                      ? `${entry.name} → ${entry.linkTarget}`
+                      : entry.name
+                  }
+                >
+                  <div className="fx-tile-icon">
+                    <FileIcon entry={entry} large />
+                  </div>
+                  <div className="fx-tile-name">{entry.name}</div>
+                </div>
+              ))
             ) : (
               sorted.map((entry) => (
                 <div
@@ -1371,11 +1467,11 @@ function PhoneIcon({ size = 11 }: InlineIconProps) {
     </svg>
   );
 }
-function FolderIcon({ open }: { open: boolean }) {
+function FolderIcon({ open, size = 14 }: { open: boolean; size?: number }) {
   // Filled folder tinted with the dashboard accent (theme primary).
   const color = 'var(--accent)';
   return (
-    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
+    <svg width={size} height={size} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
       <path
         d={
           open
@@ -1392,22 +1488,25 @@ function FolderIcon({ open }: { open: boolean }) {
   );
 }
 
-function FileIcon({ entry }: { entry: SyncEntry }) {
-  if (entry.type === 'dir') return <FolderIcon open={false} />;
+function FileIcon({ entry, large = false }: { entry: SyncEntry; large?: boolean }) {
+  // 14px in list view, 40px in icons view — the SVG paths are
+  // viewBox-based so a single `size` prop scales them cleanly.
+  const size = large ? 40 : 14;
+  if (entry.type === 'dir') return <FolderIcon open={false} size={size} />;
   // Outline-only files vs. filled folders — gives the column a clear
   // "container vs. leaf" rhythm at 14px without leaning on color alone
   // (folders are already accent-tinted).
   const color = 'var(--accent)';
   if (entry.type === 'link') {
     return (
-      <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
+      <svg width={size} height={size} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
         <path d="M 6 9 L 4 11 Q 2 13 4 15 Q 6 17 8 15 L 10 13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         <path d="M 10 7 L 12 5 Q 14 3 12 1 Q 10 -1 8 1 L 6 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
     );
   }
   return (
-    <svg width={14} height={14} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
+    <svg width={size} height={size} viewBox="0 0 16 16" style={{ flexShrink: 0, color }}>
       <path
         d="M 3 1.5 L 3 14.5 Q 3 15 3.5 15 L 12.5 15 Q 13 15 13 14.5 L 13 5 L 9 1.5 Z"
         fill="none"
@@ -1422,6 +1521,36 @@ function FileIcon({ entry }: { entry: SyncEntry }) {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function SidebarIcon({ size = 14 }: InlineIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <path d="M 6 3 L 6 13" />
+    </svg>
+  );
+}
+
+function ListViewIcon({ size = 14 }: InlineIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+      <path d="M 3 4 L 13 4" />
+      <path d="M 3 8 L 13 8" />
+      <path d="M 3 12 L 13 12" />
+    </svg>
+  );
+}
+
+function IconsViewIcon({ size = 14 }: InlineIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4}>
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="0.5" />
     </svg>
   );
 }
