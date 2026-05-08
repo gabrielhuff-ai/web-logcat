@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
-  <!-- Three-square brand mark, mirroring src/components/Toolbar.tsx
-       and the tb-logo CSS in design/source/app.css.
-       Color is the indigo accent (oklch(0.74 0.14 268)) approximated
-       in sRGB so the favicon renders consistently across browsers. -->
-  <rect x="0"  y="0"  width="8" height="8" rx="1.5" fill="#8b85f2" />
-  <rect x="12" y="0"  width="8" height="8" rx="1.5" fill="#8b85f2" fill-opacity="0.7" />
-  <rect x="6"  y="12" width="8" height="8" rx="1.5" fill="#8b85f2" fill-opacity="0.4" />
+  <!-- Three-square brand mark, mirroring the in-app dashboard glyph
+       (`.dash-brand-square` in src/styles/dashboard.css). Each square
+       is the indigo accent at three opacities: 100% / 70% / 40%.
+       Color matches the app's indigo colour scheme — `oklch(0.74 0.16
+       268)` in dark theme, which converts to `#80a4ff` in sRGB. The
+       previous `#8b85f2` was an earlier approximation at chroma 0.14
+       and read distinctly more violet than the actual accent at
+       chroma 0.16. -->
+  <rect x="0"  y="0"  width="8" height="8" rx="1.5" fill="#80a4ff" />
+  <rect x="12" y="0"  width="8" height="8" rx="1.5" fill="#80a4ff" fill-opacity="0.7" />
+  <rect x="6"  y="12" width="8" height="8" rx="1.5" fill="#80a4ff" fill-opacity="0.4" />
 </svg>
