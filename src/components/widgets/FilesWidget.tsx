@@ -868,6 +868,50 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
         </div>
 
         <div className="fx-actions">
+          <div className="fx-view-seg" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`fx-view-btn ${settings.viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setSettings({ viewMode: 'list' })}
+              title="List view"
+              aria-label="List view"
+              aria-pressed={settings.viewMode === 'list'}
+            >
+              <ListViewIcon size={14} />
+            </button>
+            <button
+              type="button"
+              className={`fx-view-btn ${settings.viewMode === 'icons' ? 'active' : ''}`}
+              onClick={() => setSettings({ viewMode: 'icons' })}
+              title="Icons view"
+              aria-label="Icons view"
+              aria-pressed={settings.viewMode === 'icons'}
+            >
+              <IconsViewIcon size={14} />
+            </button>
+          </div>
+
+          <span className="fx-actions-sep" aria-hidden />
+
+          <button
+            className={`icon-btn tt ${showHidden ? 'active' : ''}`}
+            data-tt={showHidden ? 'Hide hidden' : 'Show hidden'}
+            onClick={() => setShowHidden((s) => !s)}
+            aria-label="Toggle hidden"
+          >
+            {showHidden ? <Icons.Eye size={14} /> : <Icons.EyeOff size={14} />}
+          </button>
+          <button
+            className={`icon-btn tt ${settings.treeVisible ? 'active' : ''}`}
+            data-tt={settings.treeVisible ? 'Hide tree pane' : 'Show tree pane'}
+            onClick={() => setSettings({ treeVisible: !settings.treeVisible })}
+            aria-label="Toggle tree pane"
+          >
+            <SidebarIcon size={14} />
+          </button>
+
+          <span className="fx-actions-sep" aria-hidden />
+
           <button
             className="icon-btn tt"
             data-tt="Push (upload)"
@@ -900,44 +944,6 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           >
             <Icons.Clear size={14} />
           </button>
-          <button
-            className={`icon-btn tt ${showHidden ? 'active' : ''}`}
-            data-tt={showHidden ? 'Hide hidden' : 'Show hidden'}
-            onClick={() => setShowHidden((s) => !s)}
-            aria-label="Toggle hidden"
-          >
-            {showHidden ? <Icons.Eye size={14} /> : <Icons.EyeOff size={14} />}
-          </button>
-          <button
-            className={`icon-btn tt ${settings.treeVisible ? 'active' : ''}`}
-            data-tt={settings.treeVisible ? 'Hide tree pane' : 'Show tree pane'}
-            onClick={() => setSettings({ treeVisible: !settings.treeVisible })}
-            aria-label="Toggle tree pane"
-          >
-            <SidebarIcon size={14} />
-          </button>
-          <div className="fx-view-seg" role="group" aria-label="View mode">
-            <button
-              type="button"
-              className={`fx-view-btn ${settings.viewMode === 'list' ? 'active' : ''}`}
-              onClick={() => setSettings({ viewMode: 'list' })}
-              title="List view"
-              aria-label="List view"
-              aria-pressed={settings.viewMode === 'list'}
-            >
-              <ListViewIcon size={14} />
-            </button>
-            <button
-              type="button"
-              className={`fx-view-btn ${settings.viewMode === 'icons' ? 'active' : ''}`}
-              onClick={() => setSettings({ viewMode: 'icons' })}
-              title="Icons view"
-              aria-label="Icons view"
-              aria-pressed={settings.viewMode === 'icons'}
-            >
-              <IconsViewIcon size={14} />
-            </button>
-          </div>
         </div>
 
         <input
