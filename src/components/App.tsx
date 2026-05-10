@@ -161,6 +161,43 @@ export function App() {
     [queueEntries, resetIngest, showToast],
   );
 
+  const connectWdp = useCallback(
+    async (wdpDevice: import('../lib/wdp').WdpDevice) => {
+      try {
+        const [{ connectViaWdp }, { friendlyConnectError }] = await Promise.all([
+          import('../lib/wdp'),
+          import('../lib/adb'),
+        ]);
+        const result = await connectViaWdp({
+          device: wdpDevice,
+          onEntry: (e) => queueEntries([e]),
+          onError: (err) => showToast(friendlyConnectError(err)),
+          onDisconnect: () => {
+            resetIngest();
+            realStreamRef.current = null;
+            setDevice(null);
+            setDevices([]);
+            setAdb(null);
+            hubRef.current.reset([]);
+            showToast('Device disconnected');
+          },
+        });
+        realStreamRef.current = result.stream;
+        hubRef.current.reset([]);
+        setDevice(result.device);
+        setDevices([result.device, FAKE_DEVICE]);
+        setUsingFake(false);
+        setAdb(result.adb);
+        showToast(`Connected to ${result.device.model} via Web Device Proxy`);
+      } catch (err) {
+        const { friendlyConnectError } = await import('../lib/adb');
+        showToast(friendlyConnectError(err));
+        throw err;
+      }
+    },
+    [queueEntries, resetIngest, showToast],
+  );
+
   const onDisconnect = useCallback(() => {
     void realStreamRef.current?.stop();
     realStreamRef.current = null;
@@ -231,7 +268,11 @@ export function App() {
   if (!device) {
     return (
       <>
-        <EmptyState onConnect={connectReal} onUseFakeData={connectFake} />
+        <EmptyState
+          onConnect={connectReal}
+          onUseFakeData={connectFake}
+          onConnectWdp={connectWdp}
+        />
         {toast && <div className="toast">{toast}</div>}
       </>
     );

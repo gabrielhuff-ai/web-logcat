@@ -60,25 +60,118 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
 
-  test('Device Proxy tip shows on first visit and dismiss persists to localStorage', async ({
+  test('Device Proxy tip shows when the daemon is absent and persists dismissal', async ({
     page,
   }) => {
+    // CI has no WDP daemon listening on :9167, so the tracker probe times
+    // out and the panel falls back to the install-tip variant.
     await page.goto('/');
-    const tip = page.locator('.proxy-tip');
+    const tip = page.locator('.wdp-row-tip');
     await expect(tip).toBeVisible();
-    // The probe runs on mount; the daemon isn't installed in CI so the
-    // copy is the install-prompt variant.
     await expect(tip).toContainText(/Multiple devices, Wi-Fi ADB, or emulators/i);
     await tip.getByRole('button', { name: /dismiss tip/i }).click();
     await expect(tip).toBeHidden();
 
     // Reload-survival is verified at the storage layer (the per-test
-    // beforeEach below clears localStorage on every reload, so
-    // page.reload() can't see the dismissal in this harness).
+    // beforeEach clears localStorage on every reload, so page.reload()
+    // can't see the dismissal in this harness).
     const stored = await page.evaluate(() =>
-      localStorage.getItem('weblogcat:proxy-tip:dismissed:v1'),
+      localStorage.getItem('weblogcat:wdp-not-installed:dismissed:v1'),
     );
     expect(stored).toBe('1');
+  });
+
+  test('WDP discovery panel surfaces fake devices and connects via the proxy transport', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // Inject a fake WDP daemon in-page. The constructor intercepts
+      // WebSocket URLs targeting ws://127.0.0.1:9167/* and replays a
+      // scripted /track-devices-json snapshot or /adb-json byte stream.
+      const RealWebSocket = window.WebSocket;
+      const SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp-0.0.1',
+        device: [
+          {
+            serialNumber: 'wdp-fake-001',
+            proxyStatus: 'ADB',
+            adbStatus: 'DEVICE',
+            adbProps: {
+              'ro.product.model': 'Fake Pixel',
+              'ro.product.name': 'fake-panther',
+              'ro.product.device': 'panther',
+              'ro.build.version.release': '14',
+            },
+          },
+        ],
+      });
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            // Buffer the snapshot until the tracker attaches onmessage.
+            if (self._onmessage) self._onmessage({ data: SNAPSHOT });
+            else self._buffer.push(SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {
+        // For /adb-json the first text frame is the JSON header; after
+        // that we'd see binary writes (e.g. shell stdin). We don't need
+        // to reply — the e2e test only asserts the UI transition.
+      };
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new RealWebSocket(url);
+      };
+    });
+
+    await page.goto('/');
+    const panel = page.locator('.wdp-connected');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(/Web Device Proxy is running/i);
+    const row = panel.locator('.wdp-device');
+    await expect(row).toContainText('Fake Pixel');
+    await expect(row).toContainText('wdp-fake-001');
+
+    // Clicking Connect transitions to the dashboard. The adb session
+    // can't fully succeed against our minimal fake (we don't reply to
+    // /adb-json shell:logcat), but the empty-state should be gone and
+    // the topbar should reflect a proxy-attached device.
+    await row.getByRole('button', { name: /connect/i }).click();
+    await expect(panel).toBeHidden({ timeout: 5_000 });
+    await expect(page.locator('.dash-brand-name')).toBeVisible();
+    await expect(page.locator('.dash-device-name')).toContainText('Fake Pixel');
   });
 });
 

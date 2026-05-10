@@ -173,25 +173,29 @@
 }
 .empty-hint .kbd { margin: 0 4px; }
 
-/* Device Proxy tip — small dismissible card on the empty state. Lives
-   just above the keyboard-shortcut hint so it's reachable without
-   competing with the connect CTA. The dismissed state is sticky
-   (see lib/proxyTip.ts). */
-.proxy-tip {
+/* Web Device Proxy discovery panel on the empty state. Lives between
+   the connect CTA and the keyboard-shortcut hint. Each "row" is a
+   self-contained state (tip, approve, connected-with-devices). */
+.wdp-panel {
+  width: 100%;
+  margin: 0 auto 24px;
+  text-align: left;
+  animation: fadeIn 320ms var(--ease-out) both;
+}
+.wdp-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: start;
   gap: 10px;
-  width: 100%;
-  margin: 0 auto 24px;
   padding: 10px 12px;
-  text-align: left;
   background: var(--bg-1);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-md);
-  animation: fadeIn 320ms var(--ease-out) both;
 }
-.proxy-tip-icon {
+.wdp-row-action {
+  align-items: center;
+}
+.wdp-icon {
   display: grid;
   place-items: center;
   width: 22px;
@@ -200,21 +204,21 @@
   color: var(--accent-fg);
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
-.proxy-tip-body {
+.wdp-body {
   min-width: 0;
 }
-.proxy-tip-title {
+.wdp-title {
   font-size: var(--t-sm);
   font-weight: 600;
   color: var(--fg-1);
   margin-bottom: 2px;
 }
-.proxy-tip-text {
+.wdp-text {
   font-size: var(--t-xs);
   color: var(--fg-2);
   line-height: 1.5;
 }
-.proxy-tip-text code {
+.wdp-text code {
   font-family: var(--font-mono);
   font-size: 0.95em;
   padding: 0 3px;
@@ -222,7 +226,7 @@
   background: var(--bg-2);
   color: var(--fg-1);
 }
-.proxy-tip-close {
+.wdp-close {
   align-self: start;
   display: grid;
   place-items: center;
@@ -234,9 +238,85 @@
   transition: background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-.proxy-tip-close:hover {
+.wdp-close:hover {
   background: var(--bg-hover);
   color: var(--fg-1);
+}
+.wdp-action {
+  height: 30px;
+  padding: 0 14px;
+  font-size: var(--t-sm);
+  border-radius: var(--r-sm);
+}
+
+/* Connected state: header row + a list of devices below it, framed as
+   a single card so the multiple rows read as one panel. */
+.wdp-connected {
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.wdp-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.wdp-version {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  background: var(--bg-2);
+  border-radius: var(--r-pill);
+  align-self: center;
+}
+.wdp-devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wdp-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.wdp-device:first-child {
+  border-top: 0;
+}
+.wdp-device-meta {
+  flex: 1;
+  min-width: 0;
+}
+.wdp-device-name {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--fg-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wdp-device-sub {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wdp-device-connect {
+  height: 28px;
+  padding: 0 12px;
+  font-size: var(--t-xs);
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
 }
 
 /* Version pill — bottom-right of the pre-connect screen. Subtle so it
