@@ -59,6 +59,27 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
+
+  test('Device Proxy tip shows on first visit and dismiss persists to localStorage', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const tip = page.locator('.proxy-tip');
+    await expect(tip).toBeVisible();
+    // The probe runs on mount; the daemon isn't installed in CI so the
+    // copy is the install-prompt variant.
+    await expect(tip).toContainText(/Multiple devices, Wi-Fi ADB, or emulators/i);
+    await tip.getByRole('button', { name: /dismiss tip/i }).click();
+    await expect(tip).toBeHidden();
+
+    // Reload-survival is verified at the storage layer (the per-test
+    // beforeEach below clears localStorage on every reload, so
+    // page.reload() can't see the dismissal in this harness).
+    const stored = await page.evaluate(() =>
+      localStorage.getItem('weblogcat:proxy-tip:dismissed:v1'),
+    );
+    expect(stored).toBe('1');
+  });
 });
 
 test.describe('simulator', () => {

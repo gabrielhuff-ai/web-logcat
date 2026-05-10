@@ -64,3 +64,29 @@ denied, USB endpoint busy).
 Click **fake data** on the empty state. The dashboard runs against the
 [simulated stream](./simulator) so every widget renders against in-memory
 fixtures.
+
+## Device Proxy (optional)
+
+WebUSB takes an exclusive claim on the device's USB interface, so while
+WebLogcat is connected nothing else (Android Studio, scrcpy, `adb shell`)
+can talk to the same phone. It also can't reach **emulators** or
+**Wi-Fi-attached** devices, and Firefox / Safari don't ship WebUSB at all.
+
+[Android Web Device Proxy](https://tools.google.com/dlpage/android_web_device_proxy)
+is a small daemon you install alongside the SDK. It multiplexes through
+your local `adb` server so multiple tools can share the device, and it
+exposes everything `adb devices` sees — emulators included — to web pages
+on `localhost`.
+
+WebLogcat detects the proxy automatically on the empty state and surfaces
+a tip card pointing at the install page. The card dismisses permanently;
+remove `weblogcat:proxy-tip:dismissed:v1` from `localStorage` to bring it
+back.
+
+::: warning Status: prototype
+The proxy transport is wired up as an architectural seam only — discovery
+works, but the wire-format adapter is a TODO in
+[`lib/adbProxy.ts`](https://github.com/gabrielhuff/web-logcat/blob/main/src/lib/adbProxy.ts).
+WebUSB remains the supported path; the proxy hook is staging ground for
+the real integration.
+:::

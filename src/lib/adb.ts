@@ -92,6 +92,7 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     serial: usbDevice.serial,
     model: adb.banner.model ?? adb.banner.product ?? usbDevice.name ?? 'Unknown',
     androidVersion: await safeGetProp(adb, 'ro.build.version.release'),
+    transport: 'usb',
   };
 
   // Watch for disconnect (cable pull, screen lock dropping the connection).

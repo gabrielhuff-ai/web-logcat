@@ -8,9 +8,11 @@
 // user cancels the chooser, `onConnect` rejects and we reset the button
 // state instead of staying stuck on "Connected".
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as Icons from './Icons';
 import { APP_VERSION } from '../version';
+import { ProxyTipCard } from './ProxyTipCard';
+import { probeProxyAvailability } from '../lib/adbProxy';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
 
@@ -30,6 +32,19 @@ export interface EmptyStateProps {
 export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
+  const [proxyDetected, setProxyDetected] = useState(false);
+
+  // Cheap localhost probe for the Device Proxy. Default-off; if the
+  // daemon answers the WebSocket handshake we swap the tip's copy.
+  useEffect(() => {
+    let cancelled = false;
+    void probeProxyAvailability().then((result) => {
+      if (!cancelled) setProxyDetected(result.reachable);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const startConnect = async () => {
     setConnecting(true);
@@ -90,6 +105,8 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
             </button>
           </div>
         </div>
+
+        <ProxyTipCard proxyDetected={proxyDetected} />
 
         <div className="empty-hint">
           <span className="kbd">⌘ F</span>
