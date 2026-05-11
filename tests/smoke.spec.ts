@@ -60,12 +60,21 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
 
+  test('WDP UI stays hidden by default and reveals via ?wdp=1', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.wdp-panel')).toHaveCount(0);
+    // Opt-in. The flag sticks via localStorage and the param is stripped.
+    await page.goto('/?wdp=1');
+    await expect(page.locator('.wdp-panel')).toBeVisible();
+    expect(new URL(page.url()).searchParams.has('wdp')).toBe(false);
+  });
+
   test('Device Proxy tip shows when the daemon is absent and persists dismissal', async ({
     page,
   }) => {
     // CI has no WDP daemon listening on :9167, so the tracker probe times
     // out and the panel falls back to the install-tip variant.
-    await page.goto('/');
+    await page.goto('/?wdp=1');
     const tip = page.locator('.wdp-row-tip');
     await expect(tip).toBeVisible();
     await expect(tip).toContainText(/Multiple devices, Wi-Fi ADB, or emulators/i);
@@ -156,7 +165,7 @@ test.describe('empty state', () => {
       };
     });
 
-    await page.goto('/');
+    await page.goto('/?wdp=1');
     const panel = page.locator('.wdp-connected');
     await expect(panel).toBeVisible();
     await expect(panel).toContainText(/Web Device Proxy is running/i);

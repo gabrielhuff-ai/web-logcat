@@ -79,6 +79,13 @@ exposes everything `adb devices` sees — emulators included — to web pages
 on `localhost`. WebLogcat speaks WDP's WebSocket protocol natively (the
 same one [Perfetto's UI](https://ui.perfetto.dev) uses).
 
+::: info Opt-in flag
+The WDP transport is currently behind a feature flag while the wire
+protocol gets verified against real devices. Visit the app once with
+`?wdp=1` appended to the URL to enable it (the flag sticks via
+`localStorage`; the query param is stripped on read). `?wdp=0` clears it.
+:::
+
 ### Setup
 
 1. Install the WDP daemon from the link above and let it start.
