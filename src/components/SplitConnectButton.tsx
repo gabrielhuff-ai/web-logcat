@@ -6,15 +6,14 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Icons from './Icons';
 import type { ConnectStep } from './EmptyState';
-import type { PreferredTransport } from '../lib/preferredTransport';
 
 export interface SplitConnectButtonProps {
   /** Disable both halves of the split (e.g. while a connect is in flight). */
   busy: boolean;
   /** Phase reported by the active connect — drives the primary label. */
   step: ConnectStep;
-  /** Which transport the primary button will use. */
-  preferred: PreferredTransport;
+  /** Which transport the primary button will use (resolved by the parent's WDP probe). */
+  preferred: 'usb' | 'proxy';
   /** Primary click → run the preferred-transport connect. */
   onPrimary: () => void;
   /** Menu entry → start a WebUSB connect. */
