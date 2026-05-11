@@ -11,6 +11,9 @@
 import { useState } from 'react';
 import * as Icons from './Icons';
 import { APP_VERSION } from '../version';
+import { WdpDiscoveryPanel } from './WdpDiscoveryPanel';
+import { isWdpEnabled } from '../lib/featureFlags';
+import type { WdpDevice } from '../lib/wdp';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
 
@@ -25,11 +28,16 @@ export interface EmptyStateProps {
    */
   onConnect: (setStep: (step: ConnectStep) => void) => Promise<void>;
   onUseFakeData: () => void;
+  /** Connect to a device exposed by the Web Device Proxy daemon. */
+  onConnectWdp: (device: WdpDevice) => Promise<void>;
 }
 
-export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
+export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
+  // WDP is opt-in until the protocol has been verified against a real
+  // daemon — flip the flag on with `?wdp=1` (see lib/featureFlags.ts).
+  const wdpEnabled = isWdpEnabled();
 
   const startConnect = async () => {
     setConnecting(true);
@@ -90,6 +98,20 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
             </button>
           </div>
         </div>
+
+        {wdpEnabled && (
+          <WdpDiscoveryPanel
+            onConnect={(d) => {
+              setConnecting(true);
+              setStep(2);
+              onConnectWdp(d).catch(() => {
+                setConnecting(false);
+                setStep(0);
+              });
+            }}
+            busy={connecting}
+          />
+        )}
 
         <div className="empty-hint">
           <span className="kbd">⌘ F</span>

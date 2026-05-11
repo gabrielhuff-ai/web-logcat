@@ -10,9 +10,10 @@
 //   - Chromium-based browser (WebUSB not in Firefox / Safari)
 //   - HTTPS (WebUSB allow-list); localhost is also allowed for dev
 //
-// Untested against real hardware in this environment. The shape mirrors
-// the upstream examples so it should work, but the first integration test
-// wants a real Pixel/Galaxy on the staging URL — see docs/TASKS.md.
+// The Device Proxy (WDP) path uses the same `Adb` handle by implementing
+// yume-chan's `AdbTransport` over WDP's `/adb-json` sockets — see
+// `lib/wdp/transport.ts`. The post-connect logcat-stream helper at the
+// bottom of this file is shared between both paths.
 
 import { Adb, AdbDaemonTransport } from '@yume-chan/adb';
 import { AdbDaemonWebUsbDeviceManager } from '@yume-chan/adb-daemon-webusb';
@@ -92,6 +93,7 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     serial: usbDevice.serial,
     model: adb.banner.model ?? adb.banner.product ?? usbDevice.name ?? 'Unknown',
     androidVersion: await safeGetProp(adb, 'ro.build.version.release'),
+    transport: 'usb',
   };
 
   // Watch for disconnect (cable pull, screen lock dropping the connection).
@@ -99,7 +101,28 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     opts.onDisconnect?.();
   });
 
-  // Spawn `logcat -v threadtime` and pipe stdout through a line splitter.
+  const stream = await startLogcatStream(adb, opts, async () => {
+    await transport.close();
+  });
+
+  return { device, stream, adb };
+}
+
+/**
+ * Spawn `logcat -v threadtime` on `adb`, parse each line, and feed
+ * entries into `opts.onEntry`. Returns a `LogStream` whose `stop()` ends
+ * the subprocess, cancels the reader, and tears down the transport via
+ * `closeTransport`.
+ *
+ * Shared between the WebUSB path (this file) and the WDP path
+ * (`lib/wdp/connect.ts`) — both yield an `Adb` instance and only differ
+ * in how the underlying transport is torn down.
+ */
+export async function startLogcatStream(
+  adb: Adb,
+  opts: Pick<ConnectOptions, 'onEntry' | 'onError'>,
+  closeTransport: () => Promise<void> | void,
+): Promise<LogStream> {
   const proc = await adb.subprocess.noneProtocol.spawn(['logcat', '-v', 'threadtime']);
 
   const pidToPkg = new PidPkgCache(adb);
@@ -123,7 +146,7 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
     }
   })();
 
-  const stream: LogStream = {
+  return {
     async stop() {
       stopped = true;
       try {
@@ -137,14 +160,12 @@ export async function connectDevice(opts: ConnectOptions): Promise<{
         /* ignore */
       }
       try {
-        await transport.close();
+        await closeTransport();
       } catch {
         /* ignore */
       }
     },
   };
-
-  return { device, stream, adb };
 }
 
 /**
@@ -176,7 +197,7 @@ export function friendlyConnectError(err: unknown): string {
   return raw;
 }
 
-async function safeGetProp(adb: Adb, key: string): Promise<string> {
+export async function safeGetProp(adb: Adb, key: string): Promise<string> {
   try {
     return (await adb.getProp(key)).trim() || 'unknown';
   } catch {

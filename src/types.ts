@@ -82,6 +82,12 @@ export interface DeviceInfo {
   androidVersion: string;
   /** True for the simulated device used in dev. */
   fake?: boolean;
+  /**
+   * Which transport produced this session. Absent on legacy / fake
+   * devices; lets the dashboard label the connection ("USB" vs
+   * "Proxy") so users can tell why a co-running tool didn't conflict.
+   */
+  transport?: 'usb' | 'proxy';
 }
 
 // ---- v2: dashboard / tiles / widgets ----------------------------------------

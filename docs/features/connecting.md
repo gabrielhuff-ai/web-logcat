@@ -64,3 +64,69 @@ denied, USB endpoint busy).
 Click **fake data** on the empty state. The dashboard runs against the
 [simulated stream](./simulator) so every widget renders against in-memory
 fixtures.
+
+## Device Proxy
+
+WebUSB takes an exclusive claim on the device's USB interface, so while
+WebLogcat is connected nothing else (Android Studio, scrcpy, `adb shell`)
+can talk to the same phone. It also can't reach **emulators** or
+**Wi-Fi-attached** devices, and Firefox / Safari don't ship WebUSB at all.
+
+[Android Web Device Proxy (WDP)](https://tools.google.com/dlpage/android_web_device_proxy)
+is a small daemon you install alongside the SDK. It multiplexes through
+your local `adb` server so multiple tools can share the device, and it
+exposes everything `adb devices` sees — emulators included — to web pages
+on `localhost`. WebLogcat speaks WDP's WebSocket protocol natively (the
+same one [Perfetto's UI](https://ui.perfetto.dev) uses).
+
+::: info Opt-in flag
+The WDP transport is currently behind a feature flag while the wire
+protocol gets verified against real devices. Visit the app once with
+`?wdp=1` appended to the URL to enable it (the flag sticks via
+`localStorage`; the query param is stripped on read). `?wdp=0` clears it.
+:::
+
+### Setup
+
+1. Install the WDP daemon from the link above and let it start.
+2. Plug in the device, start the emulator, or `adb connect <ip:port>` —
+   whatever brings the device into `adb devices`.
+3. Open WebLogcat. The empty state shows a **Web Device Proxy is running**
+   panel with one row per device.
+4. Click **Connect** on a device. The first time WebLogcat talks to WDP
+   from this browser origin, WDP opens a Google-served approval popup;
+   accept it and the connection completes.
+
+After approval, subsequent visits from this origin are silent. Per-device
+authorization (the `unauthorized` state on the phone) prompts a separate
+popup the first time you connect to that device.
+
+### Why use it over WebUSB?
+
+| Need | WebUSB | Device Proxy |
+| --- | --- | --- |
+| Zero install | ✅ | Requires the daemon |
+| Multiple devices visible at once | ❌ (one chooser pick) | ✅ |
+| Coexist with Android Studio / scrcpy / `adb` | ❌ (exclusive claim) | ✅ |
+| Emulators | ❌ | ✅ |
+| Wi-Fi-attached devices | ❌ | ✅ |
+| Firefox / Safari | ❌ | ✅ (any browser) |
+
+### Mechanics
+
+The transport hooks into the same `Adb` session every widget uses, so all
+five tiles — Logcat, Shell, Dumpsys, Files, Mirror — work identically
+over the proxy. The implementation lives at
+[`src/lib/wdp/`](https://github.com/gabrielhuff/web-logcat/tree/main/src/lib/wdp):
+
+- `trackDevices.ts` subscribes to `ws://127.0.0.1:9167/track-devices-json`
+  for the live device list.
+- `transport.ts` implements yume-chan's `AdbTransport` interface — each
+  service stream (`shell:`, `sync:`, …) opens its own
+  `ws://127.0.0.1:9167/adb-json` WebSocket with a JSON header
+  `{ header: { serialNumber, command } }`.
+
+If the daemon isn't running, the empty state shows a dismissible tip
+linking to the install page; clear
+`weblogcat:wdp-not-installed:dismissed:v1` in localStorage to bring it
+back.
