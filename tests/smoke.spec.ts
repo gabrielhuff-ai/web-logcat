@@ -90,6 +90,185 @@ test.describe('empty state', () => {
     expect(stored).toBe('1');
   });
 
+  test('Authorize on a PROXY_UNAUTHORIZED device shows an error when the popup is blocked', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-unauth-001',
+            proxyStatus: 'PROXY_UNAUTHORIZED',
+            adbStatus: 'AUTHORIZING',
+            approveUrl: 'https://example.test/wdp-approve',
+          },
+        ],
+      });
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            if (self._onmessage) self._onmessage({ data: SNAPSHOT });
+            else self._buffer.push(SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {};
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new WebSocket(url);
+      };
+      // Simulate the browser blocking the popup — window.open returns null.
+      window.open = function () {
+        return null;
+      };
+    });
+
+    await page.goto('/?wdp=1');
+    const row = page.locator('.wdp-device');
+    await expect(row).toContainText('PROXY_UNAUTHORIZED');
+    await row.getByRole('button', { name: /authorize/i }).click();
+    await expect(page.locator('.wdp-device-error')).toContainText(
+      /Browser blocked the approve popup/i,
+    );
+  });
+
+  test('Authorize triggers Connect once WDP pushes the post-approval snapshot', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const UNAUTH_SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-flip-001',
+            proxyStatus: 'PROXY_UNAUTHORIZED',
+            adbStatus: 'AUTHORIZING',
+            approveUrl: 'https://example.test/wdp-approve',
+          },
+        ],
+      });
+      const READY_SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-flip-001',
+            proxyStatus: 'ADB',
+            adbStatus: 'DEVICE',
+            adbProps: {
+              'ro.product.model': 'Flip Pixel',
+              'ro.product.name': 'flip',
+              'ro.product.device': 'flip',
+              'ro.build.version.release': '14',
+            },
+          },
+        ],
+      });
+      let trackingSocket = null;
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            trackingSocket = self;
+            if (self._onmessage) self._onmessage({ data: UNAUTH_SNAPSHOT });
+            else self._buffer.push(UNAUTH_SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {};
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new WebSocket(url);
+      };
+      // Fake popup: a window object whose `.closed` flips to true after
+      // 80ms. When the panel detects the close, it polls for the new
+      // snapshot — which we push 50ms in. The snapshot transition is
+      // what gates the subsequent `onConnect` call.
+      window.open = function () {
+        const popup = { closed: false };
+        setTimeout(() => {
+          if (trackingSocket && trackingSocket._onmessage) {
+            trackingSocket._onmessage({ data: READY_SNAPSHOT });
+          }
+        }, 50);
+        setTimeout(() => {
+          popup.closed = true;
+        }, 80);
+        return popup;
+      };
+    });
+
+    await page.goto('/?wdp=1');
+    const row = page.locator('.wdp-device');
+    await expect(row).toContainText('PROXY_UNAUTHORIZED');
+    await row.getByRole('button', { name: /authorize/i }).click();
+    // After the popup closes and the new snapshot lands, the panel
+    // forwards the now-ready device to onConnect — dashboard mounts.
+    await expect(page.locator('.dash-brand-name')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.dash-device-name')).toContainText('Flip Pixel');
+  });
+
   test('WDP discovery panel surfaces fake devices and connects via the proxy transport', async ({
     page,
   }) => {
