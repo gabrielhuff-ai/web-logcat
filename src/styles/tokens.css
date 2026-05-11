@@ -216,6 +216,9 @@ input, textarea { font: inherit; color: inherit; }
   font-size: var(--t-base);
   background: var(--bg-2);
   color: var(--fg-0);
+  /* Anchors styled as buttons (e.g. the dialog's Install) shouldn't
+     keep the UA's `text-decoration: underline`. */
+  text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .btn:hover { background: var(--bg-3); }

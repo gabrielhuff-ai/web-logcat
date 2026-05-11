@@ -8,3 +8,4 @@ export { WdpTracker, type WdpTrackerHandlers } from './trackDevices';
 export { openApprovePopup } from './popup';
 export { connectViaWdp, type WdpConnectOptions } from './connect';
 export { probeWdpReachable } from './probe';
+export { fetchDeviceProp } from './getProp';

@@ -308,11 +308,15 @@
   padding: 8px 0;
 }
 .wdp-dialog-empty {
+  /* Same surface as `.wdp-device` rows so the empty card reads as the
+     no-devices counterpart of a populated list. The Install button
+     (`.btn` at `bg-2`) now contrasts cleanly against the `bg-1`
+     surface, matching Connect/Authorize on real device rows. */
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-md);
 }
@@ -321,14 +325,15 @@
   min-width: 0;
 }
 .wdp-dialog-install {
-  /* Anchor styled as a button — neutralise default underline + spacing. */
+  /* Anchor styled as a button — strip the UA underline. */
   text-decoration: none;
 }
 .wdp-dialog-empty-title {
+  /* Match `.wdp-device-name` so the row reads as part of the same family. */
   font-size: var(--t-sm);
-  font-weight: 600;
-  color: var(--fg-1);
-  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--fg-0);
+  margin-bottom: 2px;
 }
 .wdp-dialog-empty p,
 .wdp-dialog-approve p {

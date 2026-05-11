@@ -189,11 +189,7 @@ export function friendlyConnectError(err: unknown): string {
     return 'Device disconnected. Replug the cable and try again.';
   }
   if (/claim.*interface|protected interface|already in use|device.*in use/i.test(raw)) {
-    return (
-      "Couldn't claim the USB interface — something else is already holding the device. " +
-      'If you have `adb` running (Android Studio, scrcpy, the Web Device Proxy daemon, …) try ' +
-      '`adb kill-server` and reconnect. On Windows replace the WinUSB driver if needed.'
-    );
+    return 'Device is already claimed. Try `adb kill-server` and reconnect.';
   }
   if (/WebUSB is not available/i.test(raw)) return raw; // already friendly
   return raw;

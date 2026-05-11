@@ -18,6 +18,7 @@ import * as Icons from './Icons';
 import {
   WDP_DOWNLOAD_URL,
   WdpTracker,
+  fetchDeviceProp,
   openApprovePopup,
   wdpDeviceReady,
   wdpDeviceStatus,
@@ -51,6 +52,40 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
   // once WDP flips PROXY_UNAUTHORIZED → ADB/DEVICE).
   const devicesRef = useRef<WdpDevice[]>([]);
   const approveResolveRef = useRef<((approved: boolean) => void) | null>(null);
+  // Lazy serial → model cache. Some WDP daemon versions don't ship
+  // `ro.product.model` in the snapshot's `adbProps`, so the row
+  // would fall through to the bare serial. For ADB-ready devices
+  // missing the model we fire a one-shot `getprop` over a /adb-json
+  // service stream and cache the result; rows re-render once the
+  // value arrives.
+  const [modelCache, setModelCache] = useState<Record<string, string>>({});
+  const inflightModelsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (state.kind !== 'connected') return;
+    const cancelled = { v: false };
+    for (const d of state.devices) {
+      if (d.proxyStatus !== 'ADB' || d.adbStatus !== 'DEVICE') continue;
+      if (d.adbProps?.['ro.product.model']) continue;
+      if (modelCache[d.serialNumber]) continue;
+      if (inflightModelsRef.current.has(d.serialNumber)) continue;
+      inflightModelsRef.current.add(d.serialNumber);
+      void fetchDeviceProp({
+        serialNumber: d.serialNumber,
+        key: 'ro.product.model',
+      })
+        .then((model) => {
+          if (cancelled.v || !model) return;
+          setModelCache((prev) => ({ ...prev, [d.serialNumber]: model }));
+        })
+        .finally(() => {
+          inflightModelsRef.current.delete(d.serialNumber);
+        });
+    }
+    return () => {
+      cancelled.v = true;
+    };
+  }, [state, modelCache]);
 
   useEffect(() => {
     if (!open) return;
@@ -244,8 +279,8 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
                     return (
                       <li key={d.serialNumber} className="wdp-device">
                         <div className="wdp-device-meta">
-                          <div className="wdp-device-name" title={deviceLabel(d)}>
-                            {deviceLabel(d)}
+                          <div className="wdp-device-name" title={deviceLabel(d, modelCache)}>
+                            {deviceLabel(d, modelCache)}
                           </div>
                           <div className="wdp-device-sub" title={d.serialNumber}>
                             {d.serialNumber} · {wdpDeviceStatus(d)}
@@ -275,9 +310,14 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
   );
 }
 
-function deviceLabel(d: WdpDevice): string {
+function deviceLabel(d: WdpDevice, cache: Record<string, string>): string {
   if (d.proxyStatus === 'ADB') {
-    return d.adbProps?.['ro.product.model'] ?? d.adbProps?.['ro.product.name'] ?? d.serialNumber;
+    return (
+      d.adbProps?.['ro.product.model'] ??
+      cache[d.serialNumber] ??
+      d.adbProps?.['ro.product.name'] ??
+      d.serialNumber
+    );
   }
   return d.serialNumber;
 }

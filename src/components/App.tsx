@@ -82,7 +82,11 @@ export function App() {
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
-    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 1800);
+    // Display time scales with message length so longer errors stay
+    // long enough to read. Bounded to keep terse confirmations from
+    // sticking around forever.
+    const ms = Math.min(6000, Math.max(2200, msg.length * 70));
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), ms);
   }, []);
 
   // ---- Streaming: simulator (real ADB stream is in `connectReal`) ---------
