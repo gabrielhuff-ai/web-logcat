@@ -451,7 +451,10 @@
   position: fixed;
   bottom: 32px;
   left: 50%;
-  transform: translateX(-50%);
+  /* Dedicated keyframe instead of the shared `slideUp` — the latter
+     animates `transform: translateY(...)`, which clobbers the
+     `translateX(-50%)` centering and pushes the toast off-axis. */
+  transform: translate(-50%, 0);
   background: var(--bg-3);
   color: var(--fg-0);
   padding: 10px 16px;
@@ -459,6 +462,10 @@
   font-size: var(--t-sm);
   box-shadow: var(--shadow-2);
   z-index: 200;
-  animation: slideUp 240ms var(--ease-spring) both;
+  animation: toastIn 240ms var(--ease-spring) both;
   border: 1px solid var(--line);
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }

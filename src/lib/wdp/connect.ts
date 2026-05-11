@@ -50,16 +50,20 @@ export async function connectViaWdp(opts: WdpConnectOptions): Promise<{
   const adb = new Adb(transport);
   opts.onPhase?.('connected');
 
+  // Prefer the snapshot's adbProps where present (zero round-trips),
+  // fall back to `getprop` over the proxy. WDP doesn't reliably ship
+  // `ro.product.model` in adbProps on all daemon versions, so without
+  // this fallback the topbar would show the serial.
   const adbProps = opts.device.proxyStatus === 'ADB' ? opts.device.adbProps : undefined;
+  const [modelProp, androidVersion] = await Promise.all([
+    adbProps?.['ro.product.model'] ?? safeGetProp(adb, 'ro.product.model'),
+    adbProps?.['ro.build.version.release'] ?? safeGetProp(adb, 'ro.build.version.release'),
+  ]);
   const model =
-    adb.banner.model ??
-    adbProps?.['ro.product.model'] ??
-    adbProps?.['ro.product.name'] ??
+    (modelProp && modelProp !== 'unknown' && modelProp) ||
+    adb.banner.model ||
+    adbProps?.['ro.product.name'] ||
     opts.device.serialNumber;
-
-  const androidVersion =
-    adbProps?.['ro.build.version.release'] ??
-    (await safeGetProp(adb, 'ro.build.version.release'));
 
   const device: DeviceInfo = {
     serial: opts.device.serialNumber,
