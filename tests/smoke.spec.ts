@@ -60,34 +60,46 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
 
-  test('WDP UI stays hidden by default and reveals via ?wdp=1', async ({ page }) => {
+  test('split-arrow stays hidden by default and reveals via ?wdp=1', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.wdp-panel')).toHaveCount(0);
+    await expect(page.locator('.connect-split')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
     // Opt-in. The flag sticks via localStorage and the param is stripped.
     await page.goto('/?wdp=1');
-    await expect(page.locator('.wdp-panel')).toBeVisible();
+    await expect(page.locator('.connect-split')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /choose connection method/i }),
+    ).toBeVisible();
     expect(new URL(page.url()).searchParams.has('wdp')).toBe(false);
   });
 
-  test('Device Proxy tip shows when the daemon is absent and persists dismissal', async ({
+  test('dropdown menu surfaces both transports with the experimental badge on WDP', async ({
     page,
   }) => {
-    // CI has no WDP daemon listening on :9167, so the tracker probe times
-    // out and the panel falls back to the install-tip variant.
     await page.goto('/?wdp=1');
-    const tip = page.locator('.wdp-row-tip');
-    await expect(tip).toBeVisible();
-    await expect(tip).toContainText(/Multiple devices, Wi-Fi ADB, or emulators/i);
-    await tip.getByRole('button', { name: /dismiss tip/i }).click();
-    await expect(tip).toBeHidden();
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: /Connect via WebUSB/i })).toBeVisible();
+    const proxyItem = menu.getByRole('menuitem', { name: /Connect via Web Device Proxy/i });
+    await expect(proxyItem).toBeVisible();
+    await expect(proxyItem).toContainText(/experimental/i);
+  });
 
-    // Reload-survival is verified at the storage layer (the per-test
-    // beforeEach clears localStorage on every reload, so page.reload()
-    // can't see the dismissal in this harness).
-    const stored = await page.evaluate(() =>
-      localStorage.getItem('weblogcat:wdp-not-installed:dismissed:v1'),
-    );
-    expect(stored).toBe('1');
+  test('WDP dialog reports "Daemon not detected" when the proxy is unreachable', async ({
+    page,
+  }) => {
+    // No WDP daemon listening on :9167, so the tracker probe fails and
+    // the dialog shows its not-installed empty state.
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/Daemon not detected/i);
+    // Escape closes the dialog.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
   });
 
   test('Authorize on a PROXY_UNAUTHORIZED device shows an error when the popup is blocked', async ({
@@ -156,10 +168,13 @@ test.describe('empty state', () => {
     });
 
     await page.goto('/?wdp=1');
-    const row = page.locator('.wdp-device');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    const row = dialog.locator('.wdp-device');
     await expect(row).toContainText('PROXY_UNAUTHORIZED');
     await row.getByRole('button', { name: /authorize/i }).click();
-    await expect(page.locator('.wdp-device-error')).toContainText(
+    await expect(dialog.locator('.wdp-device-error')).toContainText(
       /Browser blocked the approve popup/i,
     );
   });
@@ -260,16 +275,19 @@ test.describe('empty state', () => {
     });
 
     await page.goto('/?wdp=1');
-    const row = page.locator('.wdp-device');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    const row = dialog.locator('.wdp-device');
     await expect(row).toContainText('PROXY_UNAUTHORIZED');
     await row.getByRole('button', { name: /authorize/i }).click();
-    // After the popup closes and the new snapshot lands, the panel
+    // After the popup closes and the new snapshot lands, the dialog
     // forwards the now-ready device to onConnect — dashboard mounts.
     await expect(page.locator('.dash-brand-name')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('.dash-device-name')).toContainText('Flip Pixel');
   });
 
-  test('WDP discovery panel surfaces fake devices and connects via the proxy transport', async ({
+  test('WDP dialog surfaces fake devices and connects via the proxy transport', async ({
     page,
   }) => {
     await page.addInitScript(() => {
@@ -345,19 +363,20 @@ test.describe('empty state', () => {
     });
 
     await page.goto('/?wdp=1');
-    const panel = page.locator('.wdp-connected');
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText(/Web Device Proxy is running/i);
-    const row = panel.locator('.wdp-device');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    await expect(dialog).toBeVisible();
+    const row = dialog.locator('.wdp-device');
     await expect(row).toContainText('Fake Pixel');
     await expect(row).toContainText('wdp-fake-001');
 
     // Clicking Connect transitions to the dashboard. The adb session
     // can't fully succeed against our minimal fake (we don't reply to
-    // /adb-json shell:logcat), but the empty-state should be gone and
-    // the topbar should reflect a proxy-attached device.
+    // /adb-json shell:logcat), but the dialog should close and the
+    // topbar should reflect a proxy-attached device.
     await row.getByRole('button', { name: /connect/i }).click();
-    await expect(panel).toBeHidden({ timeout: 5_000 });
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
     await expect(page.locator('.dash-brand-name')).toBeVisible();
     await expect(page.locator('.dash-device-name')).toContainText('Fake Pixel');
   });

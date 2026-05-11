@@ -11,8 +11,10 @@
 import { useState } from 'react';
 import * as Icons from './Icons';
 import { APP_VERSION } from '../version';
-import { WdpDiscoveryPanel } from './WdpDiscoveryPanel';
+import { SplitConnectButton } from './SplitConnectButton';
+import { WdpDialog } from './WdpDialog';
 import { isWdpEnabled } from '../lib/featureFlags';
+import { readPreferredTransport } from '../lib/preferredTransport';
 import type { WdpDevice } from '../lib/wdp';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
@@ -35,11 +37,15 @@ export interface EmptyStateProps {
 export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
-  // WDP is opt-in until the protocol has been verified against a real
-  // daemon — flip the flag on with `?wdp=1` (see lib/featureFlags.ts).
+  const [wdpOpen, setWdpOpen] = useState(false);
+  // WDP is opt-in until verified in the wild — flip with `?wdp=1`.
   const wdpEnabled = isWdpEnabled();
+  // Persisted last-successful-transport; gates whether the primary
+  // button tries proxy or WebUSB. WebUSB unless `wdpEnabled` and a
+  // proxy connect has previously succeeded.
+  const preferred = wdpEnabled ? readPreferredTransport() : 'usb';
 
-  const startConnect = async () => {
+  const startWebUsbConnect = async () => {
     setConnecting(true);
     // Pre-set step=1 so the button updates the moment the chooser is
     // about to open, even before lib/adb.ts has a chance to fire its
@@ -49,11 +55,27 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
       await onConnect(setStep);
       // success → parent unmounts us; no need to reset state here
     } catch {
-      // user cancelled / auth failed / WebUSB unavailable. App.tsx already
-      // surfaced the message via toast; we just need to be clickable again.
       setConnecting(false);
       setStep(0);
     }
+  };
+
+  const onPrimary = () => {
+    if (preferred === 'proxy') {
+      setWdpOpen(true);
+    } else {
+      void startWebUsbConnect();
+    }
+  };
+
+  const onDeviceConnect = (d: WdpDevice) => {
+    setConnecting(true);
+    setStep(2);
+    setWdpOpen(false);
+    onConnectWdp(d).catch(() => {
+      setConnecting(false);
+      setStep(0);
+    });
   };
 
   return (
@@ -75,21 +97,32 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
         </p>
 
         <div className="empty-actions">
-          <button className="btn primary big" onClick={startConnect} disabled={connecting}>
-            {connecting ? (
-              <>
-                <span className="dot-spinner" />
-                {step <= 1 && 'Selecting device…'}
-                {step === 2 && 'Authorize on device…'}
-                {step === 3 && 'Connected'}
-              </>
-            ) : (
-              <>
-                <Icons.Usb size={16} />
-                Connect a device
-              </>
-            )}
-          </button>
+          {wdpEnabled ? (
+            <SplitConnectButton
+              busy={connecting}
+              step={step}
+              preferred={preferred}
+              onPrimary={onPrimary}
+              onWebUsb={() => void startWebUsbConnect()}
+              onProxy={() => setWdpOpen(true)}
+            />
+          ) : (
+            <button className="btn primary big" onClick={() => void startWebUsbConnect()} disabled={connecting}>
+              {connecting ? (
+                <>
+                  <span className="dot-spinner" />
+                  {step <= 1 && 'Selecting device…'}
+                  {step === 2 && 'Authorize on device…'}
+                  {step === 3 && 'Connected'}
+                </>
+              ) : (
+                <>
+                  <Icons.Usb size={16} />
+                  Connect a device
+                </>
+              )}
+            </button>
+          )}
 
           <div className="empty-or">
             or try the app with{' '}
@@ -99,20 +132,6 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
           </div>
         </div>
 
-        {wdpEnabled && (
-          <WdpDiscoveryPanel
-            onConnect={(d) => {
-              setConnecting(true);
-              setStep(2);
-              onConnectWdp(d).catch(() => {
-                setConnecting(false);
-                setStep(0);
-              });
-            }}
-            busy={connecting}
-          />
-        )}
-
         <div className="empty-hint">
           <span className="kbd">⌘ F</span>
           to search,
@@ -121,6 +140,15 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
         </div>
       </div>
       <div className="empty-version">v{APP_VERSION}</div>
+
+      {wdpEnabled && (
+        <WdpDialog
+          open={wdpOpen}
+          busy={connecting}
+          onConnect={onDeviceConnect}
+          onClose={() => setWdpOpen(false)}
+        />
+      )}
     </div>
   );
 }
