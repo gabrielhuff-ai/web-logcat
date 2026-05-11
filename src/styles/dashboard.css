@@ -394,6 +394,14 @@
 .tile.max {
   border-radius: 0;
   margin: 0;
+  /* When maximised the tile covers everything, so the glass-blur over
+     the dashboard grid (the default `.tile` background at 55% opacity)
+     just lets the underlying widgets bleed through. Override to a
+     fully-opaque surface here — non-maximised tiles keep the
+     translucent look unchanged. `backdrop-filter: none` also spares
+     the GPU since there's no longer anything useful behind. */
+  background: var(--bg-1);
+  backdrop-filter: none;
 }
 /* Compact mode — tiles abut with no gap, so the drop shadows on
  * adjacent tiles overlap and stack in random z-order, which reads as
