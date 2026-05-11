@@ -187,13 +187,15 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
 
           {state.kind === 'not-installed' && (
             <div className="wdp-dialog-empty" role="note">
-              <div className="wdp-dialog-empty-title">Daemon not detected</div>
-              <p>
-                Install Android Web Device Proxy from the official Google page and re-open this
-                dialog. The proxy must be running on <code>localhost:9167</code>.
-              </p>
+              <div className="wdp-dialog-empty-meta">
+                <div className="wdp-dialog-empty-title">Daemon not detected</div>
+                <p>
+                  Install Android Web Device Proxy from the official Google page and re-open this
+                  dialog. The proxy must be running on <code>localhost:9167</code>.
+                </p>
+              </div>
               <a
-                className="btn primary wdp-dialog-install"
+                className="btn wdp-device-connect"
                 href={WDP_DOWNLOAD_URL}
                 target="_blank"
                 rel="noreferrer"

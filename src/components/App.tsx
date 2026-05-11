@@ -209,15 +209,6 @@ export function App() {
     hubRef.current.reset([]);
   }, [resetIngest]);
 
-  const onPairNew = useCallback(async () => {
-    onDisconnect();
-    try {
-      await connectReal();
-    } catch {
-      // already toasted by connectReal
-    }
-  }, [onDisconnect, connectReal]);
-
   const switchDevice = useCallback(
     (d: DeviceInfo) => {
       // Switching to the demo device runs through `connectFake` so the
@@ -290,7 +281,6 @@ export function App() {
             setTweaks={setTweaks}
             onSwitchDevice={switchDevice}
             onDisconnect={onDisconnect}
-            onPairNew={onPairNew}
           />
           <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
           {usingFake && (

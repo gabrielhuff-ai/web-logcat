@@ -23,7 +23,6 @@ export interface DashboardProps {
   setTweaks: (patch: Partial<Tweaks>) => void;
   onSwitchDevice: (d: DeviceInfo) => void;
   onDisconnect: () => void;
-  onPairNew: () => void;
 }
 
 export function Dashboard({
@@ -34,7 +33,6 @@ export function Dashboard({
   setTweaks,
   onSwitchDevice,
   onDisconnect,
-  onPairNew,
 }: DashboardProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -90,7 +88,6 @@ export function Dashboard({
         setTweaks={setTweaks}
         onSwitchDevice={onSwitchDevice}
         onDisconnect={onDisconnect}
-        onPairNew={onPairNew}
         onAddWidget={() => setPaletteOpen(true)}
         onClearLayout={() => setClearSignal((n) => n + 1)}
         onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
@@ -134,7 +131,6 @@ interface DashTopbarProps {
   setTweaks: (patch: Partial<Tweaks>) => void;
   onSwitchDevice: (d: DeviceInfo) => void;
   onDisconnect: () => void;
-  onPairNew: () => void;
   onAddWidget: () => void;
   onClearLayout: () => void;
   onOpenGlobalSettings: () => void;
@@ -148,7 +144,6 @@ function DashTopbar({
   setTweaks,
   onSwitchDevice,
   onDisconnect,
-  onPairNew,
   onAddWidget,
   onClearLayout,
   onOpenGlobalSettings,
@@ -237,14 +232,6 @@ function DashTopbar({
                 </button>
               ))}
               <div className="dash-device-pop-foot">
-                <button
-                  onClick={() => {
-                    onPairNew();
-                    setDevOpen(false);
-                  }}
-                >
-                  <Icons.Plus size={11} /> Pair new device…
-                </button>
                 <button
                   onClick={() => {
                     onDisconnect();
