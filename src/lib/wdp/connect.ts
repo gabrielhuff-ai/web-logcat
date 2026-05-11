@@ -29,10 +29,14 @@ export async function connectViaWdp(opts: WdpConnectOptions): Promise<{
   stream: LogStream;
   adb: Adb;
 }> {
+  // The discovery panel routes PROXY_UNAUTHORIZED through its own
+  // popup-then-wait flow before forwarding here, so reaching this point
+  // with an unready device means the snapshot transition didn't land in
+  // time. Surface a clear message instead of silently proceeding.
   if (!wdpDeviceReady(opts.device)) {
     if (opts.device.proxyStatus === 'PROXY_UNAUTHORIZED') {
       throw new Error(
-        'Device is not authorised in the Web Device Proxy yet — accept the popup and try again.',
+        'Device authorisation has not propagated yet. Accept the prompt on the device, wait a moment, and click Connect again.',
       );
     }
     throw new Error(`Device is not ready (${opts.device.adbStatus}).`);

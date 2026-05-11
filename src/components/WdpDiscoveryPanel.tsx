@@ -44,7 +44,16 @@ export interface WdpDiscoveryPanelProps {
 export function WdpDiscoveryPanel({ onConnect, busy }: WdpDiscoveryPanelProps) {
   const [state, setState] = useState<PanelState>({ kind: 'idle' });
   const [dismissed, setDismissed] = useState<boolean>(() => readDismissed());
+  const [authorizingSerial, setAuthorizingSerial] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const trackerRef = useRef<WdpTracker | null>(null);
+  // Latest device snapshot, mirrored from `state.devices` so click handlers
+  // that resume after an awaited popup read the *current* device state
+  // (not the stale closure value captured at click time). WDP transitions
+  // a device from PROXY_UNAUTHORIZED to ADB/DEVICE asynchronously via the
+  // long-lived track-devices socket — that transition is the signal we
+  // wait for after the user dismisses the approve popup.
+  const devicesRef = useRef<WdpDevice[]>([]);
   // Approve flow runs inside a user-gesture click handler, so we need a
   // synchronous trigger. The resolver is set when the panel renders the
   // 'needs-approve' state; clicking the button calls it.
@@ -57,6 +66,7 @@ export function WdpDiscoveryPanel({ onConnect, busy }: WdpDiscoveryPanelProps) {
     const tracker = new WdpTracker({
       onSnapshot: (devices) => {
         if (cancelled) return;
+        devicesRef.current = devices;
         setState({ kind: 'connected', devices, version: snapshotVersion });
       },
       onVersion: (v) => {
@@ -111,6 +121,49 @@ export function WdpDiscoveryPanel({ onConnect, busy }: WdpDiscoveryPanelProps) {
     }
   };
 
+  /**
+   * Click handler for a device row. Ready devices forward to `onConnect`
+   * directly; `PROXY_UNAUTHORIZED` devices open WDP's per-device approve
+   * popup synchronously (browsers require `window.open` to be inside the
+   * user gesture, so we cannot defer this through any awaits before the
+   * popup call). After the popup closes we give WDP a beat to push the
+   * updated snapshot, then forward the *latest* device entry — looked up
+   * by serial from `devicesRef` — to `onConnect`.
+   */
+  const onDeviceAction = (d: WdpDevice) => {
+    if (d.proxyStatus !== 'PROXY_UNAUTHORIZED') {
+      onConnect(d);
+      return;
+    }
+    setAuthError(null);
+    setAuthorizingSerial(d.serialNumber);
+    // openApprovePopup calls window.open synchronously inside its Promise
+    // constructor, so the gesture is preserved.
+    void openApprovePopup({ url: d.approveUrl }).then(async (approved) => {
+      if (!approved) {
+        setAuthorizingSerial(null);
+        setAuthError(
+          'Browser blocked the approve popup. Allow popups for this site and try again.',
+        );
+        return;
+      }
+      // WDP pushes the post-approval snapshot on /track-devices-json
+      // shortly after the popup closes. 250ms matches Perfetto's
+      // reference client; if the state hasn't transitioned by then, give
+      // the user a clear next step instead of looping.
+      await sleep(250);
+      const latest = devicesRef.current.find((x) => x.serialNumber === d.serialNumber);
+      setAuthorizingSerial(null);
+      if (latest && wdpDeviceReady(latest)) {
+        onConnect(latest);
+        return;
+      }
+      setAuthError(
+        `Device still ${latest ? wdpDeviceStatus(latest) : 'not visible'} after authorisation. Accept the prompt on the device, then click Connect again.`,
+      );
+    });
+  };
+
   const onDismiss = () => {
     writeDismissed();
     setDismissed(true);
@@ -132,7 +185,9 @@ export function WdpDiscoveryPanel({ onConnect, busy }: WdpDiscoveryPanelProps) {
         <Connected
           devices={state.devices}
           version={state.version}
-          onConnect={onConnect}
+          onDeviceAction={onDeviceAction}
+          authorizingSerial={authorizingSerial}
+          authError={authError}
           busy={!!busy}
         />
       )}
@@ -195,12 +250,16 @@ function NeedsApprove({ onApprove, busy }: { onApprove: () => void; busy: boolea
 function Connected({
   devices,
   version,
-  onConnect,
+  onDeviceAction,
+  authorizingSerial,
+  authError,
   busy,
 }: {
   devices: WdpDevice[];
   version: string;
-  onConnect: (d: WdpDevice) => void;
+  onDeviceAction: (d: WdpDevice) => void;
+  authorizingSerial: string | null;
+  authError: string | null;
   busy: boolean;
 }) {
   return (
@@ -219,9 +278,18 @@ function Connected({
         </div>
         {version && <div className="wdp-version" title={version}>v{shortVersion(version)}</div>}
       </div>
+      {authError && (
+        <div className="wdp-device-error" role="alert">
+          {authError}
+        </div>
+      )}
       {devices.length > 0 && (
         <ul className="wdp-devices">
-          {devices.map((d) => (
+          {devices.map((d) => {
+            const isAuthorizing = authorizingSerial === d.serialNumber;
+            const ready = wdpDeviceReady(d);
+            const canAuthorize = d.proxyStatus === 'PROXY_UNAUTHORIZED';
+            return (
             <li key={d.serialNumber} className="wdp-device">
               <div className="wdp-device-meta">
                 <div className="wdp-device-name">{deviceLabel(d)}</div>
@@ -231,17 +299,22 @@ function Connected({
               </div>
               <button
                 className="btn wdp-device-connect"
-                onClick={() => onConnect(d)}
-                disabled={busy || (!wdpDeviceReady(d) && d.proxyStatus !== 'PROXY_UNAUTHORIZED')}
+                onClick={() => onDeviceAction(d)}
+                disabled={busy || isAuthorizing || (!ready && !canAuthorize)}
               >
-                {d.proxyStatus === 'PROXY_UNAUTHORIZED' ? 'Authorize' : 'Connect'}
+                {isAuthorizing ? 'Authorizing…' : canAuthorize ? 'Authorize' : 'Connect'}
               </button>
             </li>
-          ))}
+          );
+          })}
         </ul>
       )}
     </div>
   );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function deviceLabel(d: WdpDevice): string {

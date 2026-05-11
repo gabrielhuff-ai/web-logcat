@@ -318,6 +318,13 @@
   border-radius: var(--r-sm);
   flex-shrink: 0;
 }
+.wdp-device-error {
+  padding: 8px 12px;
+  font-size: var(--t-xs);
+  color: oklch(0.7 0.18 25);
+  background: color-mix(in oklab, oklch(0.7 0.18 25) 8%, transparent);
+  border-top: 1px solid var(--line-soft);
+}
 
 /* Version pill — bottom-right of the pre-connect screen. Subtle so it
    doesn't compete with the connect-or-fake-data CTA, but always
