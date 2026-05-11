@@ -139,6 +139,49 @@ for (const theme of ['dark', 'light'] as const) {
       await page.screenshot({ path: out(theme, 'empty-state'), fullPage: false });
     });
 
+    test('connect dropdown menu', async ({ page }) => {
+      // `?wdp=1` reveals the split-button arrow; the screenshot captures
+      // both transports in the menu (WebUSB + Web Device Proxy with the
+      // experimental badge). No fake daemon needed — we capture the
+      // menu, not the proxy dialog.
+      await page.addInitScript((t: Theme) => {
+        localStorage.clear();
+        localStorage.setItem(
+          'weblogcat:tweaks:v1',
+          JSON.stringify({ theme: t, accent: 'indigo', performanceMode: 'on' }),
+        );
+      }, theme);
+      await page.goto('/?wdp=1');
+      await page.getByRole('button', { name: /choose connection method/i }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      await page.screenshot({
+        path: out(theme, 'connect-dropdown'),
+        fullPage: false,
+      });
+    });
+
+    test('wdp dialog (daemon not detected)', async ({ page }) => {
+      // CI has no WDP daemon, so the dialog naturally reaches the
+      // "Daemon not detected" empty state with the Install CTA — which
+      // is exactly the shot worth shipping in the docs.
+      await page.addInitScript((t: Theme) => {
+        localStorage.clear();
+        localStorage.setItem(
+          'weblogcat:tweaks:v1',
+          JSON.stringify({ theme: t, accent: 'indigo', performanceMode: 'on' }),
+        );
+      }, theme);
+      await page.goto('/?wdp=1');
+      await page.getByRole('button', { name: /choose connection method/i }).click();
+      await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+      const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+      await expect(dialog).toContainText(/Daemon not detected/i);
+      await page.screenshot({
+        path: out(theme, 'wdp-dialog'),
+        fullPage: false,
+      });
+    });
+
     test('simulator landing', async ({ page }) => {
       await bootSimulator(page, theme);
       await page.screenshot({

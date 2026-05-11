@@ -308,6 +308,8 @@
   padding: 8px 0;
 }
 .wdp-dialog-empty {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
   background: var(--bg-2);
   border: 1px solid var(--line-soft);
@@ -325,6 +327,15 @@
   font-size: var(--t-xs);
   color: var(--fg-2);
   line-height: 1.5;
+}
+.wdp-dialog-install {
+  align-self: flex-start;
+  margin-top: 10px;
+  height: 30px;
+  padding: 0 14px;
+  font-size: var(--t-sm);
+  border-radius: var(--r-sm);
+  text-decoration: none;
 }
 .wdp-dialog-empty code,
 .wdp-dialog-approve code {

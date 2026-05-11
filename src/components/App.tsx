@@ -18,7 +18,6 @@ import { DashboardChromeContext } from '../lib/dashboardChrome';
 import type { Adb } from '@yume-chan/adb';
 import type { LogStream } from '../lib/adb';
 import type { DeviceInfo, LogEntry } from '../types';
-import { writePreferredTransport } from '../lib/preferredTransport';
 
 type SimulatorAPI = typeof import('../lib/logGenerator');
 
@@ -152,7 +151,6 @@ export function App() {
         // (Shell first) can call `adb.subprocess.shellProtocol?.spawn()`
         // without each opening their own WebUSB connection.
         setAdb(result.adb);
-        writePreferredTransport('usb');
         showToast(`Connected to ${result.device.model}`);
       } catch (err) {
         const { friendlyConnectError } = await import('../lib/adb');
@@ -190,7 +188,6 @@ export function App() {
         setDevices([result.device, FAKE_DEVICE]);
         setUsingFake(false);
         setAdb(result.adb);
-        writePreferredTransport('proxy');
         showToast(`Connected to ${result.device.model} via Web Device Proxy`);
       } catch (err) {
         const { friendlyConnectError } = await import('../lib/adb');

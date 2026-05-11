@@ -65,43 +65,51 @@ Click **fake data** on the empty state. The dashboard runs against the
 [simulated stream](./simulator) so every widget renders against in-memory
 fixtures.
 
-## Device Proxy
+## Device Proxy <Badge type="warning" text="experimental" />
 
-WebUSB takes an exclusive claim on the device's USB interface, so while
-WebLogcat is connected nothing else (Android Studio, scrcpy, `adb shell`)
-can talk to the same phone. It also can't reach **emulators** or
-**Wi-Fi-attached** devices, and Firefox / Safari don't ship WebUSB at all.
+WebUSB has limits: it can't reach **emulators** or **Wi-Fi-attached**
+devices, it requires **exclusive USB access** (Android Studio / scrcpy /
+`adb shell` can't run alongside), and it isn't in **Firefox** or
+**Safari**. The Device Proxy transport fixes all four — at the cost of
+a small one-time daemon install.
 
-[Android Web Device Proxy (WDP)](https://tools.google.com/dlpage/android_web_device_proxy)
-is a small daemon you install alongside the SDK. It multiplexes through
-your local `adb` server so multiple tools can share the device, and it
-exposes everything `adb devices` sees — emulators included — to web pages
-on `localhost`. WebLogcat speaks WDP's WebSocket protocol natively (the
-same one [Perfetto's UI](https://ui.perfetto.dev) uses).
+### Turn it on
 
-::: info Opt-in flag
-The WDP transport is currently behind a feature flag while the wire
-protocol gets verified against real devices. Visit the app once with
-`?wdp=1` appended to the URL to enable it (the flag sticks via
-`localStorage`; the query param is stripped on read). `?wdp=0` clears it.
-:::
+The Device Proxy is opt-in. Append `?wdp=1` to the URL once — the flag
+sticks via `localStorage`, the query param is stripped on read, and
+`?wdp=0` clears it. With the flag set, **Connect a device** grows a
+dropdown arrow:
 
-### Setup
+<ThemeImage src-dark="/img/features/connect-dropdown.png" src-light="/img/features/connect-dropdown-light.png" alt="Connect-a-device button with a dropdown arrow, opened to show 'Connect via WebUSB' and 'Connect via Web Device Proxy' (experimental) options" />
 
-1. Install the WDP daemon from the link above and let it start.
-2. Plug in the device, start the emulator, or `adb connect <ip:port>` —
-   whatever brings the device into `adb devices`.
-3. Open WebLogcat. The empty state shows a **Web Device Proxy is running**
-   panel with one row per device.
-4. Click **Connect** on a device. The first time WebLogcat talks to WDP
-   from this browser origin, WDP opens a Google-served approval popup;
-   accept it and the connection completes.
+The arrow lets you pick a transport explicitly. The primary button
+follows whichever is **available** in your environment — if the
+proxy daemon is running on `localhost:9167`, the primary defaults to
+proxy; otherwise it falls back to WebUSB.
 
-After approval, subsequent visits from this origin are silent. Per-device
-authorization (the `unauthorized` state on the phone) prompts a separate
-popup the first time you connect to that device.
+### Connect via the proxy
 
-### Why use it over WebUSB?
+1. **Install the daemon.** Pick **Connect via Web Device Proxy** from
+   the dropdown. If the daemon isn't running, the dialog shows an
+   **Install** button that opens the official Google download page in
+   a new tab. Run the installer and re-open the dialog.
+
+   <ThemeImage src-dark="/img/features/wdp-dialog.png" src-light="/img/features/wdp-dialog-light.png" alt="Web Device Proxy dialog showing 'Daemon not detected' with an Install button" />
+
+2. **Authorize WebLogcat.** The first time the proxy sees this origin
+   it serves a small Google-hosted approval page in a popup. Click
+   *Allow* — subsequent visits from this origin are silent.
+3. **Pick a device.** The dialog lists everything `adb devices` shows:
+   USB phones, emulators, Wi-Fi attachments. Click **Connect** on the
+   row you want. If a device shows **PROXY_UNAUTHORIZED**, click
+   **Authorize** instead — that triggers a per-device approval popup
+   and re-tries the connect once the device transitions to ready.
+
+After connect, the dashboard mounts and behaves exactly the same as
+under WebUSB — every tile (Logcat, Shell, Dumpsys, Files, Mirror)
+works without modification.
+
+### When to use which
 
 | Need | WebUSB | Device Proxy |
 | --- | --- | --- |
@@ -109,24 +117,22 @@ popup the first time you connect to that device.
 | Multiple devices visible at once | ❌ (one chooser pick) | ✅ |
 | Coexist with Android Studio / scrcpy / `adb` | ❌ (exclusive claim) | ✅ |
 | Emulators | ❌ | ✅ |
-| Wi-Fi-attached devices | ❌ | ✅ |
+| Wi-Fi-attached devices (`adb connect`) | ❌ | ✅ |
 | Firefox / Safari | ❌ | ✅ (any browser) |
 
-### Mechanics
+::: warning Note
+If the proxy daemon is running, `adb-server` already holds the USB
+claim — meaning WebUSB will fail with *"device already in use"* until
+you stop the daemon (or kill `adb-server`). That's why the primary
+button defaults to the proxy whenever it's detected.
+:::
 
-The transport hooks into the same `Adb` session every widget uses, so all
-five tiles — Logcat, Shell, Dumpsys, Files, Mirror — work identically
-over the proxy. The implementation lives at
-[`src/lib/wdp/`](https://github.com/gabrielhuff/web-logcat/tree/main/src/lib/wdp):
+### Troubleshooting
 
-- `trackDevices.ts` subscribes to `ws://127.0.0.1:9167/track-devices-json`
-  for the live device list.
-- `transport.ts` implements yume-chan's `AdbTransport` interface — each
-  service stream (`shell:`, `sync:`, …) opens its own
-  `ws://127.0.0.1:9167/adb-json` WebSocket with a JSON header
-  `{ header: { serialNumber, command } }`.
-
-If the daemon isn't running, the empty state shows a dismissible tip
-linking to the install page; clear
-`weblogcat:wdp-not-installed:dismissed:v1` in localStorage to bring it
-back.
+| Symptom | Cause / fix |
+| --- | --- |
+| Dropdown arrow not visible | The `?wdp=1` opt-in flag isn't set. Visit `…/?wdp=1` once. |
+| "Daemon not detected" | Proxy isn't running on `localhost:9167`. Install or restart it. |
+| "Browser blocked the approve popup" | Allow popups for this origin, then retry. The popup is a one-time Google-hosted approval page. |
+| Device shows `OFFLINE` / `UNAUTHORIZED` | Accept the on-device debugging prompt and re-open the dialog. |
+| WebUSB suddenly fails with "device in use" | The proxy daemon claimed it via `adb`. Quit the daemon or pick **Connect via Web Device Proxy** from the dropdown. |

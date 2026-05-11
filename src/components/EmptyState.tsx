@@ -8,14 +8,13 @@
 // user cancels the chooser, `onConnect` rejects and we reset the button
 // state instead of staying stuck on "Connected".
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as Icons from './Icons';
 import { APP_VERSION } from '../version';
 import { SplitConnectButton } from './SplitConnectButton';
 import { WdpDialog } from './WdpDialog';
 import { isWdpEnabled } from '../lib/featureFlags';
-import { readPreferredTransport } from '../lib/preferredTransport';
-import type { WdpDevice } from '../lib/wdp';
+import { probeWdpReachable, type WdpDevice } from '../lib/wdp';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
 
@@ -38,12 +37,26 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
   const [wdpOpen, setWdpOpen] = useState(false);
+  // Runtime availability probe — when WDP is reachable on
+  // 127.0.0.1:9167 the primary button defaults to the proxy flow,
+  // since a running WDP daemon implies adb-server has the USB claim
+  // anyway and WebUSB would fail. When the probe times out we default
+  // to WebUSB. The arrow menu always exposes both transports.
+  const [preferred, setPreferred] = useState<'usb' | 'proxy'>('usb');
   // WDP is opt-in until verified in the wild — flip with `?wdp=1`.
   const wdpEnabled = isWdpEnabled();
-  // Persisted last-successful-transport; gates whether the primary
-  // button tries proxy or WebUSB. WebUSB unless `wdpEnabled` and a
-  // proxy connect has previously succeeded.
-  const preferred = wdpEnabled ? readPreferredTransport() : 'usb';
+
+  useEffect(() => {
+    if (!wdpEnabled) return;
+    let cancelled = false;
+    void probeWdpReachable().then((reachable) => {
+      if (cancelled) return;
+      setPreferred(reachable ? 'proxy' : 'usb');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wdpEnabled]);
 
   const startWebUsbConnect = async () => {
     setConnecting(true);

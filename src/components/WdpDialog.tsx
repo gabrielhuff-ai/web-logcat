@@ -175,7 +175,7 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
           <p className="wdp-dialog-blurb">
             The Web Device Proxy coexists with a running <code>adb</code>, exposes emulators and
             Wi-Fi-attached devices, and works in any browser.{' '}
-            <a className="link" href={DOCS_URL}>
+            <a className="link" href={DOCS_URL} target="_blank" rel="noreferrer">
               Learn more
             </a>
             .
@@ -189,13 +189,17 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
             <div className="wdp-dialog-empty" role="note">
               <div className="wdp-dialog-empty-title">Daemon not detected</div>
               <p>
-                Install{' '}
-                <a className="link" href={WDP_DOWNLOAD_URL} target="_blank" rel="noreferrer">
-                  Android Web Device Proxy
-                </a>{' '}
-                and re-open this dialog. The proxy must be running on{' '}
-                <code>localhost:9167</code>.
+                Install Android Web Device Proxy from the official Google page and re-open this
+                dialog. The proxy must be running on <code>localhost:9167</code>.
               </p>
+              <a
+                className="btn primary wdp-dialog-install"
+                href={WDP_DOWNLOAD_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Install
+              </a>
             </div>
           )}
 
