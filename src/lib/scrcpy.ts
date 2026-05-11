@@ -73,7 +73,7 @@ export interface ScrcpySession {
  */
 export async function startScrcpy(
   adb: Adb,
-  opts: { bitRate?: number; maxFps?: number } = {},
+  opts: { bitRate?: number; maxFps?: number; tunnelForward?: boolean } = {},
 ): Promise<ScrcpySession> {
   // 1. Fetch the vendored jar from the static asset path. `fetch` is
   //    fine here — Vite serves `public/` at the deploy root.
@@ -112,6 +112,16 @@ export async function startScrcpy(
     cleanup: true,
     // We don't care what scrcpy does with the screen on close.
     powerOffOnClose: false,
+    // Default scrcpy mode is reverse-tunnel: the device's `localabstract:
+    // scrcpy_<scid>` socket is bound to a host TCP port via `adb reverse`
+    // and the client dials that port. The Web Device Proxy transport
+    // doesn't expose `adb reverse` (one outbound service stream per
+    // WebSocket; no host-side port registration), so callers on WDP must
+    // flip this to `true` — forward-tunnel mode opens the localabstract
+    // socket directly as a regular ADB service, which WDP supports.
+    // WebUSB works either way; we leave it at false there to match the
+    // upstream default and not perturb proven behaviour.
+    tunnelForward: opts.tunnelForward ?? false,
   });
 
   // 4. Spawn the server. AdbScrcpyClient.start handles `app_process`

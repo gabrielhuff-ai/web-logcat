@@ -184,12 +184,15 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         // delivered by the scrcpy server itself, so the WebCodecs
         // decoder never sees the full firehose. Untouched in normal
         // mode (0 fps cap = scrcpy default of "encoder native rate").
-        const session = await startScrcpy(
-          adb,
-          perfRef.current
-            ? { maxFps: 30, bitRate: 4_000_000 }
-            : {},
-        );
+        // Web Device Proxy doesn't expose `adb reverse`, so scrcpy has
+        // to use forward-tunnel mode (opens the localabstract socket as
+        // a regular ADB service instead of binding a host port). WebUSB
+        // keeps the upstream default.
+        const tunnelForward = device?.transport === 'proxy';
+        const session = await startScrcpy(adb, {
+          tunnelForward,
+          ...(perfRef.current ? { maxFps: 30, bitRate: 4_000_000 } : {}),
+        });
         if (cancelled) {
           await session.dispose();
           return;
@@ -253,7 +256,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       void cleanup?.();
       sessionRef.current = null;
     };
-  }, [adb, usingFake, showToast]);
+  }, [adb, usingFake, showToast, device?.transport]);
 
   // ---- Pointer drag → MOTION_DOWN / MOVE / UP --------------------------
   // The previous version only emitted DOWN+UP back to back, so the
