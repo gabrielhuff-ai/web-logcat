@@ -29,6 +29,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
@@ -46,6 +47,8 @@ import {
   type SimTap,
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
+import { createSync, type SyncFs } from '../../lib/sync';
+import { markInternalDropConsumed } from '../../lib/dragHandoff';
 import type { ScrcpySession } from '../../lib/scrcpy';
 import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
 import type { AndroidKeyCode } from '@yume-chan/scrcpy';
@@ -115,6 +118,27 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   // Toggling the device screen-power-mode without restarting the
   // session.
   const [screenOff, setScreenOff] = useState(false);
+
+  // ---- Drop-to-open state ----------------------------------------------
+  // Tracks whether a Files-widget file is being dragged over the
+  // mirror — used to paint the "drop to open on device" overlay and to
+  // gate which paths take the drop. Cleared on drop / dragleave.
+  const [dropping, setDropping] = useState(false);
+  // Lazy SyncFs handle for the install-on-drop action. Created on first
+  // drop and disposed on unmount. Reusing the Files widget's instance
+  // would force a coupling between widgets; one-per-widget keeps each
+  // tile self-contained, and the underlying socket is opened lazily by
+  // `createSync` so the cost is only paid when the user actually drops.
+  const fsRef = useRef<SyncFs | null>(null);
+  if (fsRef.current === null) {
+    fsRef.current = createSync(usingFake ? null : adb);
+  }
+  useEffect(() => {
+    return () => {
+      void fsRef.current?.dispose();
+      fsRef.current = null;
+    };
+  }, []);
 
   // ---- Refs (canvas, session, decoder) ---------------------------------
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -669,6 +693,61 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     };
   }, []);
 
+  // ---- Drag-and-drop "open on device" ----------------------------------
+  // A file dragged out of the Files widget carries an
+  // `application/x-weblogcat-device-path` MIME (set in FilesWidget's
+  // `onRowDragStart`) so we can distinguish it from a host-file drop
+  // (which would land here as the `Files` MIME and is not supported
+  // for Mirror today). On drop we mark the drag consumed so the Files
+  // widget skips its default Pull-to-host download, then route the
+  // path through `SyncFs.open` — APKs install via `pm install`, other
+  // files fire an `am start VIEW` intent on the device.
+  const isDevicePathDrag = (e: ReactDragEvent<HTMLElement>): boolean =>
+    e.dataTransfer.types.includes('application/x-weblogcat-device-path');
+  const onMirrorDragOver = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+    if (!isDevicePathDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  }, []);
+  const onMirrorDragLeave = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+    // Only clear when the pointer truly left the widget, not when it
+    // crossed into a descendant.
+    if (e.currentTarget === e.target) setDropping(false);
+  }, []);
+  const onMirrorDrop = useCallback(
+    (e: ReactDragEvent<HTMLDivElement>) => {
+      if (!isDevicePathDrag(e)) return;
+      e.preventDefault();
+      setDropping(false);
+      const path = e.dataTransfer.getData('application/x-weblogcat-device-path');
+      if (!path) return;
+      markInternalDropConsumed();
+      if (usingFake) {
+        showToast('Simulated mode — open on device disabled');
+        return;
+      }
+      const slash = path.lastIndexOf('/');
+      const name = slash >= 0 ? path.slice(slash + 1) : path;
+      const isApk = path.toLowerCase().endsWith('.apk');
+      void (async () => {
+        const fs = fsRef.current;
+        if (!fs) return;
+        const res = await fs.open(path);
+        if (res.ok) {
+          showToast(isApk ? `Installed ${name}` : `Opened ${name} on device`);
+        } else {
+          // pm install / am start error messages can be long Java
+          // stack traces — log the full reason but keep the toast
+          // short. Matches the Files widget's openOnDevice contract.
+          console.error(`[Mirror] open failed for ${path}:`, res.reason);
+          showToast(isApk ? `Install failed for ${name}` : `Open failed for ${name}`);
+        }
+      })();
+    },
+    [usingFake, showToast],
+  );
+
   // ---- Render ---------------------------------------------------------
   const inlineNotice = useMemo(() => {
     if (usingFake) return null;
@@ -689,7 +768,14 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   } as CSSProperties;
 
   return (
-    <div className="mr-widget" data-tile-id={tileId} style={widgetStyle}>
+    <div
+      className={`mr-widget ${dropping ? 'mr-dropping' : ''}`}
+      data-tile-id={tileId}
+      style={widgetStyle}
+      onDragOver={onMirrorDragOver}
+      onDragLeave={onMirrorDragLeave}
+      onDrop={onMirrorDrop}
+    >
       <div className="mr-toolbar widget-bar">
         <div className="mr-hwgroup">
           <button

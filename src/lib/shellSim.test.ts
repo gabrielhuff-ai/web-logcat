@@ -71,6 +71,18 @@ describe('execShellSim — pwd + cd', () => {
     expect(r.state.cwd).toBe('/sdcard/Pictures');
   });
 
+  it('cd into an unknown directory leaves cwd untouched and prints an error', () => {
+    const r = execShellSim('cd nonexistent', { cwd: '/sdcard' });
+    expect(r.state.cwd).toBe('/sdcard');
+    expect(r.lines[0]).toMatch(/No such file or directory/);
+  });
+
+  it('cd to an absolute path outside the fake FS fails', () => {
+    const r = execShellSim('cd /no/such/dir', initial());
+    expect(r.state.cwd).toBe('/sdcard');
+    expect(r.lines[0]).toMatch(/No such file or directory/);
+  });
+
   it('chained cd updates cwd cumulatively', () => {
     let s = initial();
     s = execShellSim('cd /', s).state;

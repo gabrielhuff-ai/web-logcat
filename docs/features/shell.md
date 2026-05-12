@@ -25,9 +25,18 @@ commands, etc. There is no remote `bash` unless your device ships one.
 ## Working directory
 
 The first prompt drops you in the device's home (commonly `/sdcard`). Use
-`cd` like normal — the prompt updates to reflect the new location. The
-default starting path is configurable in the per-widget settings modal
-(the cog in the header).
+`cd` like normal — the prompt updates to reflect the new location, but
+only when the `cd` actually succeeds on-device (`cd /no/such/dir` leaves
+the prompt where it was). The default starting path is configurable in
+the per-widget settings modal (the cog in the header).
+
+## Dragging in a path
+
+Drag a file row from the [Files](./files) widget onto the Shell
+prompt to paste its device-side path at the caret. Useful for piping
+a path into `cat`, `ls`, `md5sum`, etc. without retyping. The file
+itself stays on the device — Files only triggers a Pull-to-laptop
+download when the drop lands outside the app.
 
 ## Built-ins
 

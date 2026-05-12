@@ -102,6 +102,15 @@ export function execShellSim(cmd: string, state: ShellSimState): ShellSimResult 
   if (head === 'cd') {
     const target = args[1] ?? '/sdcard';
     const next = resolvePath(state.cwd, target);
+    // Refuse to enter directories the fake FS doesn't know about so
+    // the prompt only updates on a successful cd — matches the real
+    // device behaviour where `cd nonexistent` leaves `pwd` unchanged.
+    if (!isFakeDir(next)) {
+      return {
+        lines: [`/system/bin/sh: cd: ${target}: No such file or directory`],
+        state,
+      };
+    }
     return { lines: [], state: { ...state, cwd: next } };
   }
 
@@ -225,6 +234,25 @@ function resolvePath(cwd: string, target: string): string {
     out = (out === '/' ? '' : out) + '/' + seg;
   }
   return normalize(out);
+}
+
+/**
+ * Heuristic "does this path point to a directory the fake FS knows
+ * about?" check. The FS map only records *directory listings*, not the
+ * subdirectories themselves, so we accept either form: the path is a
+ * listing key (`/sdcard`, `/sdcard/Download`, ...) or the parent's
+ * listing names this path's basename (so `/sdcard/Pictures` is valid
+ * because the `/sdcard` listing includes `Pictures`, even though
+ * `Pictures` has no listing of its own).
+ */
+function isFakeDir(path: string): boolean {
+  if (path === '/') return true;
+  if (FAKE_FS_HINTS[path]) return true;
+  const par = parent(path);
+  const listing = FAKE_FS_HINTS[par];
+  if (!listing) return false;
+  const base = path.slice(par === '/' ? 1 : par.length + 1);
+  return listing.includes(base);
 }
 
 function parent(path: string): string {
