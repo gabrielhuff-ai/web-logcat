@@ -262,6 +262,43 @@
 .dash-grid.dragging,
 .dash-grid.swap-dragging { cursor: grabbing; user-select: none; }
 
+/* ===== iOS-style "shake" while a swap drag is active ====================
+ * `.drag-polish` only lights up when the user is *actually* dragging a
+ * tile by its header *and* performance mode is off (the gate lives in
+ * `<TileGrid/>`). All non-source tiles get a small rotation oscillation
+ * around their centre so the dashboard reads as "in edit mode" — the
+ * same metaphor iOS uses when long-pressing home-screen icons. Subtle:
+ * ±0.5° at 280ms keeps the motion legible without making text wobble
+ * noticeably enough to nauseate. A per-tile delay (10ms × index)
+ * desyncs the tiles so they don't move as a single rigid block.
+ *
+ * The `.tile.dragging` class is applied to the *source* tile (see
+ * `<Tile/>`), so the `:not(.dragging)` filter exempts it — the floating
+ * ghost it follows is the dragged-visual, the source itself just sits
+ * in place at reduced opacity. */
+@keyframes tile-shake {
+  0%   { transform: rotate(-0.5deg) translate(0, -0.25px); }
+  50%  { transform: rotate( 0.5deg) translate(0,  0.25px); }
+  100% { transform: rotate(-0.5deg) translate(0, -0.25px); }
+}
+.dash-grid.drag-polish .tile:not(.dragging) {
+  animation: tile-shake 280ms ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+/* Use the tile's `data-tile-id` (every tile has one) to nudge a tiny
+ * per-instance delay so the shakes desync without us needing nth-child
+ * arithmetic against an absolute-positioned grid. The seed is the
+ * length of the id mod 8 — stable across re-renders. */
+.dash-grid.drag-polish .tile:not(.dragging) { animation-delay: 0ms; }
+.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(2n)   { animation-delay: 70ms; }
+.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(3n)   { animation-delay: 140ms; }
+.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(5n+1) { animation-delay: 210ms; }
+@media (prefers-reduced-motion: reduce) {
+  .dash-grid.drag-polish .tile:not(.dragging) { animation: none; }
+}
+/* The drag-polish class also widens the gap (the `--tile-gap` JS-side
+ * change drives the layout reflow); nothing else CSS-side here. */
+
 /* Compact mode — collapse rounded corners. The inter-tile gap is also
    set to 0 by `<TileGrid/>` (see `NORMAL_GAP` / `COMPACT_GAP`). A
    single tile in compact mode looks identical to a maximised tile. */
@@ -348,12 +385,22 @@
     height 220ms var(--ease-out),
     box-shadow 160ms;
 }
+/* The dragged tile follows the cursor (see the `style` override in
+ * `<TileGrid/>`). Kill the `left/top/width/height` transition so the
+ * tile tracks pointermove without lag — the transition is restored on
+ * drop so the tile glides back to its layout position smoothly. The
+ * z-index lift floats the dragged tile above its siblings, and the
+ * raised box-shadow reads as "I'm picked up". */
 .tile.dragging {
-  opacity: 0.55;
+  z-index: 50 !important;
+  transition: box-shadow 160ms;
+  cursor: grabbing;
   box-shadow:
-    0 1px 0 oklch(1 0 0 / 0.04) inset,
-    0 4px 24px oklch(0 0 0 / 0.25);
+    0 1px 0 oklch(1 0 0 / 0.08) inset,
+    0 18px 48px oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(from var(--accent) l c h / 0.4);
 }
+.tile.dragging .tile-head { cursor: grabbing; }
 .tile.drop-target {
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.06) inset,
@@ -394,6 +441,14 @@
 .tile.max {
   border-radius: 0;
   margin: 0;
+  /* When maximised the tile covers everything, so the glass-blur over
+     the dashboard grid (the default `.tile` background at 55% opacity)
+     just lets the underlying widgets bleed through. Override to a
+     fully-opaque surface here — non-maximised tiles keep the
+     translucent look unchanged. `backdrop-filter: none` also spares
+     the GPU since there's no longer anything useful behind. */
+  background: var(--bg-1);
+  backdrop-filter: none;
 }
 /* Compact mode — tiles abut with no gap, so the drop shadows on
  * adjacent tiles overlap and stack in random z-order, which reads as
@@ -434,6 +489,25 @@
   animation: fadeIn 120ms var(--ease-out);
 }
 [data-perf="on"] .dash-drop-overlay { transition: none; animation: none; }
+
+/* Hover-hold auto-commit: the overlay blinks once before the swap
+ * applies so the user has a moment to register that the commit is
+ * about to fire. Two quick alpha pulses — short enough that the
+ * gesture stays fluid, bright enough to read against the dashboard. */
+.dash-drop-overlay.dash-drop-overlay-committing {
+  animation: dropOverlayBlink 180ms var(--ease-out) 1;
+}
+@keyframes dropOverlayBlink {
+  0%, 100% {
+    background: oklch(from var(--accent) l c h / 0.18);
+    border-color: oklch(from var(--accent) l c h / 0.65);
+  }
+  50% {
+    background: oklch(from var(--accent) l c h / 0.45);
+    border-color: oklch(from var(--accent) l c h / 1);
+  }
+}
+[data-perf="on"] .dash-drop-overlay.dash-drop-overlay-committing { animation: none; }
 
 /* Floating ghost shown next to the cursor while dragging a tile head. */
 .dash-swap-ghost {
@@ -600,6 +674,105 @@
   border-radius: 7px;
   font-size: var(--t-sm);
   font-weight: 500;
+}
+
+/* === Quick-add menu (Cmd/Ctrl+N) ===
+ * Compact Spotlight-style floating panel. Lives over the dashboard
+ * with a barely-there scrim. Keyboard-first: pressing a widget's
+ * single-letter accelerator inserts it; Escape / outside-click
+ * dismiss; "More…" hands off to `<WidgetPalette/>`. */
+.qa-scrim {
+  position: fixed; inset: 0;
+  z-index: 52;
+  background: oklch(0 0 0 / 0.18);
+  animation: fadeIn 120ms var(--ease-out);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 70px;
+}
+.qa-menu {
+  width: min(280px, 86vw);
+  background: oklch(from var(--bg-1) l c h / 0.96);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-md);
+  box-shadow: 0 18px 48px oklch(0 0 0 / 0.55);
+  padding: 6px 0;
+  outline: none;
+  animation: qaMenuIn 140ms var(--ease-out);
+}
+@keyframes qaMenuIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.qa-head {
+  padding: 6px 12px 8px;
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.qa-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-1);
+  text-align: left;
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: background-color 80ms var(--ease-out);
+}
+.qa-row:hover:not(:disabled),
+.qa-row:focus-visible,
+.qa-row.qa-row-active:not(:disabled) {
+  background: oklch(from var(--accent) l c h / 0.16);
+  color: var(--fg-0);
+  outline: none;
+}
+.qa-row-disabled,
+.qa-row:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.qa-row-icon {
+  display: inline-flex;
+  width: 18px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.qa-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-row-key {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  background: oklch(from var(--fg-3) l c h / 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.qa-row:hover:not(:disabled) .qa-row-key {
+  color: var(--fg-1);
+}
+.qa-sep {
+  height: 1px;
+  background: var(--glass-line);
+  margin: 4px 8px;
+}
+.qa-row-more {
+  color: var(--fg-2);
 }
 
 /* === Palette === */

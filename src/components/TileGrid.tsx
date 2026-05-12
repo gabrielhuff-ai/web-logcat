@@ -59,6 +59,21 @@ import type { LayoutState, WidgetKind } from '../types';
 /** Inter-tile gap in pixels (also the seam-handle thickness). */
 const NORMAL_GAP = 10;
 const COMPACT_GAP = 0;
+/**
+ * Extra gap added to the live layout while a swap drag is in
+ * progress. iOS-style: the icons (tiles) "make room" so the drop
+ * zones read more clearly. Animates because each tile already
+ * transitions its left/top/width/height, so changing the outer gap
+ * smoothly reflows everything.
+ */
+const DRAG_GAP_BUMP = 10;
+/**
+ * Hover-hold threshold (ms): how long the user must keep the cursor
+ * still over a valid drop zone before the drop fires automatically.
+ * Tuned to feel intentional without being slow — too short and the
+ * drag commits while the user is still deciding.
+ */
+const HOVER_HOLD_MS = 900;
 
 interface ResizeDrag {
   kind: 'resize';
@@ -91,6 +106,19 @@ interface SwapDrag {
   hoverEdge: SplitEdge | null;
   /** True once the cursor has moved more than a few px from the start. */
   active: boolean;
+  /** True for ~200ms after the hover-hold auto-commit fires — drives a
+   *  quick blink on the drop overlay before the swap/restructure
+   *  actually applies. */
+  committing: boolean;
+  /**
+   * Offset from the dragged tile's top-left to the pointer position
+   * at drag start, in grid-local coordinates. The source tile is
+   * rendered at `(pointerGridX - grabOffsetX, pointerGridY - grabOffsetY)`
+   * while the drag is active so it visually follows the cursor with
+   * the same finger-on-tile grip the user established on pointerdown.
+   */
+  grabOffsetX: number;
+  grabOffsetY: number;
 }
 
 type DragState = ResizeDrag | SwapDrag;
@@ -104,6 +132,10 @@ export interface TileGridProps {
   redoSignal: number;
   /** Imperative request from the topbar to add a widget. */
   addSignal: { kind: WidgetKind; n: number } | null;
+  /** Imperative request from Backspace / Delete to remove the focused tile. */
+  removeFocusedSignal: number;
+  /** Imperative request from the arrow keys to move focus spatially. */
+  focusDirSignal: { dir: 'left' | 'right' | 'up' | 'down'; n: number } | null;
   /** Notify parent when layout changes — used for the palette's `maxInstances` check. */
   onLayoutChange?: (layout: LayoutState) => void;
   /** Notify parent when the user clicks `+ Add` from the in-grid empty state. */
@@ -118,15 +150,24 @@ export function TileGrid({
   undoSignal,
   redoSignal,
   addSignal,
+  removeFocusedSignal,
+  focusDirSignal,
   onLayoutChange,
   onRequestAdd,
 }: TileGridProps) {
-  const { tweaks } = useDashboardChrome();
-  const gap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
+  const { tweaks, performanceModeOn } = useDashboardChrome();
+  const baseGap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
 
   const [layout, setLayoutDirect] = useState<LayoutState>(loadLayout);
   const [maximized, setMaximized] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Bump the inter-tile gap while a swap drag is active so the
+  // dashboard physically "makes room" for the dragged tile — the
+  // tile-position transitions already in place animate the reflow.
+  // Skip in performance mode where every layout transition is off.
+  const swapDragging = drag?.kind === 'swap' && drag.active;
+  const dragPolishOn = swapDragging && !performanceModeOn;
+  const gap = dragPolishOn ? baseGap + DRAG_GAP_BUMP : baseGap;
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +184,35 @@ export function TileGrid({
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+
+  // ---- Hover-hold auto-commit state -------------------------------------
+  // While a swap drag is active, if the user keeps the cursor still
+  // over a valid drop target for `HOVER_HOLD_MS`, we commit the
+  // swap/restructure mid-drag (blink the overlay first), then keep
+  // dragging so they can chain edits in a single gesture. Tracked via
+  // refs (not state) so a position-update re-render doesn't reset the
+  // hold timer on every frame.
+  const hoverHoldTimerRef = useRef<number | null>(null);
+  const settleRef = useRef<{
+    x: number;
+    y: number;
+    hoverId: string | null;
+    hoverEdge: SplitEdge | null;
+  }>({ x: 0, y: 0, hoverId: null, hoverEdge: null });
+  // Mirror of the latest drag state for the timer callback to read at
+  // fire time (the timer's closure captures the state at arm time,
+  // which would be stale after subsequent pointermoves).
+  const dragRef = useRef<DragState | null>(null);
+  useEffect(() => {
+    dragRef.current = drag;
+  }, [drag]);
+  // Latch on `performanceModeOn` so the hover-hold logic inside the
+  // drag effect can short-circuit without listing the boolean in its
+  // deps (which would tear down + re-attach the pointer listeners).
+  const perfModeOnRef = useRef(performanceModeOn);
+  useEffect(() => {
+    perfModeOnRef.current = performanceModeOn;
+  }, [performanceModeOn]);
 
   /**
    * Set the layout AND push the previous one onto the undo stack.
@@ -308,6 +378,25 @@ export function TileGrid({
     [applyLayout],
   );
 
+  // Backspace / Delete — pop the focused tile. Resolves the focused id
+  // from the layout *at signal time* (not at handler-creation time) so
+  // a stale focusId in the closure can't accidentally remove the wrong
+  // tile after a swap.
+  const lastRemoveNRef = useRef(removeFocusedSignal);
+  useEffect(() => {
+    if (removeFocusedSignal === lastRemoveNRef.current) return;
+    lastRemoveNRef.current = removeFocusedSignal;
+    setLayoutDirect((cur) => {
+      if (!cur.focusId) return cur;
+      const stack = undoStackRef.current;
+      stack.push(cur);
+      if (stack.length > HISTORY_CAP) stack.shift();
+      redoStackRef.current = [];
+      return removeTileFromLayout(cur, cur.focusId);
+    });
+    setMaximized(null);
+  }, [removeFocusedSignal]);
+
   // `barsHidden` cycles through 'show' (default) / 'hideBars' /
   // 'hideHead' on each click. Widgets without an internal control bar
   // (e.g. Shell) skip the middle state — see `cycleBarMode` below.
@@ -330,6 +419,117 @@ export function TileGrid({
     setMaximized((m) => (m === id ? null : id));
   }, []);
 
+  // Arrow-key focus navigation. The active tile is the one whose centre
+  // we project from; we pick the tile in the requested direction whose
+  // centre minimises an "axis-aligned + perpendicular" cost (Euclidean
+  // distance, but with perpendicular axis weighted lower so a slightly
+  // off-axis neighbour is preferred over a far-but-on-axis one). If
+  // there is no focused tile yet we just focus the leftmost / topmost.
+  const lastFocusDirNRef = useRef(focusDirSignal?.n ?? 0);
+  useEffect(() => {
+    if (!focusDirSignal) return;
+    if (focusDirSignal.n === lastFocusDirNRef.current) return;
+    lastFocusDirNRef.current = focusDirSignal.n;
+    const leaves = computed.leaves;
+    if (leaves.length === 0) return;
+    const dir = focusDirSignal.dir;
+    const curId = layout.focusId;
+    const cur = curId ? leaves.find((l) => l.id === curId) : null;
+    const centreOf = (r: { x: number; y: number; w: number; h: number }) => ({
+      x: r.x + r.w / 2,
+      y: r.y + r.h / 2,
+    });
+    if (!cur) {
+      // No current focus — anchor to the corner that matches the
+      // direction (Right → leftmost tile, Down → topmost, etc.).
+      const pick =
+        dir === 'right' || dir === 'left'
+          ? [...leaves].sort((a, b) => a.rect.x - b.rect.x)
+          : [...leaves].sort((a, b) => a.rect.y - b.rect.y);
+      const first = pick[0];
+      if (first) {
+        applyLayout((l) => (l.focusId === first.id ? l : { ...l, focusId: first.id }), {
+          transient: true,
+        });
+      }
+      return;
+    }
+    const c = centreOf(cur.rect);
+    // Spatial pick: prefer candidates whose perpendicular extent
+    // *overlaps* the current tile's extent (i.e. they share a row or
+    // column with it), tie-breaking by the smallest axial gap.
+    // Fall back to the centre-distance metric only when no candidate
+    // overlaps — e.g. a Mirror tile that fills the left column should
+    // win against a Shell tile that's diagonally below-left, because
+    // Mirror's vertical span fully contains Logcat's. The previous
+    // `axial + 2 * perp` cost picked Shell in that case because Shell's
+    // centre was closer overall even though it didn't share a row.
+    interface Cand {
+      id: string;
+      gap: number;
+      overlap: number;
+      centerDist: number;
+    }
+    let bestOverlap: Cand | null = null;
+    let bestFallback: Cand | null = null;
+    for (const leaf of leaves) {
+      if (leaf.id === cur.id) continue;
+      const r = leaf.rect;
+      // Direction filter: candidate must lie *past* the current tile
+      // along the requested axis (use the rect edge, not the centre,
+      // so a tile that sits flush alongside the current one still
+      // counts — its centre may not be past the current centre).
+      let gap = 0;
+      let inDir = false;
+      if (dir === 'right') {
+        gap = r.x - (cur.rect.x + cur.rect.w);
+        inDir = gap > -1;
+      } else if (dir === 'left') {
+        gap = cur.rect.x - (r.x + r.w);
+        inDir = gap > -1;
+      } else if (dir === 'down') {
+        gap = r.y - (cur.rect.y + cur.rect.h);
+        inDir = gap > -1;
+      } else {
+        gap = cur.rect.y - (r.y + r.h);
+        inDir = gap > -1;
+      }
+      if (!inDir) continue;
+      // Perpendicular overlap with the current tile.
+      let overlap: number;
+      if (dir === 'left' || dir === 'right') {
+        const top = Math.max(cur.rect.y, r.y);
+        const bot = Math.min(cur.rect.y + cur.rect.h, r.y + r.h);
+        overlap = Math.max(0, bot - top);
+      } else {
+        const lf = Math.max(cur.rect.x, r.x);
+        const rt = Math.min(cur.rect.x + cur.rect.w, r.x + r.w);
+        overlap = Math.max(0, rt - lf);
+      }
+      const p = centreOf(r);
+      const centerDist = Math.hypot(p.x - c.x, p.y - c.y);
+      const cand: Cand = { id: leaf.id, gap, overlap, centerDist };
+      if (overlap > 0) {
+        if (
+          !bestOverlap ||
+          // Larger overlap wins; ties go to the smaller axial gap.
+          cand.overlap > bestOverlap.overlap + 0.5 ||
+          (Math.abs(cand.overlap - bestOverlap.overlap) <= 0.5 && cand.gap < bestOverlap.gap)
+        ) {
+          bestOverlap = cand;
+        }
+      } else if (!bestFallback || cand.centerDist < bestFallback.centerDist) {
+        bestFallback = cand;
+      }
+    }
+    const best = bestOverlap ?? bestFallback;
+    if (!best) return;
+    const target = best.id;
+    applyLayout((l) => (l.focusId === target ? l : { ...l, focusId: target }), {
+      transient: true,
+    });
+  }, [focusDirSignal, computed.leaves, layout.focusId, applyLayout]);
+
   // ---- Drag dispatch -----------------------------------------------------
   const onMoveStart = useCallback(
     (id: string) => (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -339,12 +539,37 @@ export function TileGrid({
       const target = e.target as HTMLElement;
       if (target.closest('button')) return;
       e.preventDefault();
+      // Yank DOM focus off whatever widget body input had it (Shell
+      // prompt, Logcat filter, …). Without this, clicking a tile head
+      // to "select" the tile left the previous input still focused —
+      // which made Dashboard-level shortcuts (Delete to remove tile,
+      // arrow keys to move focus) silently skip themselves because
+      // the `inEditable(activeElement)` guard fired.
+      const ae = document.activeElement;
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        (ae instanceof HTMLElement && ae.isContentEditable)
+      ) {
+        ae.blur();
+      }
       // Note: focus tracking lives on the layout itself; mark the
       // tile under the pointer as the next "+ Add" target.
       applyLayout(
         (l) => (l.focusId === id ? l : { ...l, focusId: id }),
         { transient: true },
       );
+      // Compute the pointer's offset within the dragged tile so the
+      // visual tile follows the cursor with the same finger-on-tile
+      // grip throughout the drag. Falls back to (0, 0) if we can't
+      // resolve the tile element (shouldn't happen — onMoveStart only
+      // fires on the tile-head's pointerdown).
+      const tileEl = (e.currentTarget as HTMLElement).closest<HTMLElement>(
+        '[data-tile-id]',
+      );
+      const tileRect = tileEl?.getBoundingClientRect();
+      const grabOffsetX = tileRect ? e.clientX - tileRect.left : 0;
+      const grabOffsetY = tileRect ? e.clientY - tileRect.top : 0;
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -355,6 +580,9 @@ export function TileGrid({
         hoverId: null,
         hoverEdge: null,
         active: false,
+        committing: false,
+        grabOffsetX,
+        grabOffsetY,
       });
     },
     [maximized, applyLayout],
@@ -405,6 +633,13 @@ export function TileGrid({
      *  matches the "header = grab handle" UX users carry over from
      *  IDEs. */
     const EDGE = 0.25;
+    // The source tile floats above its siblings while being dragged
+    // (`z-index: 50` so the cursor-follow preview reads cleanly), so
+    // a naive `elementsFromPoint` returns the source first and every
+    // hover test resolves to "I'm hovering myself → no drop". Skip
+    // any element that belongs to the source tile when picking a
+    // hit target.
+    const sourceTileId = drag.kind === 'swap' ? drag.fromId : null;
     const hitTest = (
       x: number,
       y: number,
@@ -416,10 +651,16 @@ export function TileGrid({
       let onHead = false;
       for (const el of els) {
         if (!grid.contains(el)) continue;
+        const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
+        // Walk past the source tile — it's a stacked-on-top decoy
+        // during the drag, not a drop target. Skip the head check
+        // too so we don't latch `onHead` from the source's header.
+        if (candidate && candidate.dataset.tileId === sourceTileId) {
+          continue;
+        }
         if (!tileEl && (el as HTMLElement).closest('.tile-head')) {
           onHead = true;
         }
-        const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
         if (candidate) {
           tileEl = candidate;
           break;
@@ -463,6 +704,56 @@ export function TileGrid({
         else edge = 'bottom';
       }
       return { id, edge };
+    };
+
+    // ---- Hover-hold auto-commit ---------------------------------------
+    // Reads from refs (not closure-captured drag state) so it sees the
+    // latest hover when the timer fires — the closure was created at
+    // arm time, which is potentially seconds ago after a few intervening
+    // pointermoves.
+    const autoCommitFromHover = () => {
+      hoverHoldTimerRef.current = null;
+      const cur = dragRef.current;
+      if (!cur || cur.kind !== 'swap') return;
+      if (!cur.hoverId || cur.hoverId === cur.fromId) return;
+      const fromId = cur.fromId;
+      const targetId = cur.hoverId;
+      const targetEdge = cur.hoverEdge;
+      // Phase 1: blink the overlay (CSS animation triggered by the
+      // `committing` flag) so the user sees confirmation before the
+      // tiles slide around.
+      setDrag((d) => (d && d.kind === 'swap' ? { ...d, committing: true } : d));
+      window.setTimeout(() => {
+        const latest = dragRef.current;
+        // Commit when either (a) the drag is still active and the
+        // hover hasn't drifted during the blink, or (b) the drag
+        // has already ended (user released during the blink) — the
+        // hover-hold authorisation should still apply rather than
+        // being silently swallowed by the late release.
+        const hoverIntact =
+          latest == null ||
+          (latest.kind === 'swap' &&
+            latest.hoverId === targetId &&
+            latest.hoverEdge === targetEdge);
+        if (hoverIntact) {
+          applyLayout((l) =>
+            targetEdge
+              ? restructureTile(l, fromId, targetId, targetEdge)
+              : swapTiles(l, fromId, targetId),
+          );
+        }
+        // Reset hover + committing on the drag so another auto-commit
+        // requires a fresh hover. The settle anchor is also reset so
+        // the next arm waits for the user to actually move first
+        // (otherwise the immediately-following pointermove with the
+        // same coordinates would rearm the timer).
+        setDrag((d) =>
+          d && d.kind === 'swap'
+            ? { ...d, hoverId: null, hoverEdge: null, committing: false }
+            : d,
+        );
+        settleRef.current = { ...settleRef.current, hoverId: null, hoverEdge: null };
+      }, 180);
     };
 
     const onMove = (e: PointerEvent) => {
@@ -511,6 +802,37 @@ export function TileGrid({
             : d,
         );
       });
+      // Hover-hold tracking. Skip in performance mode (the whole
+      // drag-polish bundle — shake, wider gap, mid-drag commit — is
+      // gated on the user *not* opting out of layout transitions).
+      if (!perfModeOnRef.current) {
+        const settle = settleRef.current;
+        const moved = Math.hypot(e.clientX - settle.x, e.clientY - settle.y) > 3;
+        const hoverChanged =
+          targetId !== settle.hoverId || edge !== settle.hoverEdge;
+        if (moved || hoverChanged) {
+          if (hoverHoldTimerRef.current != null) {
+            window.clearTimeout(hoverHoldTimerRef.current);
+            hoverHoldTimerRef.current = null;
+          }
+          settleRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            hoverId: targetId,
+            hoverEdge: edge,
+          };
+        }
+        const validDrop = active && !!targetId && targetId !== drag.fromId;
+        if (validDrop && hoverHoldTimerRef.current == null) {
+          hoverHoldTimerRef.current = window.setTimeout(
+            autoCommitFromHover,
+            HOVER_HOLD_MS,
+          );
+        } else if (!validDrop && hoverHoldTimerRef.current != null) {
+          window.clearTimeout(hoverHoldTimerRef.current);
+          hoverHoldTimerRef.current = null;
+        }
+      }
     };
 
     const onUp = (e: PointerEvent) => {
@@ -520,10 +842,22 @@ export function TileGrid({
         pendingRef.current?.();
         pendingRef.current = null;
       }
+      // Cancel any pending hover-hold so it doesn't fire after release.
+      if (hoverHoldTimerRef.current != null) {
+        window.clearTimeout(hoverHoldTimerRef.current);
+        hoverHoldTimerRef.current = null;
+      }
       if (drag.kind === 'swap') {
+        // If a hover-hold blink is in flight, skip the pointerup
+        // commit so we don't apply the same swap twice. The deferred
+        // commit inside `autoCommitFromHover` will fire on its own.
+        const committingNow =
+          dragRef.current && dragRef.current.kind === 'swap'
+            ? dragRef.current.committing
+            : false;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
-        if (Math.hypot(dx, dy) > 5) {
+        if (!committingNow && Math.hypot(dx, dy) > 5) {
           const probe = hitTest(e.clientX, e.clientY);
           const target = probe.id;
           const edge = probe.edge;
@@ -537,6 +871,7 @@ export function TileGrid({
         }
       }
       setDrag(null);
+      settleRef.current = { x: 0, y: 0, hoverId: null, hoverEdge: null };
     };
 
     window.addEventListener('pointermove', onMove);
@@ -544,6 +879,14 @@ export function TileGrid({
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      // The hover-hold timer is intentionally *not* cleared here. The
+      // drag effect re-runs on every drag-state change (every
+      // pointermove during rAF flush), so clearing the timer here
+      // would reset the hover-hold every frame and the auto-commit
+      // would never fire. The timer is cleared explicitly on:
+      //   - pointer up
+      //   - significant cursor move / hover change (in `onMove`)
+      //   - commit (in `autoCommitFromHover`)
       if (rafRef.current != null) {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -557,11 +900,16 @@ export function TileGrid({
       'dash-grid',
       drag?.kind === 'resize' && 'dragging',
       drag?.kind === 'swap' && drag.active && 'swap-dragging',
+      // `polish` is the "iOS-icon-shake + roomier gap" class. The
+      // swap-dragging class above stays in place because some
+      // unrelated rules (cursor, user-select) still want to fire in
+      // performance mode.
+      dragPolishOn && 'drag-polish',
       maximized && 'has-max',
     ]
       .filter(Boolean)
       .join(' ');
-  }, [drag, maximized]);
+  }, [drag, maximized, dragPolishOn]);
 
   const swapDrag = drag?.kind === 'swap' && drag.active ? drag : null;
 
@@ -593,13 +941,20 @@ export function TileGrid({
             // so the two cues don't double up.
             const isHover = false;
             const isSource = swapDrag?.fromId === id;
-            const style: CSSProperties = isMax
+            // Maximised tiles use the same `left/top/width/height` set as
+            // non-maximised tiles (pixel values, not `right/bottom: 0`) so
+            // the CSS transition on those four properties interpolates
+            // both corners. Mixing `right/bottom: 0` with the
+            // non-maximised `width/height` would leave width/height
+            // unanimated, which made the bottom-right edge snap to the
+            // corner instead of glide there.
+            let style: CSSProperties = isMax
               ? {
                   position: 'absolute',
                   left: 0,
                   top: 0,
-                  right: 0,
-                  bottom: 0,
+                  width: gridSize.w,
+                  height: gridSize.h,
                   zIndex: 30,
                 }
               : {
@@ -609,6 +964,25 @@ export function TileGrid({
                   width: rect.w,
                   height: rect.h,
                 };
+            // While being dragged, the source tile follows the cursor
+            // (in grid-local coordinates) so the user is moving the
+            // actual tile rather than a name-only ghost. Layout-wise
+            // the tile is still at `rect.x/y` until a commit fires; the
+            // override here is purely the visual representation. The
+            // `.tile.dragging` CSS class neutralises the
+            // left/top/width/height transition so the visual tracks
+            // pointermove without lag.
+            if (isSource && swapDrag && swapDrag.active && !isMax) {
+              const gridRect = gridRef.current?.getBoundingClientRect();
+              const gridLeft = gridRect?.left ?? 0;
+              const gridTop = gridRect?.top ?? 0;
+              style = {
+                ...style,
+                left: swapDrag.curX - gridLeft - swapDrag.grabOffsetX,
+                top: swapDrag.curY - gridTop - swapDrag.grabOffsetY,
+                zIndex: 50,
+              };
+            }
             return (
               <Tile
                 key={id}
@@ -659,17 +1033,16 @@ export function TileGrid({
           )?.rect;
           if (!targetRect) return null;
           return (
-            <DropOverlay rect={targetRect} edge={swapDrag.hoverEdge} />
+            <DropOverlay
+              rect={targetRect}
+              edge={swapDrag.hoverEdge}
+              committing={swapDrag.committing}
+            />
           );
         })()}
 
-      {swapDrag && layout.tiles[swapDrag.fromId] && (
-        <SwapGhost
-          tileKind={layout.tiles[swapDrag.fromId].kind}
-          x={swapDrag.curX}
-          y={swapDrag.curY}
-        />
-      )}
+      {/* The floating ghost is gone — the dragged tile itself follows
+          the cursor now (see the source-tile `style` override above). */}
     </div>
   );
 }
@@ -726,6 +1099,9 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
 interface DropOverlayProps {
   rect: { x: number; y: number; w: number; h: number };
   edge: SplitEdge | null;
+  /** True for the brief blink window between hover-hold trigger and
+   *  the actual swap/restructure firing. */
+  committing: boolean;
 }
 
 /**
@@ -742,7 +1118,7 @@ interface DropOverlayProps {
  * what keeps the UX from flickering between layouts as the cursor
  * crosses zone boundaries.
  */
-function DropOverlay({ rect, edge }: DropOverlayProps) {
+function DropOverlay({ rect, edge, committing }: DropOverlayProps) {
   let left = rect.x;
   let top = rect.y;
   let width = rect.w;
@@ -760,30 +1136,16 @@ function DropOverlay({ rect, edge }: DropOverlayProps) {
   }
   return (
     <div
-      className="dash-drop-overlay"
+      className={`dash-drop-overlay ${committing ? 'dash-drop-overlay-committing' : ''}`}
       style={{ left, top, width, height }}
       aria-hidden
     />
   );
 }
 
-interface SwapGhostProps {
-  tileKind: WidgetKind;
-  x: number;
-  y: number;
-}
-
-function SwapGhost({ tileKind, x, y }: SwapGhostProps) {
-  const def = WIDGETS[tileKind];
-  const Icon = def.icon;
-  return (
-    <div
-      className="dash-swap-ghost"
-      style={{ left: x, top: y }}
-      aria-hidden
-    >
-      <Icon size={12} />
-      <span>{def.name}</span>
-    </div>
-  );
-}
+// `<SwapGhost/>` used to render a small floating chip next to the
+// cursor while a swap drag was in flight. It was deleted when the
+// dragged tile itself started following the cursor — the full-fidelity
+// preview reads as "I'm holding this tile" without needing a separate
+// label. The `.dash-swap-ghost` CSS rules are intentionally kept (for
+// now) in case the chip needs to come back as a perf-mode fallback.

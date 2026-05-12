@@ -9,6 +9,27 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+/* Dropping a file row from the Files widget onto the mirror opens it
+ * on-device (APK install or `am start VIEW`). The overlay mirrors the
+ * Files widget's "Drop to push" affordance so the dashboard reads
+ * consistently when the same gesture is in flight. */
+.mr-widget.mr-dropping::after {
+  content: 'Drop to open on device';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(from var(--accent) l c h / 0.16);
+  border: 2px dashed oklch(from var(--accent) l c h / 0.6);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+  letter-spacing: 0.04em;
 }
 .mr-toolbar {
   display: flex;
@@ -54,6 +75,68 @@
 .mr-hw.rec {
   color: oklch(0.7 0.22 25);
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Host-file-drop progress strip painted between the toolbar and the
+ * screen surface. Styled after the Files widget's `.fx-xfer` but
+ * scoped to `.mr-xfer` so the two widgets stay self-contained. */
+.mr-xfer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: oklch(from var(--accent) l c h / 0.1);
+  border-bottom: 1px solid oklch(from var(--accent) l c h / 0.25);
+  font-size: var(--t-xs);
+  flex-shrink: 0;
+}
+.mr-xfer.mr-xfer-done {
+  background: oklch(from oklch(0.74 0.16 150) l c h / 0.12);
+  border-bottom-color: oklch(from oklch(0.74 0.16 150) l c h / 0.3);
+}
+.mr-xfer.mr-xfer-error {
+  background: oklch(from oklch(0.65 0.22 25) l c h / 0.12);
+  border-bottom-color: oklch(from oklch(0.65 0.22 25) l c h / 0.3);
+}
+.mr-xfer-name {
+  color: var(--fg-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+.mr-xfer-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: oklch(from var(--accent) l c h / 0.18);
+  overflow: hidden;
+}
+.mr-xfer.mr-xfer-done .mr-xfer-bar { background: oklch(from oklch(0.74 0.16 150) l c h / 0.2); }
+.mr-xfer.mr-xfer-error .mr-xfer-bar { background: oklch(from oklch(0.65 0.22 25) l c h / 0.2); }
+.mr-xfer-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.mr-xfer.mr-xfer-done .mr-xfer-bar > div { background: oklch(0.74 0.16 150); }
+.mr-xfer.mr-xfer-error .mr-xfer-bar > div { background: oklch(0.65 0.22 25); }
+.mr-xfer-pct {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
+}
+.mr-xfer-indeterminate {
+  width: 30%;
+  background: var(--accent);
+  animation: mr-xfer-slide 1.4s ease-in-out infinite;
+}
+@keyframes mr-xfer-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(360%); }
 }
 
 .mr-screen {

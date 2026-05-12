@@ -52,6 +52,12 @@ export interface WidgetDef {
    * to hide). Defaults to true.
    */
   hasControlBar?: boolean;
+  /**
+   * Single-letter accelerator surfaced in the Cmd/Ctrl+N quick-add
+   * menu. Pressing this key while the menu is open inserts the widget
+   * immediately. Must be unique across enabled widgets.
+   */
+  shortcutKey: string;
 }
 
 // `React.lazy` requires a default export. The widget files use named
@@ -82,6 +88,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: LogcatWidget,
     defaultSize: { w: 12, h: 8 },
     enabled: true,
+    shortcutKey: 'l',
   },
   shell: {
     name: 'Shell',
@@ -95,6 +102,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     // match so the eye-button tristate keeps the middle "hide
     // controls" state.
     hasControlBar: true,
+    shortcutKey: 's',
   },
   dumpsys: {
     name: 'Dumpsys',
@@ -103,6 +111,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: DumpsysWidgetLazy,
     defaultSize: { w: 6, h: 6 },
     enabled: true,
+    shortcutKey: 'd',
   },
   files: {
     name: 'Files',
@@ -111,6 +120,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: FilesWidgetLazy,
     defaultSize: { w: 8, h: 6 },
     enabled: true,
+    shortcutKey: 'f',
   },
   mirror: {
     name: 'Screen Mirror',
@@ -120,6 +130,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     defaultSize: { w: 3, h: 10 },
     enabled: true,
     maxInstances: 1,
+    shortcutKey: 'm',
   },
 };
 

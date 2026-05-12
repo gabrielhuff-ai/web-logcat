@@ -102,6 +102,15 @@ export function execShellSim(cmd: string, state: ShellSimState): ShellSimResult 
   if (head === 'cd') {
     const target = args[1] ?? '/sdcard';
     const next = resolvePath(state.cwd, target);
+    // Refuse to enter directories the fake FS doesn't know about so
+    // the prompt only updates on a successful cd — matches the real
+    // device behaviour where `cd nonexistent` leaves `pwd` unchanged.
+    if (!isFakeDir(next)) {
+      return {
+        lines: [`/system/bin/sh: cd: ${target}: No such file or directory`],
+        state,
+      };
+    }
     return { lines: [], state: { ...state, cwd: next } };
   }
 
@@ -227,6 +236,25 @@ function resolvePath(cwd: string, target: string): string {
   return normalize(out);
 }
 
+/**
+ * Heuristic "does this path point to a directory the fake FS knows
+ * about?" check. The FS map only records *directory listings*, not the
+ * subdirectories themselves, so we accept either form: the path is a
+ * listing key (`/sdcard`, `/sdcard/Download`, ...) or the parent's
+ * listing names this path's basename (so `/sdcard/Pictures` is valid
+ * because the `/sdcard` listing includes `Pictures`, even though
+ * `Pictures` has no listing of its own).
+ */
+function isFakeDir(path: string): boolean {
+  if (path === '/') return true;
+  if (FAKE_FS_HINTS[path]) return true;
+  const par = parent(path);
+  const listing = FAKE_FS_HINTS[par];
+  if (!listing) return false;
+  const base = path.slice(par === '/' ? 1 : par.length + 1);
+  return listing.includes(base);
+}
+
 function parent(path: string): string {
   const parts = path.split('/').filter(Boolean);
   parts.pop();
@@ -312,6 +340,71 @@ export function completeShellInput(
 
   // Multiple matches — extend by the longest common prefix and
   // surface the candidates so the caller can list them.
+  const lcp = longestCommonPrefix(matches);
+  return {
+    input:
+      lcp.length > namePrefix.length
+        ? prefixBeforeWord + dirPart + lcp
+        : input,
+    options: matches,
+  };
+}
+
+/**
+ * Real-device variant of `completeShellInput`. The simulator path
+ * walks an in-memory FS map; the real path takes a `listDir` callback
+ * that asynchronously lists the requested directory on the device
+ * (typically via `adb shell ls -1 -p -A <dir>`).
+ *
+ * The async callback returns `entries` (all child names without the
+ * trailing `/` ls puts on directories) and `dirs` (the subset that
+ * are directories) so the completion knows whether to suffix with
+ * `/` (continue into the subtree) or ` ` (commit the word). `null`
+ * signals a listing failure (permission denied, not a directory) —
+ * we surface that as a no-op completion, same as the simulator's
+ * unknown-dir branch.
+ */
+export async function completeShellInputReal(
+  input: string,
+  cwd: string,
+  listDir: (
+    dirAbs: string,
+  ) => Promise<{ entries: string[]; dirs: Set<string> } | null>,
+): Promise<CompleteResult> {
+  const m = /^(.*\s)?(\S*)$/.exec(input);
+  if (!m) return { input, options: [] };
+  const prefixBeforeWord = m[1] ?? '';
+  const word = m[2] ?? '';
+
+  const lastSlash = word.lastIndexOf('/');
+  const dirPart = lastSlash >= 0 ? word.slice(0, lastSlash + 1) : '';
+  const namePrefix = lastSlash >= 0 ? word.slice(lastSlash + 1) : word;
+
+  const dirAbs = dirPart
+    ? resolvePath(cwd, dirPart === '/' ? '/' : dirPart.replace(/\/$/, ''))
+    : cwd;
+
+  const listing = await listDir(dirAbs);
+  if (!listing) return { input, options: [] };
+  const { entries, dirs } = listing;
+
+  const showHidden = namePrefix.startsWith('.');
+  const matches = entries.filter((e) => {
+    if (!showHidden && e.startsWith('.')) return false;
+    return e.startsWith(namePrefix);
+  });
+
+  if (matches.length === 0) return { input, options: [] };
+
+  if (matches.length === 1) {
+    const completion = matches[0];
+    const tail = dirs.has(completion) ? '/' : ' ';
+    return {
+      input: prefixBeforeWord + dirPart + completion + tail,
+      options: [],
+    };
+  }
+
   const lcp = longestCommonPrefix(matches);
   return {
     input:

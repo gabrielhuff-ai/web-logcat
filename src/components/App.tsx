@@ -82,7 +82,11 @@ export function App() {
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
-    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 1800);
+    // Display time scales with message length so longer errors stay
+    // long enough to read. Bounded to keep terse confirmations from
+    // sticking around forever.
+    const ms = Math.min(6000, Math.max(2200, msg.length * 70));
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), ms);
   }, []);
 
   // ---- Streaming: simulator (real ADB stream is in `connectReal`) ---------
@@ -161,6 +165,43 @@ export function App() {
     [queueEntries, resetIngest, showToast],
   );
 
+  const connectWdp = useCallback(
+    async (wdpDevice: import('../lib/wdp').WdpDevice) => {
+      try {
+        const [{ connectViaWdp }, { friendlyConnectError }] = await Promise.all([
+          import('../lib/wdp'),
+          import('../lib/adb'),
+        ]);
+        const result = await connectViaWdp({
+          device: wdpDevice,
+          onEntry: (e) => queueEntries([e]),
+          onError: (err) => showToast(friendlyConnectError(err)),
+          onDisconnect: () => {
+            resetIngest();
+            realStreamRef.current = null;
+            setDevice(null);
+            setDevices([]);
+            setAdb(null);
+            hubRef.current.reset([]);
+            showToast('Device disconnected');
+          },
+        });
+        realStreamRef.current = result.stream;
+        hubRef.current.reset([]);
+        setDevice(result.device);
+        setDevices([result.device, FAKE_DEVICE]);
+        setUsingFake(false);
+        setAdb(result.adb);
+        showToast(`Connected to ${result.device.model} via Web Device Proxy`);
+      } catch (err) {
+        const { friendlyConnectError } = await import('../lib/adb');
+        showToast(friendlyConnectError(err));
+        throw err;
+      }
+    },
+    [queueEntries, resetIngest, showToast],
+  );
+
   const onDisconnect = useCallback(() => {
     void realStreamRef.current?.stop();
     realStreamRef.current = null;
@@ -171,15 +212,6 @@ export function App() {
     setAdb(null);
     hubRef.current.reset([]);
   }, [resetIngest]);
-
-  const onPairNew = useCallback(async () => {
-    onDisconnect();
-    try {
-      await connectReal();
-    } catch {
-      // already toasted by connectReal
-    }
-  }, [onDisconnect, connectReal]);
 
   const switchDevice = useCallback(
     (d: DeviceInfo) => {
@@ -231,7 +263,11 @@ export function App() {
   if (!device) {
     return (
       <>
-        <EmptyState onConnect={connectReal} onUseFakeData={connectFake} />
+        <EmptyState
+          onConnect={connectReal}
+          onUseFakeData={connectFake}
+          onConnectWdp={connectWdp}
+        />
         {toast && <div className="toast">{toast}</div>}
       </>
     );
@@ -249,7 +285,6 @@ export function App() {
             setTweaks={setTweaks}
             onSwitchDevice={switchDevice}
             onDisconnect={onDisconnect}
-            onPairNew={onPairNew}
           />
           <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
           {usingFake && (

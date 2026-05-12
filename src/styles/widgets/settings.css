@@ -258,10 +258,11 @@
 }
 
 /* Files — list-pane rows and their cells, plus the tree pane on the
- * left so changing the per-widget font size scales the entire body
- * uniformly. (Earlier this rule deliberately excluded `.fx-tree` to
- * keep the directory hierarchy compact, but a few rounds of field
- * testing made it clear users expect the slider to drive both panes.) */
+ * left and the icon-view tiles so changing the per-widget font size
+ * scales the entire body uniformly. (Earlier this rule deliberately
+ * excluded `.fx-tree` and `.fx-tile` to keep the directory hierarchy
+ * compact, but a few rounds of field testing made it clear users
+ * expect the slider to drive every label in the widget.) */
 .fx-widget .fx-row,
 .fx-widget .fx-row .fx-cell,
 .fx-widget .fx-row .fx-cell.name,
@@ -269,7 +270,9 @@
 .fx-widget .fx-row .fx-cell.mono,
 .fx-widget .fx-list-head .fx-cell,
 .fx-widget .fx-tree,
-.fx-widget .fx-tree .fx-tnode {
+.fx-widget .fx-tree .fx-tnode,
+.fx-widget .fx-tile,
+.fx-widget .fx-tile .fx-tile-name {
   font-size: var(--widget-font-size, var(--t-sm));
 }
 

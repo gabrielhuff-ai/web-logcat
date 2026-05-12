@@ -49,9 +49,18 @@
  *   no overflow clipping, no text-overflow ellipsis. The :not(.wrap)
  *   selector has higher specificity than `.cell.msg` so this overrides
  *   the design defaults in app.css cleanly. */
-.row-list {
+/* Wrap off (default): rows shrink-wrap to their widest sibling so a
+ * short row's hover/match background still extends under the
+ * horizontal-scroll area of a wider neighbour. Wrap on: constrain the
+ * row-list to the scroll container's width so `white-space: pre-wrap`
+ * actually has a wrap boundary to wrap against — otherwise the parent
+ * keeps growing to `max-content` and the message cell never wraps. */
+.row-list[data-wrap='false'] {
   width: max-content;
   min-width: 100%;
+}
+.row-list[data-wrap='true'] {
+  width: 100%;
 }
 .row[data-wrap='false'] {
   width: 100%;
@@ -172,6 +181,273 @@
   letter-spacing: 0.04em;
 }
 .empty-hint .kbd { margin: 0 4px; }
+
+/* Split connect button on the empty state: primary CTA + chevron
+   arrow that opens a dropdown menu for picking a transport
+   explicitly. The two halves share the same visual frame and a thin
+   divider in between (see `.connect-arrow`'s left border). */
+.connect-split {
+  position: relative;
+  display: inline-flex;
+}
+.btn.primary.connect-primary {
+  height: 44px;
+  padding: 0 22px;
+  font-size: var(--t-md);
+  border-radius: 10px 0 0 10px;
+  min-width: 220px;
+  justify-content: center;
+}
+.btn.primary.connect-arrow {
+  height: 44px;
+  width: 38px;
+  padding: 0;
+  font-size: var(--t-md);
+  border-radius: 0 10px 10px 0;
+  justify-content: center;
+  border-left: 1px solid color-mix(in oklab, var(--bg-0) 30%, transparent);
+}
+.connect-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  padding: 4px;
+  z-index: 200;
+  animation: fadeIn 140ms var(--ease-out) both;
+  text-align: left;
+}
+.connect-menu-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--fg-0);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.connect-menu-item:hover {
+  background: var(--bg-hover);
+}
+.connect-menu-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  color: var(--accent-fg);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  margin-top: 1px;
+}
+.connect-menu-label {
+  min-width: 0;
+}
+.connect-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--fg-0);
+}
+.connect-menu-sub {
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+}
+.connect-menu-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  background: var(--accent);
+  color: var(--bg-0);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  line-height: 1.4;
+}
+
+/* Web Device Proxy dialog. Sits inside the standard `.md-scrim` /
+   `.md-dialog` frame; the body holds the discovery list. Wider than
+   the default modal so device names + serials fit on one line. */
+.md-dialog.wdp-dialog {
+  width: min(520px, 92vw);
+}
+.wdp-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Cap vertical growth so the dialog stays inside the viewport when
+     many devices are connected. */
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.wdp-dialog-blurb {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.wdp-dialog-blurb code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-2);
+  color: var(--fg-1);
+}
+.wdp-dialog-status,
+.wdp-dialog-empty-line {
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  padding: 8px 0;
+}
+.wdp-dialog-empty {
+  /* Same surface as `.wdp-device` rows so the empty card reads as the
+     no-devices counterpart of a populated list. The Install button
+     (`.btn` at `bg-2`) now contrasts cleanly against the `bg-1`
+     surface, matching Connect/Authorize on real device rows. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+}
+.wdp-dialog-empty-meta {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.wdp-dialog-install {
+  /* Anchor styled as a button — strip the UA underline. */
+  text-decoration: none;
+}
+.wdp-dialog-empty-title {
+  /* Match `.wdp-device-name` so the row reads as part of the same family. */
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--fg-0);
+  margin-bottom: 2px;
+}
+.wdp-dialog-empty p,
+.wdp-dialog-approve p {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.wdp-dialog-empty code,
+.wdp-dialog-approve code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-1);
+  color: var(--fg-1);
+}
+.wdp-dialog-approve {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+}
+.wdp-dialog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Children are flex items inside a column flex; min-width:0 lets the
+     name + serial truncate cleanly instead of overflowing the dialog. */
+  min-width: 0;
+}
+.wdp-dialog-version {
+  align-self: flex-start;
+  /* Cap the version chip so an unusually long string can't expand the
+     row and squeeze the rest of the content (the bug the panel had). */
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.04em;
+  padding: 1px 8px;
+  background: var(--bg-2);
+  border-radius: var(--r-pill);
+}
+.wdp-devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.wdp-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-1);
+}
+.wdp-device:first-child {
+  border-top: 0;
+}
+.wdp-device-meta {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.wdp-device-name {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--fg-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wdp-device-sub {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wdp-device-connect {
+  height: 28px;
+  padding: 0 12px;
+  font-size: var(--t-xs);
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+.wdp-device-error {
+  padding: 8px 12px;
+  font-size: var(--t-xs);
+  color: oklch(0.7 0.18 25);
+  background: color-mix(in oklab, oklch(0.7 0.18 25) 8%, transparent);
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklab, oklch(0.7 0.18 25) 20%, transparent);
+}
 
 /* Version pill — bottom-right of the pre-connect screen. Subtle so it
    doesn't compete with the connect-or-fake-data CTA, but always
@@ -635,6 +911,17 @@
 .help-body {
   padding: 8px 12px 16px;
   overflow-y: auto;
+}
+.help-group + .help-group {
+  margin-top: 12px;
+}
+.help-group-title {
+  margin: 4px 8px 6px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
 }
 .help-table {
   width: 100%;

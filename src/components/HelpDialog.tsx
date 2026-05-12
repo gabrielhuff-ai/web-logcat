@@ -15,19 +15,40 @@ interface Shortcut {
   desc: string;
 }
 
-const SHORTCUTS: Shortcut[] = [
-  { keys: ['Space'], desc: 'Pause / resume the live stream' },
-  { keys: ['/'], desc: 'Focus the filter input' },
-  { keys: ['⌘', 'F'], desc: 'Open search overlay' },
-  { keys: ['⌘', 'K'], desc: 'Clear the log buffer' },
-  { keys: ['?'], desc: 'Open this dialog' },
-  { keys: ['Esc'], desc: 'Close any open overlay (search, palette, this)' },
-  { keys: ['Tab'], desc: '(In filter input) accept the highlighted suggestion' },
-  { keys: ['Enter'], desc: '(In filter input) commit the chip' },
-  { keys: ['Backspace'], desc: '(In filter input, empty) delete the last chip' },
-  { keys: ['Click'], desc: '(On a level pill) toggle that level' },
-  { keys: ['Double-click'], desc: '(On a level pill) solo that level' },
-  { keys: ['Click'], desc: '(On a heatmap cell) jump to that second in the log' },
+interface ShortcutGroup {
+  title: string;
+  shortcuts: Shortcut[];
+}
+
+const GROUPS: ShortcutGroup[] = [
+  {
+    title: 'Dashboard',
+    shortcuts: [
+      { keys: ['⌘', 'E'], desc: 'Open the quick-add widget menu' },
+      { keys: ['↑', '↓', '←', '→'], desc: 'Move the focused-tile ring' },
+      { keys: ['Backspace'], desc: 'Remove the focused tile (or in Files, delete the selected entry)' },
+      { keys: ['Delete'], desc: 'Same as Backspace' },
+      { keys: ['⌘', 'Z'], desc: 'Undo the last layout edit' },
+      { keys: ['⌘', '⇧', 'Z'], desc: 'Redo' },
+      { keys: ['?'], desc: 'Open this dialog' },
+      { keys: ['Esc'], desc: 'Close any open overlay' },
+    ],
+  },
+  {
+    title: 'Logcat',
+    shortcuts: [
+      { keys: ['Space'], desc: 'Pause / resume the live stream' },
+      { keys: ['/'], desc: 'Focus the filter input' },
+      { keys: ['⌘', 'F'], desc: 'Open search overlay' },
+      { keys: ['⌘', 'K'], desc: 'Clear the log buffer' },
+      { keys: ['Tab'], desc: '(In filter input) accept the highlighted suggestion' },
+      { keys: ['Enter'], desc: '(In filter input) commit the chip' },
+      { keys: ['Backspace'], desc: '(In filter input, empty) delete the last chip' },
+      { keys: ['Click'], desc: '(On a level pill) toggle that level' },
+      { keys: ['Double-click'], desc: '(On a level pill) solo that level' },
+      { keys: ['Click'], desc: '(On a heatmap cell) jump to that second in the log' },
+    ],
+  },
 ];
 
 export function HelpDialog({ open, onClose }: HelpDialogProps) {
@@ -52,22 +73,27 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           </button>
         </div>
         <div className="help-body">
-          <table className="help-table">
-            <tbody>
-              {SHORTCUTS.map((s, i) => (
-                <tr key={i}>
-                  <td className="help-keys">
-                    {s.keys.map((k, j) => (
-                      <span key={j} className="kbd">
-                        {k}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="help-desc">{s.desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {GROUPS.map((g) => (
+            <div key={g.title} className="help-group">
+              <h3 className="help-group-title">{g.title}</h3>
+              <table className="help-table">
+                <tbody>
+                  {g.shortcuts.map((s, i) => (
+                    <tr key={i}>
+                      <td className="help-keys">
+                        {s.keys.map((k, j) => (
+                          <span key={j} className="kbd">
+                            {k}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="help-desc">{s.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       </div>
     </>,

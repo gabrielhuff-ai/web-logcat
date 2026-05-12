@@ -8,9 +8,13 @@
 // user cancels the chooser, `onConnect` rejects and we reset the button
 // state instead of staying stuck on "Connected".
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as Icons from './Icons';
 import { APP_VERSION } from '../version';
+import { SplitConnectButton } from './SplitConnectButton';
+import { WdpDialog } from './WdpDialog';
+import { isWdpEnabled } from '../lib/featureFlags';
+import { probeWdpReachable, type WdpDevice } from '../lib/wdp';
 
 export type ConnectStep = 0 | 1 | 2 | 3; // idle / requesting / authorizing / connected
 
@@ -25,13 +29,36 @@ export interface EmptyStateProps {
    */
   onConnect: (setStep: (step: ConnectStep) => void) => Promise<void>;
   onUseFakeData: () => void;
+  /** Connect to a device exposed by the Web Device Proxy daemon. */
+  onConnectWdp: (device: WdpDevice) => Promise<void>;
 }
 
-export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
+export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
+  const [wdpOpen, setWdpOpen] = useState(false);
+  // Runtime availability probe — when WDP is reachable on
+  // 127.0.0.1:9167 the primary button defaults to the proxy flow,
+  // since a running WDP daemon implies adb-server has the USB claim
+  // anyway and WebUSB would fail. When the probe times out we default
+  // to WebUSB. The arrow menu always exposes both transports.
+  const [preferred, setPreferred] = useState<'usb' | 'proxy'>('usb');
+  // WDP is opt-in until verified in the wild — flip with `?wdp=1`.
+  const wdpEnabled = isWdpEnabled();
 
-  const startConnect = async () => {
+  useEffect(() => {
+    if (!wdpEnabled) return;
+    let cancelled = false;
+    void probeWdpReachable().then((reachable) => {
+      if (cancelled) return;
+      setPreferred(reachable ? 'proxy' : 'usb');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wdpEnabled]);
+
+  const startWebUsbConnect = async () => {
     setConnecting(true);
     // Pre-set step=1 so the button updates the moment the chooser is
     // about to open, even before lib/adb.ts has a chance to fire its
@@ -41,11 +68,27 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
       await onConnect(setStep);
       // success → parent unmounts us; no need to reset state here
     } catch {
-      // user cancelled / auth failed / WebUSB unavailable. App.tsx already
-      // surfaced the message via toast; we just need to be clickable again.
       setConnecting(false);
       setStep(0);
     }
+  };
+
+  const onPrimary = () => {
+    if (preferred === 'proxy') {
+      setWdpOpen(true);
+    } else {
+      void startWebUsbConnect();
+    }
+  };
+
+  const onDeviceConnect = (d: WdpDevice) => {
+    setConnecting(true);
+    setStep(2);
+    setWdpOpen(false);
+    onConnectWdp(d).catch(() => {
+      setConnecting(false);
+      setStep(0);
+    });
   };
 
   return (
@@ -67,21 +110,32 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
         </p>
 
         <div className="empty-actions">
-          <button className="btn primary big" onClick={startConnect} disabled={connecting}>
-            {connecting ? (
-              <>
-                <span className="dot-spinner" />
-                {step <= 1 && 'Selecting device…'}
-                {step === 2 && 'Authorize on device…'}
-                {step === 3 && 'Connected'}
-              </>
-            ) : (
-              <>
-                <Icons.Usb size={16} />
-                Connect a device
-              </>
-            )}
-          </button>
+          {wdpEnabled ? (
+            <SplitConnectButton
+              busy={connecting}
+              step={step}
+              preferred={preferred}
+              onPrimary={onPrimary}
+              onWebUsb={() => void startWebUsbConnect()}
+              onProxy={() => setWdpOpen(true)}
+            />
+          ) : (
+            <button className="btn primary big" onClick={() => void startWebUsbConnect()} disabled={connecting}>
+              {connecting ? (
+                <>
+                  <span className="dot-spinner" />
+                  {step <= 1 && 'Selecting device…'}
+                  {step === 2 && 'Authorize on device…'}
+                  {step === 3 && 'Connected'}
+                </>
+              ) : (
+                <>
+                  <Icons.Usb size={16} />
+                  Connect a device
+                </>
+              )}
+            </button>
+          )}
 
           <div className="empty-or">
             or try the app with{' '}
@@ -99,6 +153,15 @@ export function EmptyState({ onConnect, onUseFakeData }: EmptyStateProps) {
         </div>
       </div>
       <div className="empty-version">v{APP_VERSION}</div>
+
+      {wdpEnabled && (
+        <WdpDialog
+          open={wdpOpen}
+          busy={connecting}
+          onConnect={onDeviceConnect}
+          onClose={() => setWdpOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -42,6 +42,11 @@ import {
   type WriteProgress,
 } from '../../lib/sync';
 import { FILES_DEFAULTS, type FilesSettings } from './files/filesSettings';
+import {
+  resetInternalDropConsumed,
+  takeInternalDropConsumed,
+  takeOpenOnDeviceRequested,
+} from '../../lib/dragHandoff';
 
 export interface FilesWidgetProps {
   /** Stable id of the host tile — used to namespace per-instance state. */
@@ -191,11 +196,20 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           list
             // Hide `.` / `..` (the synthetic entries Linux readdir
             // returns for self / parent — they're not useful in a
-            // tree view) and keep only actual directories. Sort
-            // alphabetically so the tree is browsable instead of
-            // appearing in inode order.
+            // tree view). Include both real directories AND symlinks
+            // (`type === 'link'`): the most prominent example is
+            // `/sdcard → /storage/self/primary` and dropping it from
+            // the tree leaves users unable to navigate the device
+            // through the tree pane at all. The click handler in
+            // `navigate` / `onEntryActivate` already resolves links
+            // by trying to list them; this just makes them visible.
+            // Sort alphabetically so the tree reads as a sorted
+            // listing rather than inode order.
             .filter(
-              (e) => e.type === 'dir' && e.name !== '.' && e.name !== '..',
+              (e) =>
+                (e.type === 'dir' || e.type === 'link') &&
+                e.name !== '.' &&
+                e.name !== '..',
             )
             .sort((a, b) => a.name.localeCompare(b.name)),
         );
@@ -577,11 +591,29 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const onRowDragStart = (e: ReactDragEvent, name: string) => {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/plain', joinPath(path, name));
+    // Tag the drag so in-app drop targets (Shell prompt, Mirror) can
+    // recognise it as a device-side file reference rather than a
+    // generic text drop.
+    e.dataTransfer.setData('application/x-weblogcat-device-path', joinPath(path, name));
+    resetInternalDropConsumed();
     // Defer the actual pull until dragend so the user has feedback if
     // they cancel the drag.
   };
   const onRowDragEnd = (e: ReactDragEvent, name: string) => {
     if (e.dataTransfer.dropEffect === 'none') return;
+    // If an in-app target consumed this drag, the user's intent was
+    // the in-app action — skip the Pull-to-host download. The
+    // consumer can additionally ask us to run `openOnDevice` for the
+    // dropped entry (Mirror does this so the install progress strip
+    // stays on the Files widget, matching the double-click UX).
+    const wantsOpen = takeOpenOnDeviceRequested();
+    const consumed = takeInternalDropConsumed();
+    if (wantsOpen) {
+      const entry = entries.find((e) => e.name === name);
+      if (entry) void openOnDevice(entry);
+      return;
+    }
+    if (consumed) return;
     void pullFile(name);
   };
 
@@ -652,6 +684,62 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
     if (selected.size === 0) return;
     void removeEntries([...selected]);
   }, [removeEntries, selected]);
+
+  // ---- Widget-scoped Delete shortcut ------------------------------------
+  // When focus is inside this Files widget and the user hits
+  // Delete / Backspace, open the same confirm-delete dialog the
+  // right-click → Delete entry triggers. Registered with
+  // `capture: true` on the window so the Files handler runs *before*
+  // the Dashboard-level tile-delete shortcut and can stop it via
+  // `stopImmediatePropagation` — i.e. Delete in Files deletes the
+  // selected entry rather than the entire Files tile.
+  //
+  // We only intercept when the active element sits inside this
+  // widget's root and the user actually has a selection — otherwise
+  // we let the Dashboard handler take over (so an empty Files
+  // selection still lets you delete the tile).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const root = rootRef.current;
+      if (!root) return;
+      const ae = document.activeElement;
+      if (!(ae instanceof Node) || !root.contains(ae)) return;
+      // Inputs / text fields inside the widget (rename dialog, push
+      // file chooser, etc.) keep the browser's native delete /
+      // backspace behaviour.
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        (ae instanceof HTMLElement && ae.isContentEditable)
+      ) {
+        return;
+      }
+      // Backspace in the list pane still walks up a directory when
+      // there's no selection — keep that. The list-pane onKeyDown
+      // handler already implements it; only intercept when there's
+      // an active selection to delete.
+      const sel = selectedRef.current;
+      if (sel.size === 0) {
+        // Tree pane's "Backspace" should fall through (no concept of
+        // selection there). List pane's "Backspace = go up" is still
+        // handled by `onListKeyDown`. So we do nothing here and let
+        // the existing handlers run.
+        return;
+      }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setConfirmDelete([...sel]);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   // ---- Disposal ----------------------------------------------------------
   useEffect(() => {
@@ -730,13 +818,14 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
       const kids = treeChildren.get(p);
       if (!kids) return;
       for (const k of kids) {
+        if (!showHidden && k.name.startsWith('.')) continue;
         const child = p === '/' ? '/' + k.name : p + '/' + k.name;
         walk(child, depth + 1);
       }
     };
     walk(ROOT, 0);
     return out;
-  }, [treeExpanded, treeChildren]);
+  }, [treeExpanded, treeChildren, showHidden]);
 
   const focusTreeNode = useCallback((p: string) => {
     navigate(p);
@@ -800,6 +889,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
 
   return (
     <div
+      ref={rootRef}
       className={`fx-widget ${dropping ? 'fx-dropping' : ''}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -1024,6 +1114,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
               currentPath={path}
               expanded={treeExpanded}
               children_={treeChildren}
+              showHidden={showHidden}
               onToggle={(p) => {
                 setTreeExpanded((prev) => {
                   const next = new Set(prev);
@@ -1369,14 +1460,18 @@ interface FxTreeProps {
   expanded: Set<string>;
   // `children` is reserved by React; rename to avoid shadowing.
   children_: Map<string, SyncEntry[]>;
+  /** When false, dot-prefixed directories are filtered out of the
+   *  tree — same rule as the list pane's hidden-files toggle. */
+  showHidden: boolean;
   onToggle: (p: string) => void;
   onSelect: (p: string) => void;
 }
 
 function FxTree(props: FxTreeProps) {
-  const { path, label, depth, currentPath, expanded, children_, onToggle, onSelect } = props;
+  const { path, label, depth, currentPath, expanded, children_, showHidden, onToggle, onSelect } = props;
   const isOpen = expanded.has(path);
   const kids = children_.get(path);
+  const visibleKids = kids?.filter((k) => showHidden || !k.name.startsWith('.'));
   const isCurrent = path === currentPath;
   return (
     <>
@@ -1400,8 +1495,8 @@ function FxTree(props: FxTreeProps) {
         <span className="fx-tname">{label}</span>
       </div>
       {isOpen &&
-        kids &&
-        kids.map((kid) => (
+        visibleKids &&
+        visibleKids.map((kid) => (
           <FxTree
             key={path === '/' ? '/' + kid.name : path + '/' + kid.name}
             path={path === '/' ? '/' + kid.name : path + '/' + kid.name}
@@ -1410,6 +1505,7 @@ function FxTree(props: FxTreeProps) {
             currentPath={currentPath}
             expanded={expanded}
             children_={children_}
+            showHidden={showHidden}
             onToggle={onToggle}
             onSelect={onSelect}
           />

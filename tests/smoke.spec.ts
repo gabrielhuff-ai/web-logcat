@@ -59,6 +59,327 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
+
+  test('split-arrow stays hidden by default and reveals via ?wdp=1', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.connect-split')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
+    // Opt-in. The flag sticks via localStorage and the param is stripped.
+    await page.goto('/?wdp=1');
+    await expect(page.locator('.connect-split')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /choose connection method/i }),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.has('wdp')).toBe(false);
+  });
+
+  test('dropdown menu surfaces both transports with the experimental badge on WDP', async ({
+    page,
+  }) => {
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: /Connect via WebUSB/i })).toBeVisible();
+    const proxyItem = menu.getByRole('menuitem', { name: /Connect via Web Device Proxy/i });
+    await expect(proxyItem).toBeVisible();
+    await expect(proxyItem).toContainText(/experimental/i);
+  });
+
+  test('WDP dialog reports "Daemon not detected" when the proxy is unreachable', async ({
+    page,
+  }) => {
+    // No WDP daemon listening on :9167, so the tracker probe fails and
+    // the dialog shows its not-installed empty state.
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/Daemon not detected/i);
+    // Escape closes the dialog.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+
+  test('Authorize on a PROXY_UNAUTHORIZED device shows an error when the popup is blocked', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-unauth-001',
+            proxyStatus: 'PROXY_UNAUTHORIZED',
+            adbStatus: 'AUTHORIZING',
+            approveUrl: 'https://example.test/wdp-approve',
+          },
+        ],
+      });
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            if (self._onmessage) self._onmessage({ data: SNAPSHOT });
+            else self._buffer.push(SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {};
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new WebSocket(url);
+      };
+      // Simulate the browser blocking the popup — window.open returns null.
+      window.open = function () {
+        return null;
+      };
+    });
+
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    const row = dialog.locator('.wdp-device');
+    await expect(row).toContainText('PROXY_UNAUTHORIZED');
+    await row.getByRole('button', { name: /authorize/i }).click();
+    await expect(dialog.locator('.wdp-device-error')).toContainText(
+      /Browser blocked the approve popup/i,
+    );
+  });
+
+  test('Authorize triggers Connect once WDP pushes the post-approval snapshot', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const UNAUTH_SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-flip-001',
+            proxyStatus: 'PROXY_UNAUTHORIZED',
+            adbStatus: 'AUTHORIZING',
+            approveUrl: 'https://example.test/wdp-approve',
+          },
+        ],
+      });
+      const READY_SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp',
+        device: [
+          {
+            serialNumber: 'wdp-flip-001',
+            proxyStatus: 'ADB',
+            adbStatus: 'DEVICE',
+            adbProps: {
+              'ro.product.model': 'Flip Pixel',
+              'ro.product.name': 'flip',
+              'ro.product.device': 'flip',
+              'ro.build.version.release': '14',
+            },
+          },
+        ],
+      });
+      let trackingSocket = null;
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            trackingSocket = self;
+            if (self._onmessage) self._onmessage({ data: UNAUTH_SNAPSHOT });
+            else self._buffer.push(UNAUTH_SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {};
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new WebSocket(url);
+      };
+      // Fake popup: a window object whose `.closed` flips to true after
+      // 80ms. When the panel detects the close, it polls for the new
+      // snapshot — which we push 50ms in. The snapshot transition is
+      // what gates the subsequent `onConnect` call.
+      window.open = function () {
+        const popup = { closed: false };
+        setTimeout(() => {
+          if (trackingSocket && trackingSocket._onmessage) {
+            trackingSocket._onmessage({ data: READY_SNAPSHOT });
+          }
+        }, 50);
+        setTimeout(() => {
+          popup.closed = true;
+        }, 80);
+        return popup;
+      };
+    });
+
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    const row = dialog.locator('.wdp-device');
+    await expect(row).toContainText('PROXY_UNAUTHORIZED');
+    await row.getByRole('button', { name: /authorize/i }).click();
+    // After the popup closes and the new snapshot lands, the dialog
+    // forwards the now-ready device to onConnect — dashboard mounts.
+    await expect(page.locator('.dash-brand-name')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.dash-device-name')).toContainText('Flip Pixel');
+  });
+
+  test('WDP dialog surfaces fake devices and connects via the proxy transport', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // Inject a fake WDP daemon in-page. The constructor intercepts
+      // WebSocket URLs targeting ws://127.0.0.1:9167/* and replays a
+      // scripted /track-devices-json snapshot or /adb-json byte stream.
+      const RealWebSocket = window.WebSocket;
+      const SNAPSHOT = JSON.stringify({
+        version: 'fake-wdp-0.0.1',
+        device: [
+          {
+            serialNumber: 'wdp-fake-001',
+            proxyStatus: 'ADB',
+            adbStatus: 'DEVICE',
+            adbProps: {
+              'ro.product.model': 'Fake Pixel',
+              'ro.product.name': 'fake-panther',
+              'ro.product.device': 'panther',
+              'ro.build.version.release': '14',
+            },
+          },
+        ],
+      });
+      function FakeWdpSocket(url) {
+        this.url = url;
+        this.readyState = 0;
+        this.binaryType = 'arraybuffer';
+        this.onopen = null;
+        this._onmessage = null;
+        this._buffer = [];
+        this.onerror = null;
+        this.onclose = null;
+        Object.defineProperty(this, 'onmessage', {
+          get() {
+            return this._onmessage;
+          },
+          set(fn) {
+            this._onmessage = fn;
+            if (fn && this._buffer.length > 0) {
+              const buf = this._buffer;
+              this._buffer = [];
+              for (const data of buf) fn({ data });
+            }
+          },
+          configurable: true,
+        });
+        const self = this;
+        setTimeout(() => {
+          self.readyState = 1;
+          if (self.onopen) self.onopen();
+          if (url.endsWith('/track-devices-json')) {
+            // Buffer the snapshot until the tracker attaches onmessage.
+            if (self._onmessage) self._onmessage({ data: SNAPSHOT });
+            else self._buffer.push(SNAPSHOT);
+          }
+        }, 0);
+      }
+      FakeWdpSocket.prototype.send = function () {
+        // For /adb-json the first text frame is the JSON header; after
+        // that we'd see binary writes (e.g. shell stdin). We don't need
+        // to reply — the e2e test only asserts the UI transition.
+      };
+      FakeWdpSocket.prototype.close = function () {
+        this.readyState = 3;
+        if (this.onclose) this.onclose();
+      };
+      window.WebSocket = function (url) {
+        if (typeof url === 'string' && url.startsWith('ws://127.0.0.1:9167/')) {
+          return new FakeWdpSocket(url);
+        }
+        return new RealWebSocket(url);
+      };
+    });
+
+    await page.goto('/?wdp=1');
+    await page.getByRole('button', { name: /choose connection method/i }).click();
+    await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
+    await expect(dialog).toBeVisible();
+    const row = dialog.locator('.wdp-device');
+    await expect(row).toContainText('Fake Pixel');
+    await expect(row).toContainText('wdp-fake-001');
+
+    // Clicking Connect transitions to the dashboard. The adb session
+    // can't fully succeed against our minimal fake (we don't reply to
+    // /adb-json shell:logcat), but the dialog should close and the
+    // topbar should reflect a proxy-attached device.
+    await row.getByRole('button', { name: /connect/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
+    await expect(page.locator('.dash-brand-name')).toBeVisible();
+    await expect(page.locator('.dash-device-name')).toContainText('Fake Pixel');
+  });
 });
 
 test.describe('simulator', () => {
