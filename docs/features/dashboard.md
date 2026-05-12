@@ -21,6 +21,16 @@ itself, and a corner grip — and they share every pixel of available space.
 
 - **Swap by dragging the header.** Grab a tile by its header and drop it
   on another tile — they swap positions in the tree without resizing.
+  Drop near an edge to split that side instead of swapping.
+- **Hover-hold to commit mid-drag.** While dragging, *pause* the cursor
+  over a valid drop zone for ~0.9 s. The drop overlay blinks once and
+  the swap / restructure applies immediately, with your pointer still
+  held — chain multiple edits in a single gesture. The dashboard also
+  shakes (iOS-icon-edit-mode style) and widens the inter-tile gap while
+  a drag is active so the drop zones read more clearly. Both visual
+  affordances are skipped in **Performance mode** (Global settings →
+  Appearance) since they rely on the same layout transitions Performance
+  mode disables.
 - **Resize the seam.** Hover the seam between two tiles; the cursor turns
   into a resize handle. Drag to redistribute space between siblings.
 - **Maximize.** The square icon in a tile's header pops it to fill the
@@ -47,11 +57,15 @@ or Shell prompt is never affected.
 ### Quick-add menu
 
 `⌘E` opens a Spotlight-style floating menu listing the available
-widgets. Press a widget's single-letter accelerator — `L` (Logcat),
-`S` (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror) — to
-insert it at the focused split, or click the row. The `More…` row
-opens the full widget palette dialog with descriptions and capacity
-hints.
+widgets. Three ways to pick:
+
+- Press a widget's single-letter accelerator — `L` (Logcat), `S`
+  (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror).
+- Use `↑` / `↓` to cycle the highlight and `Enter` to confirm.
+- Click the row directly.
+
+The `More…` row opens the full widget palette dialog with
+descriptions and capacity hints.
 
 (The earlier prototype used `⌘N`, but macOS treats `⌘N` as a
 system-level "new window" shortcut the browser can't intercept.
