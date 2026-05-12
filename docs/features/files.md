@@ -50,7 +50,25 @@ Files rows are draggable onto two other widgets in the dashboard:
 
 In both cases the in-app drop suppresses the default Pull-to-laptop
 behaviour — only OS-level drops (desktop, Finder, Explorer) trigger
-the download.
+the download. Dropping a `.apk` onto Mirror installs it via the same
+`pm install` pipeline as a double-click — the install progress strip
+appears on the **Files** widget (matching the double-click UX), not
+on Mirror.
+
+## Keyboard
+
+Within the Files widget body the keyboard works as you'd expect:
+
+- `↑` / `↓` move the selection up / down the list pane.
+- `←` collapses (in the tree pane) or walks up a directory (in the
+  list pane, when nothing is selected).
+- `Enter` opens the focused entry — directories become the new cwd,
+  files trigger an open-on-device.
+- `Delete` (or `Backspace` when one or more entries are selected)
+  opens the same confirm-delete dialog as the right-click → Delete
+  menu entry. The Files widget's `Delete` shortcut takes precedence
+  over the dashboard's tile-delete shortcut, so deleting selected
+  files never accidentally removes the entire Files tile.
 
 ## Per-widget settings
 

@@ -96,9 +96,13 @@ export function Dashboard({
         return;
       }
 
-      // Quick-add menu. `N` is also the browser's "new window"
-      // shortcut on most platforms, so `preventDefault` is critical.
-      if ((e.metaKey || e.ctrlKey) && lk === 'n' && !e.shiftKey && !e.altKey) {
+      // Quick-add menu. `Cmd/Ctrl+E` — `Cmd+N` was the original pick
+      // but on macOS it's a system-level "new window" shortcut the
+      // browser can't intercept (preventDefault is too late). `E` is
+      // unbound across Chrome / Safari / Firefox on every platform
+      // and is in muscle memory from other dashboards (Linear, Notion)
+      // for "Edit" / quick-action menus.
+      if ((e.metaKey || e.ctrlKey) && lk === 'e' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         setQuickAddOpen(true);
         return;

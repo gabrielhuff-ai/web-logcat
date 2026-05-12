@@ -37,20 +37,25 @@ or Shell prompt is never affected.
 
 | Key                 | Action                                                                 |
 | ------------------- | ---------------------------------------------------------------------- |
-| `⌘N` / `Ctrl+N`     | Open the quick-add menu (see below).                                   |
+| `⌘E` / `Ctrl+E`     | Open the quick-add menu (see below).                                   |
 | `← ↑ ↓ →`           | Move the focused-tile ring to the spatially-adjacent tile.             |
-| `Backspace` / `Del` | Remove the focused tile. No effect when nothing is focused.            |
+| `Backspace` / `Del` | Remove the focused tile. Inside the Files widget, deletes the selected entry instead (same as right-click → Delete). |
 | `⌘Z` / `Ctrl+Z`     | Undo the last layout-changing action.                                  |
 | `⌘⇧Z` / `Ctrl+⇧+Z`  | Redo.                                                                  |
+| `?`                 | Open the keyboard-shortcut help dialog.                                |
 
 ### Quick-add menu
 
-`⌘N` opens a Spotlight-style floating menu listing the available
+`⌘E` opens a Spotlight-style floating menu listing the available
 widgets. Press a widget's single-letter accelerator — `L` (Logcat),
 `S` (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror) — to
 insert it at the focused split, or click the row. The `More…` row
 opens the full widget palette dialog with descriptions and capacity
 hints.
+
+(The earlier prototype used `⌘N`, but macOS treats `⌘N` as a
+system-level "new window" shortcut the browser can't intercept.
+`⌘E` is unbound on every major browser + platform combination.)
 
 The menu dismisses on Escape, outside-click, or any successful pick.
 Widgets that are at their `maxInstances` cap (Screen Mirror is hard-
