@@ -48,7 +48,10 @@ import {
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
 import { createSync, type SyncFs, type WriteProgress } from '../../lib/sync';
-import { markInternalDropConsumed } from '../../lib/dragHandoff';
+import {
+  markInternalDropConsumed,
+  markOpenOnDeviceRequested,
+} from '../../lib/dragHandoff';
 import type { ScrcpySession } from '../../lib/scrcpy';
 import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
 import type { AndroidKeyCode } from '@yume-chan/scrcpy';
@@ -842,17 +845,22 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         showToast('Simulated mode — open on device disabled');
         return;
       }
-      // In-app device-path drag (from Files): just open.
+      // In-app device-path drag (from Files): defer back to the
+      // source Files widget so the install progress strip lives on
+      // *that* widget — same surface the user already sees when
+      // double-clicking a row. We just mark the handoff and let the
+      // Files widget's `onRowDragEnd` fire `openOnDevice` for the
+      // entry. We deliberately do *not* call `fs.open` here so the
+      // two install strips never race.
       if (isDevicePathDrag(e)) {
-        const path = e.dataTransfer.getData('application/x-weblogcat-device-path');
-        if (!path) return;
-        markInternalDropConsumed();
-        void openDevicePath(path);
+        markOpenOnDeviceRequested();
         return;
       }
       // Host-file drag (from Finder / Explorer / browser): push to
       // device, then open. Serial uploads — concurrent pushes against
-      // a single sync socket race for the writer lock.
+      // a single sync socket race for the writer lock. The progress
+      // strip stays on Mirror in this case because there's no Files
+      // widget instance owning the drag.
       const files = Array.from(e.dataTransfer.files);
       if (files.length === 0) return;
       void (async () => {
@@ -861,7 +869,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         }
       })();
     },
-    [usingFake, showToast, openDevicePath, uploadAndOpen],
+    [usingFake, showToast, uploadAndOpen],
   );
 
   // ---- Render ---------------------------------------------------------

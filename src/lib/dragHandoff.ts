@@ -15,6 +15,12 @@
 // when read so a subsequent drag starts clean.
 
 let consumed = false;
+// Additional handoff signal: an in-app target that consumed the drag
+// can ask the source Files widget to run its own `openOnDevice`
+// pipeline against the dropped entry (instead of the consumer running
+// `fs.open` itself). Drives the "the install progress strip lives on
+// the Files widget, not the Mirror widget" contract for Files→Mirror.
+let openRequested = false;
 
 /** Called by an in-app drop target to claim the drag (skip Pull). */
 export function markInternalDropConsumed(): void {
@@ -28,7 +34,26 @@ export function takeInternalDropConsumed(): boolean {
   return v;
 }
 
+/**
+ * Called by an in-app drop target that wants the source Files widget
+ * to run `openOnDevice` for the dropped entry — e.g. Mirror, so the
+ * install progress strip stays on the Files widget (matching the UX
+ * of double-clicking a file). Implies `markInternalDropConsumed`.
+ */
+export function markOpenOnDeviceRequested(): void {
+  consumed = true;
+  openRequested = true;
+}
+
+/** Returns true and clears the flag if a consumer asked for openOnDevice. */
+export function takeOpenOnDeviceRequested(): boolean {
+  const v = openRequested;
+  openRequested = false;
+  return v;
+}
+
 /** Called at drag start to discard any stale flag from a prior drag. */
 export function resetInternalDropConsumed(): void {
   consumed = false;
+  openRequested = false;
 }

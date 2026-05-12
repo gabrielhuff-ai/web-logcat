@@ -431,6 +431,20 @@ export function TileGrid({
       const target = e.target as HTMLElement;
       if (target.closest('button')) return;
       e.preventDefault();
+      // Yank DOM focus off whatever widget body input had it (Shell
+      // prompt, Logcat filter, …). Without this, clicking a tile head
+      // to "select" the tile left the previous input still focused —
+      // which made Dashboard-level shortcuts (Delete to remove tile,
+      // arrow keys to move focus) silently skip themselves because
+      // the `inEditable(activeElement)` guard fired.
+      const ae = document.activeElement;
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        (ae instanceof HTMLElement && ae.isContentEditable)
+      ) {
+        ae.blur();
+      }
       // Note: focus tracking lives on the layout itself; mark the
       // tile under the pointer as the next "+ Add" target.
       applyLayout(
