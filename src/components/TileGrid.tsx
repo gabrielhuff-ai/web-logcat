@@ -59,6 +59,21 @@ import type { LayoutState, WidgetKind } from '../types';
 /** Inter-tile gap in pixels (also the seam-handle thickness). */
 const NORMAL_GAP = 10;
 const COMPACT_GAP = 0;
+/**
+ * Extra gap added to the live layout while a swap drag is in
+ * progress. iOS-style: the icons (tiles) "make room" so the drop
+ * zones read more clearly. Animates because each tile already
+ * transitions its left/top/width/height, so changing the outer gap
+ * smoothly reflows everything.
+ */
+const DRAG_GAP_BUMP = 10;
+/**
+ * Hover-hold threshold (ms): how long the user must keep the cursor
+ * still over a valid drop zone before the drop fires automatically.
+ * Tuned to feel intentional without being slow — too short and the
+ * drag commits while the user is still deciding.
+ */
+const HOVER_HOLD_MS = 900;
 
 interface ResizeDrag {
   kind: 'resize';
@@ -91,6 +106,10 @@ interface SwapDrag {
   hoverEdge: SplitEdge | null;
   /** True once the cursor has moved more than a few px from the start. */
   active: boolean;
+  /** True for ~200ms after the hover-hold auto-commit fires — drives a
+   *  quick blink on the drop overlay before the swap/restructure
+   *  actually applies. */
+  committing: boolean;
 }
 
 type DragState = ResizeDrag | SwapDrag;
@@ -127,12 +146,19 @@ export function TileGrid({
   onLayoutChange,
   onRequestAdd,
 }: TileGridProps) {
-  const { tweaks } = useDashboardChrome();
-  const gap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
+  const { tweaks, performanceModeOn } = useDashboardChrome();
+  const baseGap = tweaks.compactMode ? COMPACT_GAP : NORMAL_GAP;
 
   const [layout, setLayoutDirect] = useState<LayoutState>(loadLayout);
   const [maximized, setMaximized] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Bump the inter-tile gap while a swap drag is active so the
+  // dashboard physically "makes room" for the dragged tile — the
+  // tile-position transitions already in place animate the reflow.
+  // Skip in performance mode where every layout transition is off.
+  const swapDragging = drag?.kind === 'swap' && drag.active;
+  const dragPolishOn = swapDragging && !performanceModeOn;
+  const gap = dragPolishOn ? baseGap + DRAG_GAP_BUMP : baseGap;
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -149,6 +175,35 @@ export function TileGrid({
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+
+  // ---- Hover-hold auto-commit state -------------------------------------
+  // While a swap drag is active, if the user keeps the cursor still
+  // over a valid drop target for `HOVER_HOLD_MS`, we commit the
+  // swap/restructure mid-drag (blink the overlay first), then keep
+  // dragging so they can chain edits in a single gesture. Tracked via
+  // refs (not state) so a position-update re-render doesn't reset the
+  // hold timer on every frame.
+  const hoverHoldTimerRef = useRef<number | null>(null);
+  const settleRef = useRef<{
+    x: number;
+    y: number;
+    hoverId: string | null;
+    hoverEdge: SplitEdge | null;
+  }>({ x: 0, y: 0, hoverId: null, hoverEdge: null });
+  // Mirror of the latest drag state for the timer callback to read at
+  // fire time (the timer's closure captures the state at arm time,
+  // which would be stale after subsequent pointermoves).
+  const dragRef = useRef<DragState | null>(null);
+  useEffect(() => {
+    dragRef.current = drag;
+  }, [drag]);
+  // Latch on `performanceModeOn` so the hover-hold logic inside the
+  // drag effect can short-circuit without listing the boolean in its
+  // deps (which would tear down + re-attach the pointer listeners).
+  const perfModeOnRef = useRef(performanceModeOn);
+  useEffect(() => {
+    perfModeOnRef.current = performanceModeOn;
+  }, [performanceModeOn]);
 
   /**
    * Set the layout AND push the previous one onto the undo stack.
@@ -391,30 +446,74 @@ export function TileGrid({
       return;
     }
     const c = centreOf(cur.rect);
-    let best: { id: string; cost: number } | null = null;
+    // Spatial pick: prefer candidates whose perpendicular extent
+    // *overlaps* the current tile's extent (i.e. they share a row or
+    // column with it), tie-breaking by the smallest axial gap.
+    // Fall back to the centre-distance metric only when no candidate
+    // overlaps — e.g. a Mirror tile that fills the left column should
+    // win against a Shell tile that's diagonally below-left, because
+    // Mirror's vertical span fully contains Logcat's. The previous
+    // `axial + 2 * perp` cost picked Shell in that case because Shell's
+    // centre was closer overall even though it didn't share a row.
+    interface Cand {
+      id: string;
+      gap: number;
+      overlap: number;
+      centerDist: number;
+    }
+    let bestOverlap: Cand | null = null;
+    let bestFallback: Cand | null = null;
     for (const leaf of leaves) {
       if (leaf.id === cur.id) continue;
-      const p = centreOf(leaf.rect);
-      const dx = p.x - c.x;
-      const dy = p.y - c.y;
-      // Direction filter: candidate centre must clearly be in the
-      // requested direction relative to the current tile's centre.
-      // Strict inequality keeps us from "navigating" to an exactly-
-      // overlapping centre (only happens in degenerate layouts).
+      const r = leaf.rect;
+      // Direction filter: candidate must lie *past* the current tile
+      // along the requested axis (use the rect edge, not the centre,
+      // so a tile that sits flush alongside the current one still
+      // counts — its centre may not be past the current centre).
+      let gap = 0;
       let inDir = false;
-      if (dir === 'right') inDir = dx > 0.5;
-      else if (dir === 'left') inDir = dx < -0.5;
-      else if (dir === 'down') inDir = dy > 0.5;
-      else inDir = dy < -0.5;
+      if (dir === 'right') {
+        gap = r.x - (cur.rect.x + cur.rect.w);
+        inDir = gap > -1;
+      } else if (dir === 'left') {
+        gap = cur.rect.x - (r.x + r.w);
+        inDir = gap > -1;
+      } else if (dir === 'down') {
+        gap = r.y - (cur.rect.y + cur.rect.h);
+        inDir = gap > -1;
+      } else {
+        gap = cur.rect.y - (r.y + r.h);
+        inDir = gap > -1;
+      }
       if (!inDir) continue;
-      // Cost prefers candidates closer on the requested axis. A 2×
-      // penalty on the perpendicular distance trades a little off-axis
-      // tolerance for predictable "next column / next row" behaviour.
-      const axial = dir === 'left' || dir === 'right' ? Math.abs(dx) : Math.abs(dy);
-      const perp = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
-      const cost = axial + 2 * perp;
-      if (!best || cost < best.cost) best = { id: leaf.id, cost };
+      // Perpendicular overlap with the current tile.
+      let overlap: number;
+      if (dir === 'left' || dir === 'right') {
+        const top = Math.max(cur.rect.y, r.y);
+        const bot = Math.min(cur.rect.y + cur.rect.h, r.y + r.h);
+        overlap = Math.max(0, bot - top);
+      } else {
+        const lf = Math.max(cur.rect.x, r.x);
+        const rt = Math.min(cur.rect.x + cur.rect.w, r.x + r.w);
+        overlap = Math.max(0, rt - lf);
+      }
+      const p = centreOf(r);
+      const centerDist = Math.hypot(p.x - c.x, p.y - c.y);
+      const cand: Cand = { id: leaf.id, gap, overlap, centerDist };
+      if (overlap > 0) {
+        if (
+          !bestOverlap ||
+          // Larger overlap wins; ties go to the smaller axial gap.
+          cand.overlap > bestOverlap.overlap + 0.5 ||
+          (Math.abs(cand.overlap - bestOverlap.overlap) <= 0.5 && cand.gap < bestOverlap.gap)
+        ) {
+          bestOverlap = cand;
+        }
+      } else if (!bestFallback || cand.centerDist < bestFallback.centerDist) {
+        bestFallback = cand;
+      }
     }
+    const best = bestOverlap ?? bestFallback;
     if (!best) return;
     const target = best.id;
     applyLayout((l) => (l.focusId === target ? l : { ...l, focusId: target }), {
@@ -461,6 +560,7 @@ export function TileGrid({
         hoverId: null,
         hoverEdge: null,
         active: false,
+        committing: false,
       });
     },
     [maximized, applyLayout],
@@ -571,6 +671,56 @@ export function TileGrid({
       return { id, edge };
     };
 
+    // ---- Hover-hold auto-commit ---------------------------------------
+    // Reads from refs (not closure-captured drag state) so it sees the
+    // latest hover when the timer fires — the closure was created at
+    // arm time, which is potentially seconds ago after a few intervening
+    // pointermoves.
+    const autoCommitFromHover = () => {
+      hoverHoldTimerRef.current = null;
+      const cur = dragRef.current;
+      if (!cur || cur.kind !== 'swap') return;
+      if (!cur.hoverId || cur.hoverId === cur.fromId) return;
+      const fromId = cur.fromId;
+      const targetId = cur.hoverId;
+      const targetEdge = cur.hoverEdge;
+      // Phase 1: blink the overlay (CSS animation triggered by the
+      // `committing` flag) so the user sees confirmation before the
+      // tiles slide around.
+      setDrag((d) => (d && d.kind === 'swap' ? { ...d, committing: true } : d));
+      window.setTimeout(() => {
+        const latest = dragRef.current;
+        // Commit when either (a) the drag is still active and the
+        // hover hasn't drifted during the blink, or (b) the drag
+        // has already ended (user released during the blink) — the
+        // hover-hold authorisation should still apply rather than
+        // being silently swallowed by the late release.
+        const hoverIntact =
+          latest == null ||
+          (latest.kind === 'swap' &&
+            latest.hoverId === targetId &&
+            latest.hoverEdge === targetEdge);
+        if (hoverIntact) {
+          applyLayout((l) =>
+            targetEdge
+              ? restructureTile(l, fromId, targetId, targetEdge)
+              : swapTiles(l, fromId, targetId),
+          );
+        }
+        // Reset hover + committing on the drag so another auto-commit
+        // requires a fresh hover. The settle anchor is also reset so
+        // the next arm waits for the user to actually move first
+        // (otherwise the immediately-following pointermove with the
+        // same coordinates would rearm the timer).
+        setDrag((d) =>
+          d && d.kind === 'swap'
+            ? { ...d, hoverId: null, hoverEdge: null, committing: false }
+            : d,
+        );
+        settleRef.current = { ...settleRef.current, hoverId: null, hoverEdge: null };
+      }, 180);
+    };
+
     const onMove = (e: PointerEvent) => {
       if (drag.kind === 'resize') {
         const dPx = drag.axis === 'row' ? e.clientX - drag.startX : e.clientY - drag.startY;
@@ -617,6 +767,37 @@ export function TileGrid({
             : d,
         );
       });
+      // Hover-hold tracking. Skip in performance mode (the whole
+      // drag-polish bundle — shake, wider gap, mid-drag commit — is
+      // gated on the user *not* opting out of layout transitions).
+      if (!perfModeOnRef.current) {
+        const settle = settleRef.current;
+        const moved = Math.hypot(e.clientX - settle.x, e.clientY - settle.y) > 3;
+        const hoverChanged =
+          targetId !== settle.hoverId || edge !== settle.hoverEdge;
+        if (moved || hoverChanged) {
+          if (hoverHoldTimerRef.current != null) {
+            window.clearTimeout(hoverHoldTimerRef.current);
+            hoverHoldTimerRef.current = null;
+          }
+          settleRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            hoverId: targetId,
+            hoverEdge: edge,
+          };
+        }
+        const validDrop = active && !!targetId && targetId !== drag.fromId;
+        if (validDrop && hoverHoldTimerRef.current == null) {
+          hoverHoldTimerRef.current = window.setTimeout(
+            autoCommitFromHover,
+            HOVER_HOLD_MS,
+          );
+        } else if (!validDrop && hoverHoldTimerRef.current != null) {
+          window.clearTimeout(hoverHoldTimerRef.current);
+          hoverHoldTimerRef.current = null;
+        }
+      }
     };
 
     const onUp = (e: PointerEvent) => {
@@ -626,10 +807,22 @@ export function TileGrid({
         pendingRef.current?.();
         pendingRef.current = null;
       }
+      // Cancel any pending hover-hold so it doesn't fire after release.
+      if (hoverHoldTimerRef.current != null) {
+        window.clearTimeout(hoverHoldTimerRef.current);
+        hoverHoldTimerRef.current = null;
+      }
       if (drag.kind === 'swap') {
+        // If a hover-hold blink is in flight, skip the pointerup
+        // commit so we don't apply the same swap twice. The deferred
+        // commit inside `autoCommitFromHover` will fire on its own.
+        const committingNow =
+          dragRef.current && dragRef.current.kind === 'swap'
+            ? dragRef.current.committing
+            : false;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
-        if (Math.hypot(dx, dy) > 5) {
+        if (!committingNow && Math.hypot(dx, dy) > 5) {
           const probe = hitTest(e.clientX, e.clientY);
           const target = probe.id;
           const edge = probe.edge;
@@ -643,6 +836,7 @@ export function TileGrid({
         }
       }
       setDrag(null);
+      settleRef.current = { x: 0, y: 0, hoverId: null, hoverEdge: null };
     };
 
     window.addEventListener('pointermove', onMove);
@@ -650,6 +844,14 @@ export function TileGrid({
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      // The hover-hold timer is intentionally *not* cleared here. The
+      // drag effect re-runs on every drag-state change (every
+      // pointermove during rAF flush), so clearing the timer here
+      // would reset the hover-hold every frame and the auto-commit
+      // would never fire. The timer is cleared explicitly on:
+      //   - pointer up
+      //   - significant cursor move / hover change (in `onMove`)
+      //   - commit (in `autoCommitFromHover`)
       if (rafRef.current != null) {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -663,11 +865,16 @@ export function TileGrid({
       'dash-grid',
       drag?.kind === 'resize' && 'dragging',
       drag?.kind === 'swap' && drag.active && 'swap-dragging',
+      // `polish` is the "iOS-icon-shake + roomier gap" class. The
+      // swap-dragging class above stays in place because some
+      // unrelated rules (cursor, user-select) still want to fire in
+      // performance mode.
+      dragPolishOn && 'drag-polish',
       maximized && 'has-max',
     ]
       .filter(Boolean)
       .join(' ');
-  }, [drag, maximized]);
+  }, [drag, maximized, dragPolishOn]);
 
   const swapDrag = drag?.kind === 'swap' && drag.active ? drag : null;
 
@@ -772,7 +979,11 @@ export function TileGrid({
           )?.rect;
           if (!targetRect) return null;
           return (
-            <DropOverlay rect={targetRect} edge={swapDrag.hoverEdge} />
+            <DropOverlay
+              rect={targetRect}
+              edge={swapDrag.hoverEdge}
+              committing={swapDrag.committing}
+            />
           );
         })()}
 
@@ -839,6 +1050,9 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
 interface DropOverlayProps {
   rect: { x: number; y: number; w: number; h: number };
   edge: SplitEdge | null;
+  /** True for the brief blink window between hover-hold trigger and
+   *  the actual swap/restructure firing. */
+  committing: boolean;
 }
 
 /**
@@ -855,7 +1069,7 @@ interface DropOverlayProps {
  * what keeps the UX from flickering between layouts as the cursor
  * crosses zone boundaries.
  */
-function DropOverlay({ rect, edge }: DropOverlayProps) {
+function DropOverlay({ rect, edge, committing }: DropOverlayProps) {
   let left = rect.x;
   let top = rect.y;
   let width = rect.w;
@@ -873,7 +1087,7 @@ function DropOverlay({ rect, edge }: DropOverlayProps) {
   }
   return (
     <div
-      className="dash-drop-overlay"
+      className={`dash-drop-overlay ${committing ? 'dash-drop-overlay-committing' : ''}`}
       style={{ left, top, width, height }}
       aria-hidden
     />

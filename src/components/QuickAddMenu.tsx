@@ -1,13 +1,25 @@
-// Quick-add menu for tile creation. Opens on `Cmd/Ctrl+N`; pressing a
+// Quick-add menu for tile creation. Opens on `Cmd/Ctrl+E`; pressing a
 // widget's shortcut key inserts it immediately. A "More…" row at the
 // bottom hands off to the full `<WidgetPalette/>` for users who want
 // the descriptions and capacity hints.
 //
+// Keyboard:
+//   - `Esc`             → dismiss.
+//   - `↑` / `↓`         → cycle the highlighted row (wraps; skips
+//                         capacity-capped widgets).
+//   - `Enter`           → pick the highlighted row (or open the full
+//                         palette if "More…" is highlighted).
+//   - single letter     → jump-pick the matching widget (`L`, `S`, …).
+//
+// The arrow / Enter handlers are registered with `capture: true` and
+// `stopImmediatePropagation` so the Dashboard's tile-focus arrow
+// shortcuts and the tile-delete shortcut don't fire while the menu
+// is open.
+//
 // Visual model: a compact floating panel centred near the top of the
-// dashboard. Auto-focuses itself on mount so the next keystroke can
-// pick a widget without a click first.
+// dashboard. Auto-focuses itself on mount.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { WIDGETS, WIDGET_KINDS } from '../lib/widgets';
 import { countByKind } from '../lib/layout';
 import type { LayoutState, WidgetKind } from '../types';
@@ -19,22 +31,95 @@ export interface QuickAddMenuProps {
   onClose: () => void;
 }
 
+/**
+ * Row in the menu, in render order. The trailing `null` represents
+ * the "More…" row; using `null` for that kind keeps the rest of the
+ * logic dealing in `WidgetKind`s without a sentinel string.
+ */
+type Row = { kind: WidgetKind; capped: boolean } | { kind: null; capped: false };
+
 export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const rows: Row[] = useMemo(() => {
+    const out: Row[] = [];
+    for (const kind of WIDGET_KINDS) {
+      if (!WIDGETS[kind].enabled) continue;
+      out.push({ kind, capped: atCapacity(layout, kind) });
+    }
+    out.push({ kind: null, capped: false });
+    return out;
+  }, [layout]);
+
+  // Index of the currently-highlighted row. Defaults to the first
+  // selectable row (first non-capped widget, falling back to "More…"
+  // if all widgets are capped — unlikely but defensive).
+  const initialIdx = useMemo(() => {
+    const i = rows.findIndex((r) => !r.capped);
+    return i >= 0 ? i : 0;
+  }, [rows]);
+  const [highlight, setHighlight] = useState(initialIdx);
+  // Keep `highlight` valid when `rows` changes (e.g. the layout
+  // mutates while the menu is open).
+  useEffect(() => {
+    if (highlight >= rows.length) setHighlight(rows.length - 1);
+  }, [rows.length, highlight]);
 
   // Auto-focus on mount so the next keypress lands on the menu.
   useEffect(() => {
     rootRef.current?.focus({ preventScroll: true });
   }, []);
 
-  // Global key listener — `keydown` rather than the local `onKeyDown`
-  // so single-letter shortcuts work even if the focus slips away
-  // during a re-render (e.g. when the layout snapshot updates).
+  // Global capture-phase key listener. Capture-phase + a
+  // stopImmediatePropagation on every key we consume keeps the
+  // Dashboard's arrow-key tile-focus + tile-delete shortcuts from
+  // firing while the menu is up.
   useEffect(() => {
+    const isSelectable = (i: number): boolean => {
+      const r = rows[i];
+      return !!r && !r.capped;
+    };
+    const step = (delta: 1 | -1) => {
+      if (rows.length === 0) return;
+      let i = highlight;
+      for (let n = 0; n < rows.length; n += 1) {
+        i = (i + delta + rows.length) % rows.length;
+        if (isSelectable(i)) {
+          setHighlight(i);
+          return;
+        }
+      }
+    };
+    const commit = () => {
+      const r = rows[highlight];
+      if (!r) return;
+      if (r.kind === null) onMore();
+      else if (!r.capped) onPick(r.kind);
+    };
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        step(1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        step(-1);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        commit();
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -50,20 +135,20 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
         return;
       }
       const key = e.key.toLowerCase();
-      // Single-letter shortcut → add the matching widget.
       for (const kind of WIDGET_KINDS) {
         const def = WIDGETS[kind];
         if (!def.enabled) continue;
         if (def.shortcutKey === key && !atCapacity(layout, kind)) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           onPick(kind);
           return;
         }
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [layout, onPick, onClose]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [highlight, layout, onPick, onMore, onClose, rows]);
 
   // Outside click dismisses the menu.
   useEffect(() => {
@@ -73,9 +158,6 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
         onClose();
       }
     };
-    // `mousedown` rather than `click` so we close before any button
-    // inside `<DashTopbar/>` fires its onClick — otherwise the
-    // "Add widget" button would reopen the full palette.
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [onClose]);
@@ -91,18 +173,39 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="qa-head">New widget</div>
-        {WIDGET_KINDS.filter((k) => WIDGETS[k].enabled).map((kind) => {
-          const def = WIDGETS[kind];
+        {rows.map((r, i) => {
+          const active = i === highlight;
+          if (r.kind === null) {
+            return (
+              <div key="__divider" style={{ display: 'contents' }}>
+                <div className="qa-sep" role="separator" />
+                <button
+                  type="button"
+                  className={`qa-row qa-row-more ${active ? 'qa-row-active' : ''}`}
+                  role="menuitem"
+                  onClick={onMore}
+                  onMouseEnter={() => setHighlight(i)}
+                >
+                  <span className="qa-row-name">More…</span>
+                </button>
+              </div>
+            );
+          }
+          const def = WIDGETS[r.kind];
           const Icon = def.icon;
-          const capped = atCapacity(layout, kind);
           return (
             <button
-              key={kind}
+              key={r.kind}
               type="button"
-              className={`qa-row ${capped ? 'qa-row-disabled' : ''}`}
+              className={`qa-row ${r.capped ? 'qa-row-disabled' : ''} ${
+                active ? 'qa-row-active' : ''
+              }`}
               role="menuitem"
-              disabled={capped}
-              onClick={() => onPick(kind)}
+              disabled={r.capped}
+              onClick={() => onPick(r.kind as WidgetKind)}
+              onMouseEnter={() => {
+                if (!r.capped) setHighlight(i);
+              }}
             >
               <span className="qa-row-icon">
                 <Icon size={14} />
@@ -114,15 +217,6 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
             </button>
           );
         })}
-        <div className="qa-sep" role="separator" />
-        <button
-          type="button"
-          className="qa-row qa-row-more"
-          role="menuitem"
-          onClick={onMore}
-        >
-          <span className="qa-row-name">More…</span>
-        </button>
       </div>
     </div>
   );
