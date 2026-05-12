@@ -180,7 +180,11 @@
 .fx-tname {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  /* Inherit `font-size` from the surrounding `.fx-tnode` rule in
+   * `settings.css` (which is driven by `--widget-font-size`) so the
+   * per-widget font-size slider scales the tree-pane text too. The
+   * previous hardcoded `12px` here was the reason the slider only
+   * resized the list pane. */
 }
 
 .fx-list-pane {

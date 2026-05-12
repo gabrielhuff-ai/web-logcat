@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import * as Icons from './Icons';
 import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
+import { QuickAddMenu } from './QuickAddMenu';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
@@ -35,14 +36,21 @@ export function Dashboard({
   onDisconnect,
 }: DashboardProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
-  // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` are bumped
-  // to push imperative actions down into `<TileGrid/>` without lifting
-  // its layout state up. Simpler than threading callbacks through every
+  // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` /
+  // `removeFocusedSignal` / `focusDirSignal` are bumped to push
+  // imperative actions down into `<TileGrid/>` without lifting its
+  // layout state up. Simpler than threading callbacks through every
   // drag/resize tick.
   const [clearSignal, setClearSignal] = useState(0);
   const [undoSignal, setUndoSignal] = useState(0);
   const [redoSignal, setRedoSignal] = useState(0);
+  const [removeFocusedSignal, setRemoveFocusedSignal] = useState(0);
+  const [focusDirSignal, setFocusDirSignal] = useState<{
+    dir: 'left' | 'right' | 'up' | 'down';
+    n: number;
+  } | null>(null);
   const [addSignal, setAddSignal] = useState<{ kind: WidgetKind; n: number } | null>(null);
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutState>({
     tiles: {},
@@ -53,30 +61,79 @@ export function Dashboard({
   const onAddPick = useCallback((kind: WidgetKind) => {
     setAddSignal((p) => ({ kind, n: (p?.n ?? 0) + 1 }));
     setPaletteOpen(false);
+    setQuickAddOpen(false);
   }, []);
 
-  // Cmd/Ctrl+Z (undo) and Cmd/Ctrl+Shift+Z (redo) on the dashboard.
-  // We swallow the keystroke when the focus is inside a text input so
-  // the user can still undo their typing without thrashing the layout.
+  // Global keyboard shortcuts on the dashboard:
+  //   - Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z — undo / redo layout edits.
+  //   - Cmd/Ctrl+N                    — open the quick-add menu.
+  //   - Arrow keys                    — move focus to the spatially
+  //                                     adjacent tile (only when the
+  //                                     active element isn't a text
+  //                                     input — otherwise arrows
+  //                                     still navigate inside Logcat,
+  //                                     Shell input, etc.).
+  //   - Backspace / Delete            — remove the focused tile.
+  // The text-input guard is shared across all of these so typing
+  // inside a widget never thrashes the layout.
   useEffect(() => {
+    const inEditable = (t: EventTarget | null): boolean =>
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      (t instanceof HTMLElement && t.isContentEditable);
+
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.key.toLowerCase() !== 'z') return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t instanceof HTMLInputElement ||
-        t instanceof HTMLTextAreaElement ||
-        t?.isContentEditable
-      ) {
+      // Don't fire any shortcut while the user is typing somewhere.
+      if (inEditable(e.target)) return;
+
+      const lk = e.key.toLowerCase();
+
+      // Undo / redo.
+      if ((e.metaKey || e.ctrlKey) && lk === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) setRedoSignal((n) => n + 1);
+        else setUndoSignal((n) => n + 1);
         return;
       }
-      e.preventDefault();
-      if (e.shiftKey) setRedoSignal((n) => n + 1);
-      else setUndoSignal((n) => n + 1);
+
+      // Quick-add menu. `N` is also the browser's "new window"
+      // shortcut on most platforms, so `preventDefault` is critical.
+      if ((e.metaKey || e.ctrlKey) && lk === 'n' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setQuickAddOpen(true);
+        return;
+      }
+
+      // Beyond this point we want unmodified keys only — Cmd+Arrow on
+      // macOS jumps the cursor; Cmd+Delete trashes a file in Finder.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const dir = (
+          {
+            ArrowLeft: 'left',
+            ArrowRight: 'right',
+            ArrowUp: 'up',
+            ArrowDown: 'down',
+          } as const
+        )[e.key];
+        e.preventDefault();
+        setFocusDirSignal((p) => ({ dir, n: (p?.n ?? 0) + 1 }));
+        return;
+      }
+
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        // Only react when there's actually a focused tile (otherwise
+        // a stray Backspace shouldn't tear something down silently).
+        if (!layoutSnapshot.focusId) return;
+        e.preventDefault();
+        setRemoveFocusedSignal((n) => n + 1);
+        return;
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [layoutSnapshot.focusId]);
 
   return (
     <div className="dash">
@@ -98,9 +155,23 @@ export function Dashboard({
         undoSignal={undoSignal}
         redoSignal={redoSignal}
         addSignal={addSignal}
+        removeFocusedSignal={removeFocusedSignal}
+        focusDirSignal={focusDirSignal}
         onLayoutChange={setLayoutSnapshot}
-        onRequestAdd={() => setPaletteOpen(true)}
+        onRequestAdd={() => setQuickAddOpen(true)}
       />
+
+      {quickAddOpen && (
+        <QuickAddMenu
+          layout={layoutSnapshot}
+          onPick={onAddPick}
+          onMore={() => {
+            setQuickAddOpen(false);
+            setPaletteOpen(true);
+          }}
+          onClose={() => setQuickAddOpen(false)}
+        />
+      )}
 
       {paletteOpen && (
         <WidgetPalette
