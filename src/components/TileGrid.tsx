@@ -104,6 +104,10 @@ export interface TileGridProps {
   redoSignal: number;
   /** Imperative request from the topbar to add a widget. */
   addSignal: { kind: WidgetKind; n: number } | null;
+  /** Imperative request from Backspace / Delete to remove the focused tile. */
+  removeFocusedSignal: number;
+  /** Imperative request from the arrow keys to move focus spatially. */
+  focusDirSignal: { dir: 'left' | 'right' | 'up' | 'down'; n: number } | null;
   /** Notify parent when layout changes — used for the palette's `maxInstances` check. */
   onLayoutChange?: (layout: LayoutState) => void;
   /** Notify parent when the user clicks `+ Add` from the in-grid empty state. */
@@ -118,6 +122,8 @@ export function TileGrid({
   undoSignal,
   redoSignal,
   addSignal,
+  removeFocusedSignal,
+  focusDirSignal,
   onLayoutChange,
   onRequestAdd,
 }: TileGridProps) {
@@ -308,6 +314,25 @@ export function TileGrid({
     [applyLayout],
   );
 
+  // Backspace / Delete — pop the focused tile. Resolves the focused id
+  // from the layout *at signal time* (not at handler-creation time) so
+  // a stale focusId in the closure can't accidentally remove the wrong
+  // tile after a swap.
+  const lastRemoveNRef = useRef(removeFocusedSignal);
+  useEffect(() => {
+    if (removeFocusedSignal === lastRemoveNRef.current) return;
+    lastRemoveNRef.current = removeFocusedSignal;
+    setLayoutDirect((cur) => {
+      if (!cur.focusId) return cur;
+      const stack = undoStackRef.current;
+      stack.push(cur);
+      if (stack.length > HISTORY_CAP) stack.shift();
+      redoStackRef.current = [];
+      return removeTileFromLayout(cur, cur.focusId);
+    });
+    setMaximized(null);
+  }, [removeFocusedSignal]);
+
   // `barsHidden` cycles through 'show' (default) / 'hideBars' /
   // 'hideHead' on each click. Widgets without an internal control bar
   // (e.g. Shell) skip the middle state — see `cycleBarMode` below.
@@ -329,6 +354,73 @@ export function TileGrid({
   const toggleMax = useCallback((id: string) => {
     setMaximized((m) => (m === id ? null : id));
   }, []);
+
+  // Arrow-key focus navigation. The active tile is the one whose centre
+  // we project from; we pick the tile in the requested direction whose
+  // centre minimises an "axis-aligned + perpendicular" cost (Euclidean
+  // distance, but with perpendicular axis weighted lower so a slightly
+  // off-axis neighbour is preferred over a far-but-on-axis one). If
+  // there is no focused tile yet we just focus the leftmost / topmost.
+  const lastFocusDirNRef = useRef(focusDirSignal?.n ?? 0);
+  useEffect(() => {
+    if (!focusDirSignal) return;
+    if (focusDirSignal.n === lastFocusDirNRef.current) return;
+    lastFocusDirNRef.current = focusDirSignal.n;
+    const leaves = computed.leaves;
+    if (leaves.length === 0) return;
+    const dir = focusDirSignal.dir;
+    const curId = layout.focusId;
+    const cur = curId ? leaves.find((l) => l.id === curId) : null;
+    const centreOf = (r: { x: number; y: number; w: number; h: number }) => ({
+      x: r.x + r.w / 2,
+      y: r.y + r.h / 2,
+    });
+    if (!cur) {
+      // No current focus — anchor to the corner that matches the
+      // direction (Right → leftmost tile, Down → topmost, etc.).
+      const pick =
+        dir === 'right' || dir === 'left'
+          ? [...leaves].sort((a, b) => a.rect.x - b.rect.x)
+          : [...leaves].sort((a, b) => a.rect.y - b.rect.y);
+      const first = pick[0];
+      if (first) {
+        applyLayout((l) => (l.focusId === first.id ? l : { ...l, focusId: first.id }), {
+          transient: true,
+        });
+      }
+      return;
+    }
+    const c = centreOf(cur.rect);
+    let best: { id: string; cost: number } | null = null;
+    for (const leaf of leaves) {
+      if (leaf.id === cur.id) continue;
+      const p = centreOf(leaf.rect);
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      // Direction filter: candidate centre must clearly be in the
+      // requested direction relative to the current tile's centre.
+      // Strict inequality keeps us from "navigating" to an exactly-
+      // overlapping centre (only happens in degenerate layouts).
+      let inDir = false;
+      if (dir === 'right') inDir = dx > 0.5;
+      else if (dir === 'left') inDir = dx < -0.5;
+      else if (dir === 'down') inDir = dy > 0.5;
+      else inDir = dy < -0.5;
+      if (!inDir) continue;
+      // Cost prefers candidates closer on the requested axis. A 2×
+      // penalty on the perpendicular distance trades a little off-axis
+      // tolerance for predictable "next column / next row" behaviour.
+      const axial = dir === 'left' || dir === 'right' ? Math.abs(dx) : Math.abs(dy);
+      const perp = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
+      const cost = axial + 2 * perp;
+      if (!best || cost < best.cost) best = { id: leaf.id, cost };
+    }
+    if (!best) return;
+    const target = best.id;
+    applyLayout((l) => (l.focusId === target ? l : { ...l, focusId: target }), {
+      transient: true,
+    });
+  }, [focusDirSignal, computed.leaves, layout.focusId, applyLayout]);
 
   // ---- Drag dispatch -----------------------------------------------------
   const onMoveStart = useCallback(

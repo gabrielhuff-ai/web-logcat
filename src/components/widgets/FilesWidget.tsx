@@ -752,13 +752,14 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
       const kids = treeChildren.get(p);
       if (!kids) return;
       for (const k of kids) {
+        if (!showHidden && k.name.startsWith('.')) continue;
         const child = p === '/' ? '/' + k.name : p + '/' + k.name;
         walk(child, depth + 1);
       }
     };
     walk(ROOT, 0);
     return out;
-  }, [treeExpanded, treeChildren]);
+  }, [treeExpanded, treeChildren, showHidden]);
 
   const focusTreeNode = useCallback((p: string) => {
     navigate(p);
@@ -1046,6 +1047,7 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
               currentPath={path}
               expanded={treeExpanded}
               children_={treeChildren}
+              showHidden={showHidden}
               onToggle={(p) => {
                 setTreeExpanded((prev) => {
                   const next = new Set(prev);
@@ -1391,14 +1393,18 @@ interface FxTreeProps {
   expanded: Set<string>;
   // `children` is reserved by React; rename to avoid shadowing.
   children_: Map<string, SyncEntry[]>;
+  /** When false, dot-prefixed directories are filtered out of the
+   *  tree — same rule as the list pane's hidden-files toggle. */
+  showHidden: boolean;
   onToggle: (p: string) => void;
   onSelect: (p: string) => void;
 }
 
 function FxTree(props: FxTreeProps) {
-  const { path, label, depth, currentPath, expanded, children_, onToggle, onSelect } = props;
+  const { path, label, depth, currentPath, expanded, children_, showHidden, onToggle, onSelect } = props;
   const isOpen = expanded.has(path);
   const kids = children_.get(path);
+  const visibleKids = kids?.filter((k) => showHidden || !k.name.startsWith('.'));
   const isCurrent = path === currentPath;
   return (
     <>
@@ -1422,8 +1428,8 @@ function FxTree(props: FxTreeProps) {
         <span className="fx-tname">{label}</span>
       </div>
       {isOpen &&
-        kids &&
-        kids.map((kid) => (
+        visibleKids &&
+        visibleKids.map((kid) => (
           <FxTree
             key={path === '/' ? '/' + kid.name : path + '/' + kid.name}
             path={path === '/' ? '/' + kid.name : path + '/' + kid.name}
@@ -1432,6 +1438,7 @@ function FxTree(props: FxTreeProps) {
             currentPath={currentPath}
             expanded={expanded}
             children_={children_}
+            showHidden={showHidden}
             onToggle={onToggle}
             onSelect={onSelect}
           />

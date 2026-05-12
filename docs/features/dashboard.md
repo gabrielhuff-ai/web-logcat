@@ -29,6 +29,33 @@ itself, and a corner grip — and they share every pixel of available space.
   *show everything* → *hide the toolbar* → *hide the toolbar **and** the
   header*. Use it when you want a tile to read like an embedded panel.
 
+## Keyboard
+
+The dashboard reads a small set of global shortcuts. None of them fire
+while the focus is inside a text field, so typing into a Logcat filter
+or Shell prompt is never affected.
+
+| Key                 | Action                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| `⌘N` / `Ctrl+N`     | Open the quick-add menu (see below).                                   |
+| `← ↑ ↓ →`           | Move the focused-tile ring to the spatially-adjacent tile.             |
+| `Backspace` / `Del` | Remove the focused tile. No effect when nothing is focused.            |
+| `⌘Z` / `Ctrl+Z`     | Undo the last layout-changing action.                                  |
+| `⌘⇧Z` / `Ctrl+⇧+Z`  | Redo.                                                                  |
+
+### Quick-add menu
+
+`⌘N` opens a Spotlight-style floating menu listing the available
+widgets. Press a widget's single-letter accelerator — `L` (Logcat),
+`S` (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror) — to
+insert it at the focused split, or click the row. The `More…` row
+opens the full widget palette dialog with descriptions and capacity
+hints.
+
+The menu dismisses on Escape, outside-click, or any successful pick.
+Widgets that are at their `maxInstances` cap (Screen Mirror is hard-
+capped at 1) are greyed out and their accelerator is ignored.
+
 ## Undo and redo
 
 - **⌘Z / Ctrl+Z** undoes the last layout-changing action — adding a tile,
@@ -36,9 +63,6 @@ itself, and a corner grip — and they share every pixel of available space.
   buffer lives inside the tile grid; reloading the page persists the
   current layout but not the undo stack.
 - **⌘⇧Z / Ctrl+Shift+Z** redoes.
-
-The shortcut is suppressed when the focus is inside a text field, so the
-browser's native undo for typing keeps working.
 
 ## Persistence
 

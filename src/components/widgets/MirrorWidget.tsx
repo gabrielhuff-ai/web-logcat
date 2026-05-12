@@ -47,7 +47,7 @@ import {
   type SimTap,
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
-import { createSync, type SyncFs } from '../../lib/sync';
+import { createSync, type SyncFs, type WriteProgress } from '../../lib/sync';
 import { markInternalDropConsumed } from '../../lib/dragHandoff';
 import type { ScrcpySession } from '../../lib/scrcpy';
 import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
@@ -89,6 +89,14 @@ const MOTION_MOVE = AndroidMotionEventAction.Move;
 /** scrcpy `setScreenPowerMode` modes. */
 const POWER_MODE_OFF = 0;
 const POWER_MODE_NORMAL = 2;
+
+/** Phases of a host-file drop's progress strip (used by `MirrorXferStrip`). */
+interface MirrorXfer {
+  name: string;
+  phase: 'uploading' | 'installing' | 'done' | 'error';
+  bytes: number;
+  total: number | null;
+}
 
 // DataTransfer sniffers — declared at module scope so the drag/drop
 // useCallbacks below don't have to list them in their deps.
@@ -133,6 +141,19 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   // mirror — used to paint the "drop to open on device" overlay and to
   // gate which paths take the drop. Cleared on drop / dragleave.
   const [dropping, setDropping] = useState(false);
+  // Progress strip below the toolbar while a host-file drop is in
+  // flight. The strip mirrors the Files widget's `.fx-xfer` pill: a
+  // determinate bar during the push phase + an indeterminate slide
+  // during the (no-progress-signal) `pm install` phase.
+  const [xfer, setXfer] = useState<MirrorXfer | null>(null);
+  const clearXferTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (clearXferTimerRef.current != null) {
+        window.clearTimeout(clearXferTimerRef.current);
+      }
+    };
+  }, []);
   // Lazy SyncFs handle for the install-on-drop action. Created on first
   // drop and disposed on unmount. Reusing the Files widget's instance
   // would force a coupling between widgets; one-per-widget keeps each
@@ -726,6 +747,19 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     // crossed into a descendant.
     if (e.currentTarget === e.target) setDropping(false);
   }, []);
+  // Schedule the progress strip to fade away after a short success
+  // window so the user has visible confirmation the operation
+  // finished, without the strip sticking around forever.
+  const scheduleXferFade = useCallback((delayMs: number) => {
+    if (clearXferTimerRef.current != null) {
+      window.clearTimeout(clearXferTimerRef.current);
+    }
+    clearXferTimerRef.current = window.setTimeout(() => {
+      setXfer(null);
+      clearXferTimerRef.current = null;
+    }, delayMs);
+  }, []);
+
   const openDevicePath = useCallback(
     async (devicePath: string) => {
       const fs = fsRef.current;
@@ -733,15 +767,34 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       const slash = devicePath.lastIndexOf('/');
       const name = slash >= 0 ? devicePath.slice(slash + 1) : devicePath;
       const isApk = devicePath.toLowerCase().endsWith('.apk');
+      // Show the indeterminate "installing" strip while `pm install`
+      // runs (typically 5–30 s on real devices). Non-APK opens fire
+      // `am start VIEW` and return almost instantly, so we don't
+      // bother lighting up the strip for those.
+      if (isApk) {
+        if (clearXferTimerRef.current != null) {
+          window.clearTimeout(clearXferTimerRef.current);
+          clearXferTimerRef.current = null;
+        }
+        setXfer({ name, phase: 'installing', bytes: 0, total: null });
+      }
       const res = await fs.open(devicePath);
       if (res.ok) {
+        if (isApk) {
+          setXfer({ name, phase: 'done', bytes: 0, total: null });
+          scheduleXferFade(1500);
+        }
         showToast(isApk ? `Installed ${name}` : `Opened ${name} on device`);
       } else {
+        if (isApk) {
+          setXfer({ name, phase: 'error', bytes: 0, total: null });
+          scheduleXferFade(2500);
+        }
         console.error(`[Mirror] open failed for ${devicePath}:`, res.reason);
         showToast(isApk ? `Install failed for ${name}` : `Open failed for ${name}`);
       }
     },
-    [showToast],
+    [showToast, scheduleXferFade],
   );
   const uploadAndOpen = useCallback(
     async (file: File) => {
@@ -752,17 +805,32 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       // can pick it up without SELinux fights. The Files widget's
       // existing push pipeline does the same.
       const target = `/sdcard/Download/${file.name}`;
-      showToast(`Uploading ${file.name}…`);
+      if (clearXferTimerRef.current != null) {
+        window.clearTimeout(clearXferTimerRef.current);
+        clearXferTimerRef.current = null;
+      }
+      setXfer({ name: file.name, phase: 'uploading', bytes: 0, total: file.size });
       try {
-        await fs.write(target, file.stream(), { total: file.size });
+        await fs.write(target, file.stream(), {
+          total: file.size,
+          onProgress: (p: WriteProgress) => {
+            setXfer((cur) =>
+              cur && cur.name === file.name && cur.phase === 'uploading'
+                ? { ...cur, bytes: p.bytes, total: p.total }
+                : cur,
+            );
+          },
+        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Push failed';
+        setXfer({ name: file.name, phase: 'error', bytes: 0, total: null });
+        scheduleXferFade(2500);
         showToast(`Upload failed for ${file.name}: ${msg}`);
         return;
       }
       await openDevicePath(target);
     },
-    [openDevicePath, showToast],
+    [openDevicePath, showToast, scheduleXferFade],
   );
   const onMirrorDrop = useCallback(
     (e: ReactDragEvent<HTMLDivElement>) => {
@@ -934,6 +1002,8 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         <span style={{ flex: 1 }} />
       </div>
 
+      {xfer && <MirrorXferStrip xfer={xfer} />}
+
       <div
         className="mr-screen"
         tabIndex={0}
@@ -963,6 +1033,57 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The host-file-drop progress strip that paints below the Mirror's
+ * toolbar. Three visual variants:
+ *   - uploading → determinate bar driven by `bytes` / `total`
+ *   - installing → indeterminate slide (no signal from `pm install`)
+ *   - done / error → solid bar + checkmark / error icon
+ * Styling mirrors the Files widget's `.fx-xfer` pill but lives under
+ * `.mr-xfer` so the two widgets don't share global selectors.
+ */
+function MirrorXferStrip({ xfer }: { xfer: MirrorXfer }) {
+  const pct =
+    xfer.total != null && xfer.total > 0
+      ? Math.min(100, Math.round((xfer.bytes / xfer.total) * 100))
+      : null;
+  const label =
+    xfer.phase === 'uploading'
+      ? `Uploading · ${xfer.name}`
+      : xfer.phase === 'installing'
+        ? `Installing · ${xfer.name}`
+        : xfer.phase === 'error'
+          ? `Failed · ${xfer.name}`
+          : `Done · ${xfer.name}`;
+  return (
+    <div
+      className={`mr-xfer mr-xfer-${xfer.phase}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="mr-xfer-name">{label}</span>
+      <div className="mr-xfer-bar">
+        {xfer.phase === 'uploading' && pct != null ? (
+          <div style={{ width: `${pct}%` }} />
+        ) : xfer.phase === 'installing' ? (
+          <div className="mr-xfer-indeterminate" />
+        ) : (
+          <div style={{ width: '100%' }} />
+        )}
+      </div>
+      <span className="mr-xfer-pct">
+        {xfer.phase === 'uploading' && pct != null
+          ? `${pct}%`
+          : xfer.phase === 'done'
+            ? '✓'
+            : xfer.phase === 'error'
+              ? '!'
+              : '…'}
+      </span>
     </div>
   );
 }
