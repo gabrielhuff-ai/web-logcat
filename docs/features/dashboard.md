@@ -19,10 +19,15 @@ itself, and a corner grip — and they share every pixel of available space.
 
 ## Rearranging
 
-- **Swap by dragging the header.** Grab a tile by its header and drop it
-  on another tile — they swap positions in the tree without resizing.
-  Drop near an edge to split that side instead of swapping.
-- **Hover-hold to commit mid-drag.** While dragging, *pause* the cursor
+- **Swap by dragging the header.** Grab a tile by its header — the
+  tile itself follows the cursor with the same finger-on-tile grip
+  you established on pointerdown — and drop it on another tile. They
+  swap positions in the tree without resizing. Drop near an edge to
+  split that side instead of swapping. The layout doesn't mutate
+  until the drop fires (or the [hover-hold](#hover-hold-to-commit)
+  threshold lands an early commit) — the cursor-follow is purely a
+  visual preview.
+- **Hover-hold to commit.** While dragging, *pause* the cursor
   over a valid drop zone for ~0.9 s. The drop overlay blinks once and
   the swap / restructure applies immediately, with your pointer still
   held — chain multiple edits in a single gesture. The dashboard also

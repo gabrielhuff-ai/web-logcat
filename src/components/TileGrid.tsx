@@ -110,6 +110,15 @@ interface SwapDrag {
    *  quick blink on the drop overlay before the swap/restructure
    *  actually applies. */
   committing: boolean;
+  /**
+   * Offset from the dragged tile's top-left to the pointer position
+   * at drag start, in grid-local coordinates. The source tile is
+   * rendered at `(pointerGridX - grabOffsetX, pointerGridY - grabOffsetY)`
+   * while the drag is active so it visually follows the cursor with
+   * the same finger-on-tile grip the user established on pointerdown.
+   */
+  grabOffsetX: number;
+  grabOffsetY: number;
 }
 
 type DragState = ResizeDrag | SwapDrag;
@@ -550,6 +559,17 @@ export function TileGrid({
         (l) => (l.focusId === id ? l : { ...l, focusId: id }),
         { transient: true },
       );
+      // Compute the pointer's offset within the dragged tile so the
+      // visual tile follows the cursor with the same finger-on-tile
+      // grip throughout the drag. Falls back to (0, 0) if we can't
+      // resolve the tile element (shouldn't happen — onMoveStart only
+      // fires on the tile-head's pointerdown).
+      const tileEl = (e.currentTarget as HTMLElement).closest<HTMLElement>(
+        '[data-tile-id]',
+      );
+      const tileRect = tileEl?.getBoundingClientRect();
+      const grabOffsetX = tileRect ? e.clientX - tileRect.left : 0;
+      const grabOffsetY = tileRect ? e.clientY - tileRect.top : 0;
       setDrag({
         kind: 'swap',
         fromId: id,
@@ -561,6 +581,8 @@ export function TileGrid({
         hoverEdge: null,
         active: false,
         committing: false,
+        grabOffsetX,
+        grabOffsetY,
       });
     },
     [maximized, applyLayout],
@@ -913,7 +935,7 @@ export function TileGrid({
             // non-maximised `width/height` would leave width/height
             // unanimated, which made the bottom-right edge snap to the
             // corner instead of glide there.
-            const style: CSSProperties = isMax
+            let style: CSSProperties = isMax
               ? {
                   position: 'absolute',
                   left: 0,
@@ -929,6 +951,25 @@ export function TileGrid({
                   width: rect.w,
                   height: rect.h,
                 };
+            // While being dragged, the source tile follows the cursor
+            // (in grid-local coordinates) so the user is moving the
+            // actual tile rather than a name-only ghost. Layout-wise
+            // the tile is still at `rect.x/y` until a commit fires; the
+            // override here is purely the visual representation. The
+            // `.tile.dragging` CSS class neutralises the
+            // left/top/width/height transition so the visual tracks
+            // pointermove without lag.
+            if (isSource && swapDrag && swapDrag.active && !isMax) {
+              const gridRect = gridRef.current?.getBoundingClientRect();
+              const gridLeft = gridRect?.left ?? 0;
+              const gridTop = gridRect?.top ?? 0;
+              style = {
+                ...style,
+                left: swapDrag.curX - gridLeft - swapDrag.grabOffsetX,
+                top: swapDrag.curY - gridTop - swapDrag.grabOffsetY,
+                zIndex: 50,
+              };
+            }
             return (
               <Tile
                 key={id}
@@ -987,13 +1028,8 @@ export function TileGrid({
           );
         })()}
 
-      {swapDrag && layout.tiles[swapDrag.fromId] && (
-        <SwapGhost
-          tileKind={layout.tiles[swapDrag.fromId].kind}
-          x={swapDrag.curX}
-          y={swapDrag.curY}
-        />
-      )}
+      {/* The floating ghost is gone — the dragged tile itself follows
+          the cursor now (see the source-tile `style` override above). */}
     </div>
   );
 }
@@ -1094,23 +1130,9 @@ function DropOverlay({ rect, edge, committing }: DropOverlayProps) {
   );
 }
 
-interface SwapGhostProps {
-  tileKind: WidgetKind;
-  x: number;
-  y: number;
-}
-
-function SwapGhost({ tileKind, x, y }: SwapGhostProps) {
-  const def = WIDGETS[tileKind];
-  const Icon = def.icon;
-  return (
-    <div
-      className="dash-swap-ghost"
-      style={{ left: x, top: y }}
-      aria-hidden
-    >
-      <Icon size={12} />
-      <span>{def.name}</span>
-    </div>
-  );
-}
+// `<SwapGhost/>` used to render a small floating chip next to the
+// cursor while a swap drag was in flight. It was deleted when the
+// dragged tile itself started following the cursor — the full-fidelity
+// preview reads as "I'm holding this tile" without needing a separate
+// label. The `.dash-swap-ghost` CSS rules are intentionally kept (for
+// now) in case the chip needs to come back as a perf-mode fallback.
