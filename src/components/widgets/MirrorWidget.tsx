@@ -90,6 +90,15 @@ const MOTION_MOVE = AndroidMotionEventAction.Move;
 const POWER_MODE_OFF = 0;
 const POWER_MODE_NORMAL = 2;
 
+// DataTransfer sniffers — declared at module scope so the drag/drop
+// useCallbacks below don't have to list them in their deps.
+const isDevicePathDrag = (e: ReactDragEvent<HTMLElement>): boolean =>
+  e.dataTransfer.types.includes('application/x-weblogcat-device-path');
+const isHostFilesDrag = (e: ReactDragEvent<HTMLElement>): boolean =>
+  e.dataTransfer.types.includes('Files');
+const isOpenableDrag = (e: ReactDragEvent<HTMLElement>): boolean =>
+  isDevicePathDrag(e) || isHostFilesDrag(e);
+
 export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   const { device, adb, usingFake } = useAdb();
   const { showToast, performanceModeOn } = useDashboardChrome();
@@ -694,18 +703,20 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   }, []);
 
   // ---- Drag-and-drop "open on device" ----------------------------------
-  // A file dragged out of the Files widget carries an
-  // `application/x-weblogcat-device-path` MIME (set in FilesWidget's
-  // `onRowDragStart`) so we can distinguish it from a host-file drop
-  // (which would land here as the `Files` MIME and is not supported
-  // for Mirror today). On drop we mark the drag consumed so the Files
-  // widget skips its default Pull-to-host download, then route the
-  // path through `SyncFs.open` — APKs install via `pm install`, other
-  // files fire an `am start VIEW` intent on the device.
-  const isDevicePathDrag = (e: ReactDragEvent<HTMLElement>): boolean =>
-    e.dataTransfer.types.includes('application/x-weblogcat-device-path');
+  // Two drag sources land here:
+  //   1. A file row from the Files widget — carries the
+  //      `application/x-weblogcat-device-path` MIME (set in
+  //      FilesWidget's `onRowDragStart`). The path already lives on
+  //      the device; we just call `SyncFs.open`.
+  //   2. A file from the host OS (Finder / Explorer / browser
+  //      download) — carries the standard `Files` MIME. We push it to
+  //      `/sdcard/Download/<name>` first, then call `open` on the
+  //      resulting device path. APKs install via `pm install`; other
+  //      files fire an `am start VIEW` intent.
+  // In the device-path case we also mark the drag consumed so the
+  // Files widget skips its default Pull-to-host download.
   const onMirrorDragOver = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
-    if (!isDevicePathDrag(e)) return;
+    if (!isOpenableDrag(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     setDropping(true);
@@ -715,37 +726,74 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     // crossed into a descendant.
     if (e.currentTarget === e.target) setDropping(false);
   }, []);
+  const openDevicePath = useCallback(
+    async (devicePath: string) => {
+      const fs = fsRef.current;
+      if (!fs) return;
+      const slash = devicePath.lastIndexOf('/');
+      const name = slash >= 0 ? devicePath.slice(slash + 1) : devicePath;
+      const isApk = devicePath.toLowerCase().endsWith('.apk');
+      const res = await fs.open(devicePath);
+      if (res.ok) {
+        showToast(isApk ? `Installed ${name}` : `Opened ${name} on device`);
+      } else {
+        console.error(`[Mirror] open failed for ${devicePath}:`, res.reason);
+        showToast(isApk ? `Install failed for ${name}` : `Open failed for ${name}`);
+      }
+    },
+    [showToast],
+  );
+  const uploadAndOpen = useCallback(
+    async (file: File) => {
+      const fs = fsRef.current;
+      if (!fs) return;
+      // Stage in `/sdcard/Download` — world-readable on every Android
+      // version since 4.0, so both `pm install` and `am start VIEW`
+      // can pick it up without SELinux fights. The Files widget's
+      // existing push pipeline does the same.
+      const target = `/sdcard/Download/${file.name}`;
+      showToast(`Uploading ${file.name}…`);
+      try {
+        await fs.write(target, file.stream(), { total: file.size });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Push failed';
+        showToast(`Upload failed for ${file.name}: ${msg}`);
+        return;
+      }
+      await openDevicePath(target);
+    },
+    [openDevicePath, showToast],
+  );
   const onMirrorDrop = useCallback(
     (e: ReactDragEvent<HTMLDivElement>) => {
-      if (!isDevicePathDrag(e)) return;
+      if (!isOpenableDrag(e)) return;
       e.preventDefault();
       setDropping(false);
-      const path = e.dataTransfer.getData('application/x-weblogcat-device-path');
-      if (!path) return;
-      markInternalDropConsumed();
       if (usingFake) {
+        markInternalDropConsumed();
         showToast('Simulated mode — open on device disabled');
         return;
       }
-      const slash = path.lastIndexOf('/');
-      const name = slash >= 0 ? path.slice(slash + 1) : path;
-      const isApk = path.toLowerCase().endsWith('.apk');
+      // In-app device-path drag (from Files): just open.
+      if (isDevicePathDrag(e)) {
+        const path = e.dataTransfer.getData('application/x-weblogcat-device-path');
+        if (!path) return;
+        markInternalDropConsumed();
+        void openDevicePath(path);
+        return;
+      }
+      // Host-file drag (from Finder / Explorer / browser): push to
+      // device, then open. Serial uploads — concurrent pushes against
+      // a single sync socket race for the writer lock.
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
       void (async () => {
-        const fs = fsRef.current;
-        if (!fs) return;
-        const res = await fs.open(path);
-        if (res.ok) {
-          showToast(isApk ? `Installed ${name}` : `Opened ${name} on device`);
-        } else {
-          // pm install / am start error messages can be long Java
-          // stack traces — log the full reason but keep the toast
-          // short. Matches the Files widget's openOnDevice contract.
-          console.error(`[Mirror] open failed for ${path}:`, res.reason);
-          showToast(isApk ? `Install failed for ${name}` : `Open failed for ${name}`);
+        for (const f of files) {
+          await uploadAndOpen(f);
         }
       })();
     },
-    [usingFake, showToast],
+    [usingFake, showToast, openDevicePath, uploadAndOpen],
   );
 
   // ---- Render ---------------------------------------------------------

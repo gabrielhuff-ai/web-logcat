@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  completeShellInputReal,
   execShellSim,
   initialShellSimState,
   stripAnsi,
@@ -197,6 +198,57 @@ describe('execShellSim — control commands', () => {
     const before: ShellSimState = { cwd: '/system' };
     const r = execShellSim('echo ping', before);
     expect(r.state).toEqual(before);
+  });
+});
+
+describe('completeShellInputReal', () => {
+  // Fake "device" — one directory containing two files and one
+  // subdirectory. Mirrors the shape `ls -1 -p -A` produces on a real
+  // adb shell.
+  const fakeListDir = async (
+    dirAbs: string,
+  ): Promise<{ entries: string[]; dirs: Set<string> } | null> => {
+    if (dirAbs === '/sdcard') {
+      return {
+        entries: ['Download', 'DCIM', 'invoice.pdf'],
+        dirs: new Set(['Download', 'DCIM']),
+      };
+    }
+    if (dirAbs === '/sdcard/Download') {
+      return { entries: ['report.txt'], dirs: new Set() };
+    }
+    return null;
+  };
+
+  it('extends a single match to the full name + trailing slash for a directory', async () => {
+    const r = await completeShellInputReal('cd Down', '/sdcard', fakeListDir);
+    expect(r.input).toBe('cd Download/');
+    expect(r.options).toEqual([]);
+  });
+
+  it('extends a single match with a trailing space for a regular file', async () => {
+    const r = await completeShellInputReal('cat inv', '/sdcard', fakeListDir);
+    expect(r.input).toBe('cat invoice.pdf ');
+    expect(r.options).toEqual([]);
+  });
+
+  it('extends to the longest common prefix when ambiguous', async () => {
+    const r = await completeShellInputReal('ls D', '/sdcard', fakeListDir);
+    // LCP of {Download, DCIM} is 'D' — same as the typed prefix, so
+    // the input stays put but the options list surfaces both.
+    expect(r.input).toBe('ls D');
+    expect(r.options.sort()).toEqual(['DCIM', 'Download']);
+  });
+
+  it('resolves an absolute path component before listing', async () => {
+    const r = await completeShellInputReal('cat /sdcard/Down', '/', fakeListDir);
+    expect(r.input).toBe('cat /sdcard/Download/');
+  });
+
+  it('returns a no-op result when listDir says null (perm denied / not a dir)', async () => {
+    const r = await completeShellInputReal('ls /no', '/', fakeListDir);
+    expect(r.input).toBe('ls /no');
+    expect(r.options).toEqual([]);
   });
 });
 

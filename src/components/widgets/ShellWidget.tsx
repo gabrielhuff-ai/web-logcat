@@ -38,6 +38,7 @@ import { useDashboardChrome } from '../../lib/dashboardChrome';
 import { useTileSettings } from '../../lib/tileSettings';
 import {
   completeShellInput,
+  completeShellInputReal,
   execShellSim,
   initialShellSimState,
   stripAnsi,
@@ -117,6 +118,10 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ShellChannel | null>(null);
   const channelKilledRef = useRef(false);
+  // Stays in sync with `settings.homeDir` (see the effect lower down).
+  // Used by the channel-open effect's `cd` call so a homeDir change
+  // doesn't have to tear down + reopen the channel.
+  const homeDirRef = useRef(settings.homeDir);
 
   // `appendLines` is a stable callback so it can live in the long-lived
   // shell-channel effect's dependency array without re-opening the
@@ -264,7 +269,20 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
     })();
 
     void handle.then((ch) => {
-      if (!cancelled) channelRef.current = ch;
+      if (!cancelled) {
+        channelRef.current = ch;
+        // Send the initial `cd <homeDir>` once the channel is up so the
+        // remote shell starts where the user wants it — and append the
+        // CWD marker so the prompt updates from the device's actual
+        // post-cd `pwd`. Without the marker the prompt sat at
+        // `homeDir` even when the device refused the cd (homeDir
+        // doesn't exist, perms denied), leaving the user typing into a
+        // prompt that didn't match reality.
+        if (ch) {
+          const dir = homeDirRef.current;
+          void ch.write(`cd ${dir}${CWD_MARKER_SUFFIX}\n`);
+        }
+      }
     });
 
     return () => {
@@ -376,11 +394,59 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
             };
             setHistory((prev) => prev.concat([promptLine, optionsLine]));
           }
-        } else if (channelRef.current) {
-          // No PTY on the real channel — forwarding `\t` to a non-PTY
-          // bash is a no-op, but rooted ROMs running mksh do honour it
-          // for in-band completion. Cheap to keep.
-          void channelRef.current.write('\t');
+        } else if (adb) {
+          // Real device — there is no PTY on the shell-v2 channel, so
+          // we can't ask the remote shell for completion. Instead we
+          // run a side-channel `ls -1 -p -A <dir>` via a separate
+          // shell subprocess, parse the listing client-side, and
+          // apply the same extend-or-list logic as the simulator
+          // path. Async — input updates land a tick or two after the
+          // user pressed Tab, which still feels responsive over USB.
+          const sp = adb.subprocess.shellProtocol;
+          if (!sp) return;
+          void (async () => {
+            const result = await completeShellInputReal(
+              input,
+              cwd,
+              async (dirAbs) => {
+                try {
+                  const out = await sp.spawnWaitText([
+                    'ls',
+                    '-1',
+                    '-p',
+                    '-A',
+                    dirAbs,
+                  ]);
+                  if (out.exitCode !== 0) return null;
+                  const entries: string[] = [];
+                  const dirs = new Set<string>();
+                  for (const raw of (out.stdout ?? '').split('\n')) {
+                    const line = stripAnsi(raw).trim();
+                    if (!line) continue;
+                    if (line.endsWith('/')) {
+                      const name = line.slice(0, -1);
+                      entries.push(name);
+                      dirs.add(name);
+                    } else {
+                      entries.push(line);
+                    }
+                  }
+                  return { entries, dirs };
+                } catch {
+                  return null;
+                }
+              },
+            );
+            if (result.input !== input) setInput(result.input);
+            if (result.options.length > 1) {
+              const promptLine: ShellLine = { kind: 'prompt', cwd, text: input };
+              const optionsLine: ShellLine = {
+                kind: 'out',
+                text: result.options.join('  '),
+              };
+              setHistory((prev) => prev.concat([promptLine, optionsLine]));
+            }
+          })();
         }
         return;
       }
@@ -410,7 +476,7 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
         return;
       }
     },
-    [cmdHistory, cwd, histIdx, input, simState, usingFake],
+    [adb, cmdHistory, cwd, histIdx, input, simState, usingFake],
   );
 
   // ---- Click anywhere in the body grabs focus ----------------------------
@@ -419,33 +485,40 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
   }, []);
 
   // ---- Drag-from-Files handoff ------------------------------------------
-  // Dropping a file row from the Files widget onto the shell input pastes
-  // its device-side path at the cursor. We handle the drop explicitly
-  // (rather than relying on the browser's default text-drop behaviour)
-  // so we can also mark the drag as "consumed in-app", which suppresses
-  // the Files widget's default Pull-to-host download on `dragend`.
-  const onInputDragOver = useCallback((e: React.DragEvent<HTMLInputElement>) => {
-    if (
-      e.dataTransfer.types.includes('application/x-weblogcat-device-path') ||
-      e.dataTransfer.types.includes('text/plain')
-    ) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-    }
+  // Dropping a file row from the Files widget anywhere inside the
+  // terminal area pastes its device-side path at the current caret of
+  // the prompt input. The drop target is the whole `.sh-widget` (not
+  // just the input) so the user doesn't have to aim at the prompt
+  // line, which is a small slice of the tile. We also mark the drag
+  // as "consumed in-app" so the Files widget skips its default
+  // Pull-to-host download on `dragend`.
+  const isDevicePathOrTextDrag = (e: React.DragEvent<HTMLElement>): boolean =>
+    e.dataTransfer.types.includes('application/x-weblogcat-device-path') ||
+    e.dataTransfer.types.includes('text/plain');
+  const onShellDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isDevicePathOrTextDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
   }, []);
-  const onInputDrop = useCallback((e: React.DragEvent<HTMLInputElement>) => {
+  const onShellDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isDevicePathOrTextDrag(e)) return;
+    e.preventDefault();
     const path =
       e.dataTransfer.getData('application/x-weblogcat-device-path') ||
       e.dataTransfer.getData('text/plain');
     if (!path) return;
-    e.preventDefault();
     markInternalDropConsumed();
-    const el = e.currentTarget;
-    const start = el.selectionStart ?? input.length;
-    const end = el.selectionEnd ?? input.length;
+    const el = inputRef.current;
+    // When the drop didn't land on the input, the caret position
+    // isn't meaningful — append at end. Otherwise insert at the
+    // current selection range so the user can wedge the path
+    // between existing characters.
+    const dropOnInput = el === e.target || el?.contains(e.target as Node);
+    const start = dropOnInput ? el?.selectionStart ?? input.length : input.length;
+    const end = dropOnInput ? el?.selectionEnd ?? input.length : input.length;
     const next = input.slice(0, start) + path + input.slice(end);
     setInput(next);
-    // Restore the caret just after the inserted path.
+    // Restore focus + caret just after the inserted path.
     requestAnimationFrame(() => {
       const target = inputRef.current;
       if (!target) return;
@@ -464,22 +537,27 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
   // input — but we don't currently have any global shell shortcuts.
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // ---- Send `cd <homeDir>` on real-channel spawn -----------------------
+  // ---- Re-cd when the user changes the home dir mid-session ------------
+  // The initial cd (right after spawn) lives in the channel-open
+  // effect so it can't race the channel handle's async resolution.
+  // This effect only fires on *subsequent* `settings.homeDir` edits,
+  // when `channelRef.current` is already populated. We still append
+  // the CWD marker so the prompt reflects the device's real post-cd
+  // pwd (the new homeDir might not exist).
+  //
   // The legacy `weblogcat:shell:<serial>:<tileId>:cwd` key is migrated
-  // into `settings.homeDir` by the registered migration. On real
-  // devices we send a `cd <homeDir>` once the channel is up so the
-  // remote shell starts where the user wants it.
-  const homeDirRef = useRef(settings.homeDir);
+  // into `settings.homeDir` by the registered migration.
   useEffect(() => {
     homeDirRef.current = settings.homeDir;
   }, [settings.homeDir]);
+  const homeDirInitialRef = useRef(settings.homeDir);
   useEffect(() => {
     if (usingFake || !adb) return;
+    if (settings.homeDir === homeDirInitialRef.current) return;
+    homeDirInitialRef.current = settings.homeDir;
     const ch = channelRef.current;
     if (!ch) return;
-    void ch.write(`cd ${homeDirRef.current}\n`);
-    setCwd(homeDirRef.current);
-    // Re-send when the user changes the home dir mid-session.
+    void ch.write(`cd ${settings.homeDir}${CWD_MARKER_SUFFIX}\n`);
   }, [adb, usingFake, settings.homeDir]);
 
   const widgetStyle: CSSProperties = {
@@ -492,6 +570,8 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
       ref={rootRef}
       tabIndex={-1}
       onClick={onWidgetClick}
+      onDragOver={onShellDragOver}
+      onDrop={onShellDrop}
       style={widgetStyle}
     >
       <div className="sh-toolbar widget-bar">
@@ -572,8 +652,6 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            onDragOver={onInputDragOver}
-            onDrop={onInputDrop}
             spellCheck={false}
             autoComplete="off"
             aria-label="Shell input"
