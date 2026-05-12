@@ -385,12 +385,22 @@
     height 220ms var(--ease-out),
     box-shadow 160ms;
 }
+/* The dragged tile follows the cursor (see the `style` override in
+ * `<TileGrid/>`). Kill the `left/top/width/height` transition so the
+ * tile tracks pointermove without lag — the transition is restored on
+ * drop so the tile glides back to its layout position smoothly. The
+ * z-index lift floats the dragged tile above its siblings, and the
+ * raised box-shadow reads as "I'm picked up". */
 .tile.dragging {
-  opacity: 0.55;
+  z-index: 50 !important;
+  transition: box-shadow 160ms;
+  cursor: grabbing;
   box-shadow:
-    0 1px 0 oklch(1 0 0 / 0.04) inset,
-    0 4px 24px oklch(0 0 0 / 0.25);
+    0 1px 0 oklch(1 0 0 / 0.08) inset,
+    0 18px 48px oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(from var(--accent) l c h / 0.4);
 }
+.tile.dragging .tile-head { cursor: grabbing; }
 .tile.drop-target {
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.06) inset,
