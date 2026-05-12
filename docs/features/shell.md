@@ -32,11 +32,26 @@ the per-widget settings modal (the cog in the header).
 
 ## Dragging in a path
 
-Drag a file row from the [Files](./files) widget onto the Shell
-prompt to paste its device-side path at the caret. Useful for piping
-a path into `cat`, `ls`, `md5sum`, etc. without retyping. The file
-itself stays on the device — Files only triggers a Pull-to-laptop
-download when the drop lands outside the app.
+Drag a file row from the [Files](./files) widget anywhere into the
+terminal area to paste its device-side path at the prompt caret.
+Useful for piping a path into `cat`, `ls`, `md5sum`, etc. without
+retyping. The file itself stays on the device — Files only triggers a
+Pull-to-laptop download when the drop lands outside the app.
+
+## Tab completion
+
+Press `Tab` to complete the path component you're typing against the
+device's filesystem. On the simulator, completion runs against the
+in-memory fake FS; on a real device, the widget side-channels a
+`ls -1 -p -A <dir>` over a separate ADB shell subprocess, then:
+
+- A single match extends the word in place (with a trailing `/` for
+  directories so you can keep tabbing into the subtree).
+- Multiple matches extend to the longest common prefix and print the
+  candidates inline.
+
+Completion runs asynchronously over USB / WDP, so there's a small
+delay (typically <100 ms) before the input updates.
 
 ## Built-ins
 

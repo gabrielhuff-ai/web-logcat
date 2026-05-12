@@ -350,6 +350,71 @@ export function completeShellInput(
   };
 }
 
+/**
+ * Real-device variant of `completeShellInput`. The simulator path
+ * walks an in-memory FS map; the real path takes a `listDir` callback
+ * that asynchronously lists the requested directory on the device
+ * (typically via `adb shell ls -1 -p -A <dir>`).
+ *
+ * The async callback returns `entries` (all child names without the
+ * trailing `/` ls puts on directories) and `dirs` (the subset that
+ * are directories) so the completion knows whether to suffix with
+ * `/` (continue into the subtree) or ` ` (commit the word). `null`
+ * signals a listing failure (permission denied, not a directory) —
+ * we surface that as a no-op completion, same as the simulator's
+ * unknown-dir branch.
+ */
+export async function completeShellInputReal(
+  input: string,
+  cwd: string,
+  listDir: (
+    dirAbs: string,
+  ) => Promise<{ entries: string[]; dirs: Set<string> } | null>,
+): Promise<CompleteResult> {
+  const m = /^(.*\s)?(\S*)$/.exec(input);
+  if (!m) return { input, options: [] };
+  const prefixBeforeWord = m[1] ?? '';
+  const word = m[2] ?? '';
+
+  const lastSlash = word.lastIndexOf('/');
+  const dirPart = lastSlash >= 0 ? word.slice(0, lastSlash + 1) : '';
+  const namePrefix = lastSlash >= 0 ? word.slice(lastSlash + 1) : word;
+
+  const dirAbs = dirPart
+    ? resolvePath(cwd, dirPart === '/' ? '/' : dirPart.replace(/\/$/, ''))
+    : cwd;
+
+  const listing = await listDir(dirAbs);
+  if (!listing) return { input, options: [] };
+  const { entries, dirs } = listing;
+
+  const showHidden = namePrefix.startsWith('.');
+  const matches = entries.filter((e) => {
+    if (!showHidden && e.startsWith('.')) return false;
+    return e.startsWith(namePrefix);
+  });
+
+  if (matches.length === 0) return { input, options: [] };
+
+  if (matches.length === 1) {
+    const completion = matches[0];
+    const tail = dirs.has(completion) ? '/' : ' ';
+    return {
+      input: prefixBeforeWord + dirPart + completion + tail,
+      options: [],
+    };
+  }
+
+  const lcp = longestCommonPrefix(matches);
+  return {
+    input:
+      lcp.length > namePrefix.length
+        ? prefixBeforeWord + dirPart + lcp
+        : input,
+    options: matches,
+  };
+}
+
 function longestCommonPrefix(strs: string[]): string {
   if (strs.length === 0) return '';
   let prefix = strs[0];

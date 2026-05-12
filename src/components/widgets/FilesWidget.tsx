@@ -195,11 +195,20 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
           list
             // Hide `.` / `..` (the synthetic entries Linux readdir
             // returns for self / parent — they're not useful in a
-            // tree view) and keep only actual directories. Sort
-            // alphabetically so the tree is browsable instead of
-            // appearing in inode order.
+            // tree view). Include both real directories AND symlinks
+            // (`type === 'link'`): the most prominent example is
+            // `/sdcard → /storage/self/primary` and dropping it from
+            // the tree leaves users unable to navigate the device
+            // through the tree pane at all. The click handler in
+            // `navigate` / `onEntryActivate` already resolves links
+            // by trying to list them; this just makes them visible.
+            // Sort alphabetically so the tree reads as a sorted
+            // listing rather than inode order.
             .filter(
-              (e) => e.type === 'dir' && e.name !== '.' && e.name !== '..',
+              (e) =>
+                (e.type === 'dir' || e.type === 'link') &&
+                e.name !== '.' &&
+                e.name !== '..',
             )
             .sort((a, b) => a.name.localeCompare(b.name)),
         );

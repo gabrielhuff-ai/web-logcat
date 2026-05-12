@@ -30,8 +30,16 @@ native `scrcpy`, but indistinguishable for non-game use.
 
 ## Open files on device
 
-Drag a file row from the [Files](./files) widget and drop it onto the
-Mirror surface to open it on the device:
+Drop a file onto the Mirror surface to open it on the device. Two
+sources are accepted:
+
+- **Files widget rows.** Already live on the device — the drop just
+  triggers the open.
+- **Host OS files (Finder / Explorer / browser downloads).** Pushed
+  to `/sdcard/Download/<name>` first via the ADB sync protocol, then
+  opened.
+
+In either case the open mechanism is the same:
 
 - `.apk` files are installed via `pm install -r` (staged through
   `/data/local/tmp` so SELinux is happy on Android 14+).
@@ -39,9 +47,7 @@ Mirror surface to open it on the device:
   type, letting the device pick a viewer (PDF, image, video, …).
 
 A "Drop to open on device" overlay appears while the drag is over the
-widget. A toast confirms success or surfaces the failure reason. This
-matches the right-click "Open on device" action in the Files widget,
-but without leaving the mirror.
+widget. A toast confirms success or surfaces the failure reason.
 
 ## Recording
 
