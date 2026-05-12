@@ -633,6 +633,13 @@ export function TileGrid({
      *  matches the "header = grab handle" UX users carry over from
      *  IDEs. */
     const EDGE = 0.25;
+    // The source tile floats above its siblings while being dragged
+    // (`z-index: 50` so the cursor-follow preview reads cleanly), so
+    // a naive `elementsFromPoint` returns the source first and every
+    // hover test resolves to "I'm hovering myself → no drop". Skip
+    // any element that belongs to the source tile when picking a
+    // hit target.
+    const sourceTileId = drag.kind === 'swap' ? drag.fromId : null;
     const hitTest = (
       x: number,
       y: number,
@@ -644,10 +651,16 @@ export function TileGrid({
       let onHead = false;
       for (const el of els) {
         if (!grid.contains(el)) continue;
+        const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
+        // Walk past the source tile — it's a stacked-on-top decoy
+        // during the drag, not a drop target. Skip the head check
+        // too so we don't latch `onHead` from the source's header.
+        if (candidate && candidate.dataset.tileId === sourceTileId) {
+          continue;
+        }
         if (!tileEl && (el as HTMLElement).closest('.tile-head')) {
           onHead = true;
         }
-        const candidate = (el as HTMLElement).closest('[data-tile-id]') as HTMLElement | null;
         if (candidate) {
           tileEl = candidate;
           break;
