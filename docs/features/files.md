@@ -35,6 +35,23 @@ into the focused directory. The widget queues them and streams them up,
 showing per-file progress. Existing files are overwritten only if you
 confirm.
 
+## Drag onto other widgets
+
+Files rows are draggable onto two other widgets in the dashboard:
+
+- **Shell.** Drop a row onto a Shell prompt to paste the file's
+  device-side path at the cursor — handy for piping a path into any
+  command without retyping it. The file is *not* pulled to your
+  laptop in this case.
+- **Screen Mirror.** Drop a row onto the Mirror surface to open the
+  file on the device (APK install or `am start VIEW`). See the
+  [Screen Mirror](./screen-mirror#open-files-on-device) page for the
+  full handoff.
+
+In both cases the in-app drop suppresses the default Pull-to-laptop
+behaviour — only OS-level drops (desktop, Finder, Explorer) trigger
+the download.
+
 ## Per-widget settings
 
 - **Starting path.** Where the widget mounts.

@@ -42,6 +42,10 @@ import {
   type WriteProgress,
 } from '../../lib/sync';
 import { FILES_DEFAULTS, type FilesSettings } from './files/filesSettings';
+import {
+  resetInternalDropConsumed,
+  takeInternalDropConsumed,
+} from '../../lib/dragHandoff';
 
 export interface FilesWidgetProps {
   /** Stable id of the host tile — used to namespace per-instance state. */
@@ -577,11 +581,20 @@ export function FilesWidget({ tileId }: FilesWidgetProps) {
   const onRowDragStart = (e: ReactDragEvent, name: string) => {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/plain', joinPath(path, name));
+    // Tag the drag so in-app drop targets (Shell prompt, Mirror) can
+    // recognise it as a device-side file reference rather than a
+    // generic text drop.
+    e.dataTransfer.setData('application/x-weblogcat-device-path', joinPath(path, name));
+    resetInternalDropConsumed();
     // Defer the actual pull until dragend so the user has feedback if
     // they cancel the drag.
   };
   const onRowDragEnd = (e: ReactDragEvent, name: string) => {
     if (e.dataTransfer.dropEffect === 'none') return;
+    // If an in-app target (Shell input, Mirror surface) already
+    // consumed this drag, the user's intent was the in-app action —
+    // skip the Pull-to-host download.
+    if (takeInternalDropConsumed()) return;
     void pullFile(name);
   };
 

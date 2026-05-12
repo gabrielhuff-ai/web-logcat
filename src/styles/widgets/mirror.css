@@ -9,6 +9,27 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+/* Dropping a file row from the Files widget onto the mirror opens it
+ * on-device (APK install or `am start VIEW`). The overlay mirrors the
+ * Files widget's "Drop to push" affordance so the dashboard reads
+ * consistently when the same gesture is in flight. */
+.mr-widget.mr-dropping::after {
+  content: 'Drop to open on device';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(from var(--accent) l c h / 0.16);
+  border: 2px dashed oklch(from var(--accent) l c h / 0.6);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+  letter-spacing: 0.04em;
 }
 .mr-toolbar {
   display: flex;

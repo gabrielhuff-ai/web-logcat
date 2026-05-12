@@ -44,9 +44,24 @@ import {
   type ShellSimState,
 } from '../../lib/shellSim';
 import { SHELL_DEFAULTS, type ShellSettings } from './shell/shellSettings';
+import { markInternalDropConsumed } from '../../lib/dragHandoff';
 
 /** Host segment shown in the prompt — matches the design reference. */
 const SHELL_HOST = 'shiba';
+
+/**
+ * Sentinel pattern used to read the device's post-command cwd. We
+ * append `printf '__WLC_CWD_%s__\n' "$(pwd)"` after any `cd` the user
+ * runs and parse the marker out of stdout — that way the prompt only
+ * updates when `cd` actually succeeded on-device (failure leaves
+ * `pwd` at the previous directory). Without this we used to update
+ * the prompt optimistically based on the simulator's path resolver,
+ * which happily resolves non-existent paths.
+ */
+const CWD_MARKER_RE = /^__WLC_CWD_(.+)__$/;
+const CWD_MARKER_SUFFIX = `; printf '__WLC_CWD_%s__\\n' "$(pwd)"`;
+/** True for plain `cd` / `cd <target>` invocations (no pipes / chains). */
+const SIMPLE_CD_RE = /^cd(\s+\S.*)?$/;
 
 /** One row in the scrollback. */
 type ShellLine =
@@ -176,7 +191,15 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
             const out: string[] = [];
             for (const raw of lines) {
               if (raw === '' && lines.length === 1) continue;
-              out.push(stripAnsi(raw));
+              const cleaned = stripAnsi(raw);
+              const m = CWD_MARKER_RE.exec(cleaned);
+              if (m) {
+                // Eat the marker line and update the prompt cwd to
+                // whatever the device reports for `pwd` after the cd.
+                setCwd(m[1]);
+                continue;
+              }
+              out.push(cleaned);
             }
             if (out.length) appendLines(out, 'out');
           },
@@ -297,17 +320,17 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
       setHistIdx(-1);
       setInput('');
 
-      // Track cwd client-side: if the user typed `cd <target>`, run the
-      // simulator's path resolver to keep the prompt in sync. Best
-      // effort — anything more elaborate would require parsing the
-      // device's PS1, which is out of scope.
+      // Track cwd client-side: if the user typed a plain `cd <target>`,
+      // append a printf-pwd sentinel so the prompt updates from the
+      // device's *actual* post-cd `pwd` (not an optimistic local path
+      // resolution). The sentinel line is intercepted in the stdout
+      // reader above. For pipes / chains / other commands we don't
+      // bother — keeping the prompt at the old cwd is correct in those
+      // cases anyway.
       const trimmed = cmd.trim();
-      if (trimmed.startsWith('cd ') || trimmed === 'cd') {
-        const sim = execShellSim(trimmed, { cwd });
-        setCwd(sim.state.cwd);
-      }
-
-      void channelRef.current?.write(cmd + '\n');
+      const isSimpleCd = SIMPLE_CD_RE.test(trimmed);
+      const wireCmd = isSimpleCd ? trimmed + CWD_MARKER_SUFFIX : cmd;
+      void channelRef.current?.write(wireCmd + '\n');
     },
     [adb, cwd, input, simState, usingFake],
   );
@@ -394,6 +417,47 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
   const onWidgetClick = useCallback(() => {
     inputRef.current?.focus();
   }, []);
+
+  // ---- Drag-from-Files handoff ------------------------------------------
+  // Dropping a file row from the Files widget onto the shell input pastes
+  // its device-side path at the cursor. We handle the drop explicitly
+  // (rather than relying on the browser's default text-drop behaviour)
+  // so we can also mark the drag as "consumed in-app", which suppresses
+  // the Files widget's default Pull-to-host download on `dragend`.
+  const onInputDragOver = useCallback((e: React.DragEvent<HTMLInputElement>) => {
+    if (
+      e.dataTransfer.types.includes('application/x-weblogcat-device-path') ||
+      e.dataTransfer.types.includes('text/plain')
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+  const onInputDrop = useCallback((e: React.DragEvent<HTMLInputElement>) => {
+    const path =
+      e.dataTransfer.getData('application/x-weblogcat-device-path') ||
+      e.dataTransfer.getData('text/plain');
+    if (!path) return;
+    e.preventDefault();
+    markInternalDropConsumed();
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? input.length;
+    const end = el.selectionEnd ?? input.length;
+    const next = input.slice(0, start) + path + input.slice(end);
+    setInput(next);
+    // Restore the caret just after the inserted path.
+    requestAnimationFrame(() => {
+      const target = inputRef.current;
+      if (!target) return;
+      const caret = start + path.length;
+      target.focus();
+      try {
+        target.setSelectionRange(caret, caret);
+      } catch {
+        /* selection ranges aren't always settable mid-drop — ignore */
+      }
+    });
+  }, [input]);
 
   // The wrapper itself is focusable so the bars-hidden / focus-scoped
   // shortcut idiom (matches LogcatWidget) works even without an active
@@ -508,6 +572,8 @@ export function ShellWidget({ tileId }: ShellWidgetProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
+            onDragOver={onInputDragOver}
+            onDrop={onInputDrop}
             spellCheck={false}
             autoComplete="off"
             aria-label="Shell input"

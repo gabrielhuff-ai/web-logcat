@@ -593,13 +593,20 @@ export function TileGrid({
             // so the two cues don't double up.
             const isHover = false;
             const isSource = swapDrag?.fromId === id;
+            // Maximised tiles use the same `left/top/width/height` set as
+            // non-maximised tiles (pixel values, not `right/bottom: 0`) so
+            // the CSS transition on those four properties interpolates
+            // both corners. Mixing `right/bottom: 0` with the
+            // non-maximised `width/height` would leave width/height
+            // unanimated, which made the bottom-right edge snap to the
+            // corner instead of glide there.
             const style: CSSProperties = isMax
               ? {
                   position: 'absolute',
                   left: 0,
                   top: 0,
-                  right: 0,
-                  bottom: 0,
+                  width: gridSize.w,
+                  height: gridSize.h,
                   zIndex: 30,
                 }
               : {

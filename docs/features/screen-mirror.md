@@ -28,6 +28,21 @@ native `scrcpy`, but indistinguishable for non-game use.
 - **Type into the device.** Click the canvas first to focus, then type.
   Modifier keys forward through.
 
+## Open files on device
+
+Drag a file row from the [Files](./files) widget and drop it onto the
+Mirror surface to open it on the device:
+
+- `.apk` files are installed via `pm install -r` (staged through
+  `/data/local/tmp` so SELinux is happy on Android 14+).
+- Anything else fires an `am start VIEW` intent with the file's MIME
+  type, letting the device pick a viewer (PDF, image, video, …).
+
+A "Drop to open on device" overlay appears while the drag is over the
+widget. A toast confirms success or surfaces the failure reason. This
+matches the right-click "Open on device" action in the Files widget,
+but without leaving the mirror.
+
 ## Recording
 
 The record button starts an MP4 capture of the live stream — encoded

@@ -49,9 +49,18 @@
  *   no overflow clipping, no text-overflow ellipsis. The :not(.wrap)
  *   selector has higher specificity than `.cell.msg` so this overrides
  *   the design defaults in app.css cleanly. */
-.row-list {
+/* Wrap off (default): rows shrink-wrap to their widest sibling so a
+ * short row's hover/match background still extends under the
+ * horizontal-scroll area of a wider neighbour. Wrap on: constrain the
+ * row-list to the scroll container's width so `white-space: pre-wrap`
+ * actually has a wrap boundary to wrap against — otherwise the parent
+ * keeps growing to `max-content` and the message cell never wraps. */
+.row-list[data-wrap='false'] {
   width: max-content;
   min-width: 100%;
+}
+.row-list[data-wrap='true'] {
+  width: 100%;
 }
 .row[data-wrap='false'] {
   width: 100%;
