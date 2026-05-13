@@ -60,23 +60,19 @@ test.describe('empty state', () => {
     await expect(page.getByRole('button', { name: /fake data/i })).toBeVisible();
   });
 
-  test('split-arrow stays hidden by default and reveals via ?wdp=1', async ({ page }) => {
+  test('connect button exposes the split-arrow dropdown', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.connect-split')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
-    // Opt-in. The flag sticks via localStorage and the param is stripped.
-    await page.goto('/?wdp=1');
     await expect(page.locator('.connect-split')).toBeVisible();
+    await expect(page.getByRole('button', { name: /connect a device/i })).toBeVisible();
     await expect(
       page.getByRole('button', { name: /choose connection method/i }),
     ).toBeVisible();
-    expect(new URL(page.url()).searchParams.has('wdp')).toBe(false);
   });
 
   test('dropdown menu surfaces both transports with the experimental badge on WDP', async ({
     page,
   }) => {
-    await page.goto('/?wdp=1');
+    await page.goto('/');
     await page.getByRole('button', { name: /choose connection method/i }).click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
@@ -91,7 +87,7 @@ test.describe('empty state', () => {
   }) => {
     // No WDP daemon listening on :9167, so the tracker probe fails and
     // the dialog shows its not-installed empty state.
-    await page.goto('/?wdp=1');
+    await page.goto('/');
     await page.getByRole('button', { name: /choose connection method/i }).click();
     await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
     const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
@@ -167,7 +163,7 @@ test.describe('empty state', () => {
       };
     });
 
-    await page.goto('/?wdp=1');
+    await page.goto('/');
     await page.getByRole('button', { name: /choose connection method/i }).click();
     await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
     const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
@@ -274,7 +270,7 @@ test.describe('empty state', () => {
       };
     });
 
-    await page.goto('/?wdp=1');
+    await page.goto('/');
     await page.getByRole('button', { name: /choose connection method/i }).click();
     await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
     const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
@@ -362,7 +358,7 @@ test.describe('empty state', () => {
       };
     });
 
-    await page.goto('/?wdp=1');
+    await page.goto('/');
     await page.getByRole('button', { name: /choose connection method/i }).click();
     await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
     const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
