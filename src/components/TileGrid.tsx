@@ -822,21 +822,28 @@ export function TileGrid({
                   height: rect.h,
                 };
             // While being dragged, the source tile follows the cursor
-            // (in grid-local coordinates) so the user is moving the
-            // actual tile rather than a name-only ghost. Layout-wise
-            // the tile is still at `rect.x/y` until a commit fires; the
-            // override here is purely the visual representation. The
-            // `.tile.dragging` CSS class neutralises the
-            // left/top/width/height transition so the visual tracks
-            // pointermove without lag.
+            // via `transform: translate(...)` — `left/top` stay pinned
+            // to the layout rect so the position transition can resolve
+            // cleanly on drop. The inline transform offsets the tile
+            // visually to the cursor; on release the class lifts, the
+            // transform clears to identity, and the `transform 220ms`
+            // transition in `.tile` interpolates the source from its
+            // cursor visual position to the new layout slot in lockstep
+            // with any `left/top` animation. The previous implementation
+            // overrode `left/top` and disabled the whole transition list
+            // during drag, which left the source tile snapping to its
+            // final slot while the swapped-in tile glided — the source's
+            // properties weren't in the before-change transition list,
+            // so WebKit/Blink skipped the same-frame restoration.
             if (isSource && swapDrag && swapDrag.active && !isMax) {
               const gridRect = gridRef.current?.getBoundingClientRect();
               const gridLeft = gridRect?.left ?? 0;
               const gridTop = gridRect?.top ?? 0;
+              const dx = swapDrag.curX - gridLeft - swapDrag.grabOffsetX - rect.x;
+              const dy = swapDrag.curY - gridTop - swapDrag.grabOffsetY - rect.y;
               style = {
                 ...style,
-                left: swapDrag.curX - gridLeft - swapDrag.grabOffsetX,
-                top: swapDrag.curY - gridTop - swapDrag.grabOffsetY,
+                transform: `translate(${dx}px, ${dy}px)`,
                 zIndex: 50,
               };
             }
