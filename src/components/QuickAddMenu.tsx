@@ -16,10 +16,12 @@
 // shortcuts and the tile-delete shortcut don't fire while the menu
 // is open.
 //
-// Visual model: a compact floating panel centred near the top of the
-// dashboard. Auto-focuses itself on mount.
+// Visual model: a compact floating panel anchored to the focused
+// tile (clamped to the viewport so the menu never spills off-screen).
+// Falls back to a top-centred position when no tile is focused (the
+// empty-state CTA case). Auto-focuses itself on mount.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WIDGETS, WIDGET_KINDS } from '../lib/widgets';
 import { countByKind } from '../lib/layout';
 import type { LayoutState, WidgetKind } from '../types';
@@ -69,6 +71,41 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
   useEffect(() => {
     rootRef.current?.focus({ preventScroll: true });
   }, []);
+
+  // Anchor the menu at the focused tile's top-left, clamped so it
+  // never spills past the viewport. Measured in a layout effect so
+  // the menu is positioned before the first paint — the initial
+  // render uses `visibility: hidden` to hide the unpositioned frame.
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const menu = rootRef.current;
+    if (!menu) return;
+    const m = menu.getBoundingClientRect();
+    const margin = 8;
+    const focusEl = layout.focusId
+      ? document.querySelector<HTMLElement>(
+          `[data-tile-id="${CSS.escape(layout.focusId)}"]`,
+        )
+      : null;
+    let left: number;
+    let top: number;
+    if (focusEl) {
+      const wr = focusEl.getBoundingClientRect();
+      // Inset a touch from the corner so the menu visibly sits "in"
+      // the widget instead of perfectly hugging its edge.
+      left = wr.left + 12;
+      top = wr.top + 12;
+    } else {
+      // No focused widget (empty-state CTA): centre near the top.
+      left = (window.innerWidth - m.width) / 2;
+      top = 70;
+    }
+    const maxLeft = window.innerWidth - m.width - margin;
+    const maxTop = window.innerHeight - m.height - margin;
+    left = Math.max(margin, Math.min(left, maxLeft));
+    top = Math.max(margin, Math.min(top, maxTop));
+    setPos({ left, top });
+  }, [layout.focusId]);
 
   // Global capture-phase key listener. Capture-phase + a
   // stopImmediatePropagation on every key we consume keeps the
@@ -171,6 +208,11 @@ export function QuickAddMenu({ layout, onPick, onMore, onClose }: QuickAddMenuPr
         aria-label="Quick add widget"
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
+        style={
+          pos
+            ? { left: pos.left, top: pos.top }
+            : { visibility: 'hidden' }
+        }
       >
         <div className="qa-head">New widget</div>
         {rows.map((r, i) => {
