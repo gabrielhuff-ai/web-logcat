@@ -265,36 +265,30 @@
 /* ===== iOS-style "shake" while a swap drag is active ====================
  * `.drag-polish` only lights up when the user is *actually* dragging a
  * tile by its header *and* performance mode is off (the gate lives in
- * `<TileGrid/>`). All non-source tiles get a small rotation oscillation
- * around their centre so the dashboard reads as "in edit mode" — the
- * same metaphor iOS uses when long-pressing home-screen icons. Subtle:
- * ±0.5° at 280ms keeps the motion legible without making text wobble
- * noticeably enough to nauseate. A per-tile delay (10ms × index)
- * desyncs the tiles so they don't move as a single rigid block.
+ * `<TileGrid/>`). The dragged tile itself wobbles slightly while in
+ * flight — the same "I've picked this up, it's not part of the grid
+ * any more" metaphor iOS uses when long-pressing a home-screen icon
+ * to start a rearrange. Subtle: ±0.5° at 280ms keeps the motion
+ * legible without making text wobble noticeably enough to nauseate.
  *
- * The `.tile.dragging` class is applied to the *source* tile (see
- * `<Tile/>`), so the `:not(.dragging)` filter exempts it — the floating
- * ghost it follows is the dragged-visual, the source itself just sits
- * in place at reduced opacity. */
+ * The shake used to apply to every *other* tile, which doubled as a
+ * "the dashboard is in edit mode" cue but also caused readers (Logcat
+ * rows, Shell lines) under the cursor to vibrate as the user tried to
+ * aim — distracting and made the destination harder to read. Inverting
+ * it leaves the surrounding tiles stable so the user can target a
+ * drop zone cleanly while still seeing the dragged tile reads as
+ * "picked up". */
 @keyframes tile-shake {
-  0%   { transform: rotate(-0.5deg) translate(0, -0.25px); }
-  50%  { transform: rotate( 0.5deg) translate(0,  0.25px); }
-  100% { transform: rotate(-0.5deg) translate(0, -0.25px); }
+  0%   { transform: rotate(-0.6deg); }
+  50%  { transform: rotate( 0.6deg); }
+  100% { transform: rotate(-0.6deg); }
 }
-.dash-grid.drag-polish .tile:not(.dragging) {
+.dash-grid.drag-polish .tile.dragging {
   animation: tile-shake 280ms ease-in-out infinite;
   transform-origin: 50% 50%;
 }
-/* Use the tile's `data-tile-id` (every tile has one) to nudge a tiny
- * per-instance delay so the shakes desync without us needing nth-child
- * arithmetic against an absolute-positioned grid. The seed is the
- * length of the id mod 8 — stable across re-renders. */
-.dash-grid.drag-polish .tile:not(.dragging) { animation-delay: 0ms; }
-.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(2n)   { animation-delay: 70ms; }
-.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(3n)   { animation-delay: 140ms; }
-.dash-grid.drag-polish .tile:not(.dragging):nth-of-type(5n+1) { animation-delay: 210ms; }
 @media (prefers-reduced-motion: reduce) {
-  .dash-grid.drag-polish .tile:not(.dragging) { animation: none; }
+  .dash-grid.drag-polish .tile.dragging { animation: none; }
 }
 /* The drag-polish class also widens the gap (the `--tile-gap` JS-side
  * change drives the layout reflow); nothing else CSS-side here. */
@@ -395,6 +389,13 @@
   z-index: 50 !important;
   transition: box-shadow 160ms;
   cursor: grabbing;
+  /* Translucent while in flight so the user can see the drop target
+   * (and any drop overlays the cursor crosses) through the tile being
+   * carried — without this, the dragged tile occludes whatever it's
+   * about to land on. Applies in every mode; performance mode used to
+   * leave the tile fully opaque, which made aiming a swap onto a
+   * smaller tile unnecessarily blind. */
+  opacity: 0.4;
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.08) inset,
     0 18px 48px oklch(0 0 0 / 0.45),
@@ -489,25 +490,6 @@
   animation: fadeIn 120ms var(--ease-out);
 }
 [data-perf="on"] .dash-drop-overlay { transition: none; animation: none; }
-
-/* Hover-hold auto-commit: the overlay blinks once before the swap
- * applies so the user has a moment to register that the commit is
- * about to fire. Two quick alpha pulses — short enough that the
- * gesture stays fluid, bright enough to read against the dashboard. */
-.dash-drop-overlay.dash-drop-overlay-committing {
-  animation: dropOverlayBlink 180ms var(--ease-out) 1;
-}
-@keyframes dropOverlayBlink {
-  0%, 100% {
-    background: oklch(from var(--accent) l c h / 0.18);
-    border-color: oklch(from var(--accent) l c h / 0.65);
-  }
-  50% {
-    background: oklch(from var(--accent) l c h / 0.45);
-    border-color: oklch(from var(--accent) l c h / 1);
-  }
-}
-[data-perf="on"] .dash-drop-overlay.dash-drop-overlay-committing { animation: none; }
 
 /* Floating ghost shown next to the cursor while dragging a tile head. */
 .dash-swap-ghost {
