@@ -73,19 +73,14 @@ devices, it requires **exclusive USB access** (Android Studio / scrcpy /
 **Safari**. The Device Proxy transport fixes all four — at the cost of
 a small one-time daemon install.
 
-### Turn it on
-
-The Device Proxy is opt-in. Append `?wdp=1` to the URL once — the flag
-sticks via `localStorage`, the query param is stripped on read, and
-`?wdp=0` clears it. With the flag set, **Connect a device** grows a
-dropdown arrow:
+The dropdown arrow next to **Connect a device** lets you pick a
+transport explicitly:
 
 <ThemeImage src-dark="/img/features/connect-dropdown.png" src-light="/img/features/connect-dropdown-light.png" alt="Connect-a-device button with a dropdown arrow, opened to show 'Connect via WebUSB' and 'Connect via Web Device Proxy' (experimental) options" />
 
-The arrow lets you pick a transport explicitly. The primary button
-follows whichever is **available** in your environment — if the
-proxy daemon is running on `localhost:9167`, the primary defaults to
-proxy; otherwise it falls back to WebUSB.
+The primary button follows whichever is **available** in your
+environment — if the proxy daemon is running on `localhost:9167`,
+the primary defaults to proxy; otherwise it falls back to WebUSB.
 
 ### Connect via the proxy
 
@@ -131,7 +126,6 @@ button defaults to the proxy whenever it's detected.
 
 | Symptom | Cause / fix |
 | --- | --- |
-| Dropdown arrow not visible | The `?wdp=1` opt-in flag isn't set. Visit `…/?wdp=1` once. |
 | "Daemon not detected" | Proxy isn't running on `localhost:9167`. Install or restart it. |
 | "Browser blocked the approve popup" | Allow popups for this origin, then retry. The popup is a one-time Google-hosted approval page. |
 | Device shows `OFFLINE` / `UNAUTHORIZED` | Accept the on-device debugging prompt and re-open the dialog. |

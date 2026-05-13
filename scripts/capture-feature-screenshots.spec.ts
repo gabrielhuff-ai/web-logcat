@@ -140,10 +140,9 @@ for (const theme of ['dark', 'light'] as const) {
     });
 
     test('connect dropdown menu', async ({ page }) => {
-      // `?wdp=1` reveals the split-button arrow; the screenshot captures
-      // both transports in the menu (WebUSB + Web Device Proxy with the
-      // experimental badge). No fake daemon needed — we capture the
-      // menu, not the proxy dialog.
+      // Screenshot captures both transports in the menu (WebUSB + Web
+      // Device Proxy with the experimental badge). No fake daemon
+      // needed — we capture the menu, not the proxy dialog.
       await page.addInitScript((t: Theme) => {
         localStorage.clear();
         localStorage.setItem(
@@ -151,7 +150,7 @@ for (const theme of ['dark', 'light'] as const) {
           JSON.stringify({ theme: t, accent: 'indigo', performanceMode: 'on' }),
         );
       }, theme);
-      await page.goto('/?wdp=1');
+      await page.goto('/');
       await page.getByRole('button', { name: /choose connection method/i }).click();
       await expect(page.getByRole('menu')).toBeVisible();
       await page.screenshot({
@@ -171,7 +170,7 @@ for (const theme of ['dark', 'light'] as const) {
           JSON.stringify({ theme: t, accent: 'indigo', performanceMode: 'on' }),
         );
       }, theme);
-      await page.goto('/?wdp=1');
+      await page.goto('/');
       await page.getByRole('button', { name: /choose connection method/i }).click();
       await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
       const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
