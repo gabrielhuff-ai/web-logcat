@@ -783,10 +783,28 @@ export function TileGrid({
     [layout.tree],
   );
 
+  // Render tiles in a stable DOM order — sorted by `id` rather than by
+  // the tree-traversal order that `computed.leaves` produces. Layout
+  // is driven entirely by absolute `left/top`, so the children-array
+  // order has no visual effect; it does, however, govern React's keyed
+  // reconciliation. When a swap or restructure flips the traversal
+  // order, React's "minimum-move" algorithm holds the first child in
+  // place and calls `Node.insertBefore` on the others to reorder them.
+  // `insertBefore` on an attached node interrupts that node's active
+  // CSS transitions, so the moved tile snaps to its new layout slot
+  // while the unmoved tile animates — the asymmetric "position-1
+  // teleports, position-0 glides" behaviour reported during swap /
+  // edge-drop / undo-redo all funnel through this same path. Sorting
+  // by id keeps the DOM child order constant across renders, so
+  // neither tile gets relocated and both transitions survive.
+  const sortedLeaves = useMemo(() => {
+    return [...computed.leaves].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }, [computed.leaves]);
+
   return (
     <div ref={gridRef} className={gridClass}>
       {layout.tree
-        ? computed.leaves.map(({ id, rect }) => {
+        ? sortedLeaves.map(({ id, rect }) => {
             const tile = layout.tiles[id];
             if (!tile) return null;
             const def = WIDGETS[tile.kind];
