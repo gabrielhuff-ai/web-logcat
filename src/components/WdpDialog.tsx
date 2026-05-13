@@ -226,8 +226,7 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
               {isMac() && (
                 <div className="wdp-dialog-warn" role="note">
                   Heads up — the Web Device Proxy daemon isn't currently
-                  shipped for macOS; Google's download page only serves
-                  a Windows installer. Track support at{' '}
+                  available for macOS. Track support at{' '}
                   <a
                     className="link"
                     href={MAC_TRACKING_ISSUE_URL}

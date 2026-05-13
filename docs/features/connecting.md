@@ -74,9 +74,8 @@ devices, it requires **exclusive USB access** (Android Studio / scrcpy /
 a small one-time daemon install.
 
 ::: warning macOS support
-Google's daemon download page currently only serves a Windows
-installer, so the Device Proxy can't be set up on macOS today.
-Tracking at
+Google doesn't currently ship a macOS build of the daemon, so the
+Device Proxy can't be set up on macOS today. Tracking at
 [#133](https://github.com/gabrielhuff/web-logcat/issues/133).
 :::
 
