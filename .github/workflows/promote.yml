@@ -1,9 +1,13 @@
 name: Promote main to release
 
-# Manual "promote" button — fast-forwards `release` to whatever
-# `main` currently points at. The ruleset on `release` blocks force
-# pushes and deletes; this workflow only ever does a fast-forward
-# push, so it composes cleanly with the protection.
+# Manual "promote" button — brings `release` up to the current `main`.
+# The ruleset on `release` blocks force pushes and deletes, so this
+# workflow never rewrites history. When `release` is strictly behind
+# `main` the merge fast-forwards; when the two have diverged (e.g. a
+# previous promote was applied as a PR merge instead of a fast-forward,
+# leaving a merge commit on `release` that isn't on `main`) it falls
+# back to a regular merge commit on `release`. Either way the push is
+# non-destructive.
 #
 # Trigger via the Actions tab → "Promote main to release" → Run
 # workflow. The resulting push to `release` triggers `deploy.yml`
@@ -30,12 +34,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: release
           fetch-depth: 0
           token: ${{ secrets.BOT_PAT }}
 
-      - name: Fast-forward release to main
+      - name: Merge main into release
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git push origin HEAD:release
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "release already contains main; nothing to promote."
+            exit 0
+          fi
+          # `git merge` is `--ff` by default: fast-forwards when possible,
+          # otherwise records a merge commit. `-m` is only consumed in the
+          # non-FF path.
+          git merge origin/main -m "Promote main → release"
+          git push origin release

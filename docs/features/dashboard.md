@@ -61,8 +61,9 @@ or Shell prompt is never affected.
 
 ### Quick-add menu
 
-`⌘E` opens a Spotlight-style floating menu listing the available
-widgets. Three ways to pick:
+`⌘E` opens a Spotlight-style floating menu anchored at the
+focused tile (or centred at the top of the dashboard when there
+isn't one yet). Three ways to pick:
 
 - Press a widget's single-letter accelerator — `L` (Logcat), `S`
   (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror).

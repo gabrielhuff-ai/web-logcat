@@ -686,12 +686,9 @@
   z-index: 52;
   background: oklch(0 0 0 / 0.18);
   animation: fadeIn 120ms var(--ease-out);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 70px;
 }
 .qa-menu {
+  position: fixed;
   width: min(280px, 86vw);
   background: oklch(from var(--bg-1) l c h / 0.96);
   backdrop-filter: blur(24px);
