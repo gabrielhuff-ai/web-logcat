@@ -8,11 +8,16 @@
 //   node scripts/capture-hero-gif.mjs
 
 import { chromium } from '@playwright/test';
+import ffmpegPath from 'ffmpeg-static';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (!ffmpegPath) {
+  throw new Error('ffmpeg-static did not resolve a binary for this platform');
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, '..');
@@ -107,7 +112,7 @@ async function main() {
   const palette = path.join(framesDir, 'palette.png');
   const fps = 1000 / FRAME_INTERVAL_MS;
   execFileSync(
-    'ffmpeg',
+    ffmpegPath,
     [
       '-y',
       '-framerate', String(fps),
@@ -118,7 +123,7 @@ async function main() {
     { stdio: 'inherit' },
   );
   execFileSync(
-    'ffmpeg',
+    ffmpegPath,
     [
       '-y',
       '-framerate', String(fps),
