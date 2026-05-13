@@ -67,11 +67,19 @@ export function WidgetPalette({ layout, onClose, onPick }: WidgetPaletteProps) {
           })}
         </div>
         <div className="palette-foot">
-          Drag widget headers to swap · Drag the seam between widgets to resize
+          Drag widget headers to swap · Drag the seam between widgets to resize · Quickly add other widgets with {modKey()}E
         </div>
       </div>
     </>
   );
+}
+
+// Platform-specific Cmd/Ctrl glyph. `navigator.platform` is deprecated
+// but still the most reliable cross-browser source; `userAgentData` is
+// Chromium-only.
+function modKey(): string {
+  if (typeof navigator === 'undefined') return '⌘';
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 }
 
 /**
