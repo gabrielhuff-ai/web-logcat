@@ -63,9 +63,7 @@ or Shell prompt is never affected.
 
 `⌘E` opens a Spotlight-style floating menu anchored at the
 focused tile (or centred at the top of the dashboard when there
-isn't one yet). The menu is clamped to the viewport, so it stays
-fully on-screen even when the focused tile sits in a corner.
-Three ways to pick:
+isn't one yet). Three ways to pick:
 
 - Press a widget's single-letter accelerator — `L` (Logcat), `S`
   (Shell), `D` (Dumpsys), `F` (Files), `M` (Screen Mirror).
