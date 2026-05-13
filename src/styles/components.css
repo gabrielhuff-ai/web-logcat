@@ -448,6 +448,19 @@
   border-radius: var(--r-sm);
   border: 1px solid color-mix(in oklab, oklch(0.7 0.18 25) 20%, transparent);
 }
+.wdp-dialog-warn {
+  padding: 8px 12px;
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  color: oklch(0.78 0.16 80);
+  background: color-mix(in oklab, oklch(0.78 0.16 80) 8%, transparent);
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklab, oklch(0.78 0.16 80) 20%, transparent);
+}
+.wdp-dialog-warn .link {
+  color: inherit;
+  text-decoration: underline;
+}
 
 /* Version pill — bottom-right of the pre-connect screen. Subtle so it
    doesn't compete with the connect-or-fake-data CTA, but always

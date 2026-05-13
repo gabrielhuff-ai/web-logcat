@@ -26,6 +26,7 @@ import {
 } from '../lib/wdp';
 
 const DOCS_URL = 'docs/features/connecting.html#device-proxy';
+const MAC_TRACKING_ISSUE_URL = 'https://github.com/gabrielhuff/web-logcat/issues/133';
 
 type DialogState =
   | { kind: 'idle' }
@@ -221,23 +222,41 @@ export function WdpDialog({ open, onConnect, onClose, busy }: WdpDialogProps) {
           )}
 
           {state.kind === 'not-installed' && (
-            <div className="wdp-dialog-empty" role="note">
-              <div className="wdp-dialog-empty-meta">
-                <div className="wdp-dialog-empty-title">Daemon not detected</div>
-                <p>
-                  Install Android Web Device Proxy from the official Google page and re-open this
-                  dialog. The proxy must be running on <code>localhost:9167</code>.
-                </p>
+            <>
+              {isMac() && (
+                <div className="wdp-dialog-warn" role="note">
+                  Heads up — the Web Device Proxy daemon isn't currently
+                  shipped for macOS; Google's download page only serves
+                  a Windows installer. Track support at{' '}
+                  <a
+                    className="link"
+                    href={MAC_TRACKING_ISSUE_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    #133
+                  </a>
+                  .
+                </div>
+              )}
+              <div className="wdp-dialog-empty" role="note">
+                <div className="wdp-dialog-empty-meta">
+                  <div className="wdp-dialog-empty-title">Daemon not detected</div>
+                  <p>
+                    Install Android Web Device Proxy from the official Google page and re-open
+                    this dialog. The proxy must be running on <code>localhost:9167</code>.
+                  </p>
+                </div>
+                <a
+                  className="btn wdp-device-connect"
+                  href={WDP_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Install
+                </a>
               </div>
-              <a
-                className="btn wdp-device-connect"
-                href={WDP_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Install
-              </a>
-            </div>
+            </>
           )}
 
           {state.kind === 'needs-approve' && (
@@ -331,4 +350,11 @@ function shortVersion(v: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// `navigator.platform` is deprecated but still the most reliable
+// cross-browser source; `userAgentData` is Chromium-only.
+function isMac(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Mac/.test(navigator.platform);
 }

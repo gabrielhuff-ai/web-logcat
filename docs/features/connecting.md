@@ -73,6 +73,13 @@ devices, it requires **exclusive USB access** (Android Studio / scrcpy /
 **Safari**. The Device Proxy transport fixes all four — at the cost of
 a small one-time daemon install.
 
+::: warning macOS support
+Google's daemon download page currently only serves a Windows
+installer, so the Device Proxy can't be set up on macOS today.
+Tracking at
+[#133](https://github.com/gabrielhuff/web-logcat/issues/133).
+:::
+
 The dropdown arrow next to **Connect a device** lets you pick a
 transport explicitly:
 
