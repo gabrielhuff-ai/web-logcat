@@ -20,22 +20,20 @@ itself, and a corner grip — and they share every pixel of available space.
 ## Rearranging
 
 - **Swap by dragging the header.** Grab a tile by its header — the
-  tile itself follows the cursor with the same finger-on-tile grip
+  tile itself follows the cursor (at ~40% opacity so you can still
+  see the drop zone underneath) with the same finger-on-tile grip
   you established on pointerdown — and drop it on another tile. They
   swap positions in the tree without resizing. Drop near an edge to
   split that side instead of swapping. The layout doesn't mutate
-  until the drop fires (or the [hover-hold](#hover-hold-to-commit)
-  threshold lands an early commit) — the cursor-follow is purely a
-  visual preview.
-- **Hover-hold to commit.** While dragging, *pause* the cursor
-  over a valid drop zone for ~0.9 s. The drop overlay blinks once and
-  the swap / restructure applies immediately, with your pointer still
-  held — chain multiple edits in a single gesture. The dashboard also
-  shakes (iOS-icon-edit-mode style) and widens the inter-tile gap while
-  a drag is active so the drop zones read more clearly. Both visual
-  affordances are skipped in **Performance mode** (Global settings →
-  Appearance) since they rely on the same layout transitions Performance
-  mode disables.
+  until the drop fires — the cursor-follow is purely a visual
+  preview.
+- **Drag affordances.** The dragged tile wobbles slightly
+  (iOS-icon-edit-mode style) and the inter-tile gap widens while a
+  drag is active so the drop zones read more clearly. The wobble +
+  gap bump are skipped in **Performance mode** (Global settings →
+  Appearance) since they rely on the same layout transitions
+  Performance mode disables; the dragged-tile transparency still
+  applies so aiming a swap stays equally readable.
 - **Resize the seam.** Hover the seam between two tiles; the cursor turns
   into a resize handle. Drag to redistribute space between siblings.
 - **Maximize.** The square icon in a tile's header pops it to fill the

@@ -31,18 +31,53 @@ export interface EmptyStateProps {
   onConnectWdp: (device: WdpDevice) => Promise<void>;
 }
 
+/** localStorage key that remembers the user's last-used transport.
+ *  Sticky across disconnect/reconnect cycles within a session as well
+ *  as across page reloads — once a user has settled on WDP for their
+ *  setup, we shouldn't keep flipping the primary CTA back to WebUSB
+ *  every time they disconnect (the runtime probe can race with the
+ *  WDP daemon's socket teardown right after a disconnect, which left
+ *  the button on the wrong transport). */
+const PREFERRED_TRANSPORT_KEY = 'weblogcat:preferred-transport';
+
+function readSavedPreferred(): 'usb' | 'proxy' | null {
+  try {
+    const raw = window.localStorage.getItem(PREFERRED_TRANSPORT_KEY);
+    return raw === 'usb' || raw === 'proxy' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedPreferred(value: 'usb' | 'proxy') {
+  try {
+    window.localStorage.setItem(PREFERRED_TRANSPORT_KEY, value);
+  } catch {
+    // localStorage may be unavailable (privacy mode); the in-memory
+    // state still drives the current session's primary CTA.
+  }
+}
+
 export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStateProps) {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState<ConnectStep>(0);
   const [wdpOpen, setWdpOpen] = useState(false);
-  // Runtime availability probe — when WDP is reachable on
-  // 127.0.0.1:9167 the primary button defaults to the proxy flow,
-  // since a running WDP daemon implies adb-server has the USB claim
-  // anyway and WebUSB would fail. When the probe times out we default
-  // to WebUSB. The arrow menu always exposes both transports.
-  const [preferred, setPreferred] = useState<'usb' | 'proxy'>('usb');
+  // Primary-CTA transport. Initial value comes from the persisted
+  // preference (the user almost always uses the same transport across
+  // disconnect cycles); on a first visit we still fall back to the
+  // runtime probe — when WDP is reachable on 127.0.0.1:9167 the
+  // primary defaults to the proxy flow (since a running WDP daemon
+  // implies adb-server has the USB claim anyway and WebUSB would
+  // fail). The arrow menu always exposes both transports.
+  const [preferred, setPreferred] = useState<'usb' | 'proxy'>(
+    () => readSavedPreferred() ?? 'usb',
+  );
 
   useEffect(() => {
+    // Skip the probe when the user has a persisted preference — we
+    // trust their stated choice over a 600ms probe that can race
+    // with the WDP daemon's socket teardown right after a disconnect.
+    if (readSavedPreferred() != null) return;
     let cancelled = false;
     void probeWdpReachable().then((reachable) => {
       if (cancelled) return;
@@ -55,6 +90,8 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
 
   const startWebUsbConnect = async () => {
     setConnecting(true);
+    writeSavedPreferred('usb');
+    setPreferred('usb');
     // Pre-set step=1 so the button updates the moment the chooser is
     // about to open, even before lib/adb.ts has a chance to fire its
     // own onPhase('requesting').
@@ -68,9 +105,15 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
     }
   };
 
+  const openWdp = () => {
+    writeSavedPreferred('proxy');
+    setPreferred('proxy');
+    setWdpOpen(true);
+  };
+
   const onPrimary = () => {
     if (preferred === 'proxy') {
-      setWdpOpen(true);
+      openWdp();
     } else {
       void startWebUsbConnect();
     }
@@ -111,7 +154,7 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
             preferred={preferred}
             onPrimary={onPrimary}
             onWebUsb={() => void startWebUsbConnect()}
-            onProxy={() => setWdpOpen(true)}
+            onProxy={openWdp}
           />
 
           <div className="empty-or">

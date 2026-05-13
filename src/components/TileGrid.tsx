@@ -67,13 +67,6 @@ const COMPACT_GAP = 0;
  * smoothly reflows everything.
  */
 const DRAG_GAP_BUMP = 10;
-/**
- * Hover-hold threshold (ms): how long the user must keep the cursor
- * still over a valid drop zone before the drop fires automatically.
- * Tuned to feel intentional without being slow — too short and the
- * drag commits while the user is still deciding.
- */
-const HOVER_HOLD_MS = 900;
 
 interface ResizeDrag {
   kind: 'resize';
@@ -106,10 +99,6 @@ interface SwapDrag {
   hoverEdge: SplitEdge | null;
   /** True once the cursor has moved more than a few px from the start. */
   active: boolean;
-  /** True for ~200ms after the hover-hold auto-commit fires — drives a
-   *  quick blink on the drop overlay before the swap/restructure
-   *  actually applies. */
-  committing: boolean;
   /**
    * Offset from the dragged tile's top-left to the pointer position
    * at drag start, in grid-local coordinates. The source tile is
@@ -184,35 +173,6 @@ export function TileGrid({
   // per paint.
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);
-
-  // ---- Hover-hold auto-commit state -------------------------------------
-  // While a swap drag is active, if the user keeps the cursor still
-  // over a valid drop target for `HOVER_HOLD_MS`, we commit the
-  // swap/restructure mid-drag (blink the overlay first), then keep
-  // dragging so they can chain edits in a single gesture. Tracked via
-  // refs (not state) so a position-update re-render doesn't reset the
-  // hold timer on every frame.
-  const hoverHoldTimerRef = useRef<number | null>(null);
-  const settleRef = useRef<{
-    x: number;
-    y: number;
-    hoverId: string | null;
-    hoverEdge: SplitEdge | null;
-  }>({ x: 0, y: 0, hoverId: null, hoverEdge: null });
-  // Mirror of the latest drag state for the timer callback to read at
-  // fire time (the timer's closure captures the state at arm time,
-  // which would be stale after subsequent pointermoves).
-  const dragRef = useRef<DragState | null>(null);
-  useEffect(() => {
-    dragRef.current = drag;
-  }, [drag]);
-  // Latch on `performanceModeOn` so the hover-hold logic inside the
-  // drag effect can short-circuit without listing the boolean in its
-  // deps (which would tear down + re-attach the pointer listeners).
-  const perfModeOnRef = useRef(performanceModeOn);
-  useEffect(() => {
-    perfModeOnRef.current = performanceModeOn;
-  }, [performanceModeOn]);
 
   /**
    * Set the layout AND push the previous one onto the undo stack.
@@ -580,7 +540,6 @@ export function TileGrid({
         hoverId: null,
         hoverEdge: null,
         active: false,
-        committing: false,
         grabOffsetX,
         grabOffsetY,
       });
@@ -706,56 +665,6 @@ export function TileGrid({
       return { id, edge };
     };
 
-    // ---- Hover-hold auto-commit ---------------------------------------
-    // Reads from refs (not closure-captured drag state) so it sees the
-    // latest hover when the timer fires — the closure was created at
-    // arm time, which is potentially seconds ago after a few intervening
-    // pointermoves.
-    const autoCommitFromHover = () => {
-      hoverHoldTimerRef.current = null;
-      const cur = dragRef.current;
-      if (!cur || cur.kind !== 'swap') return;
-      if (!cur.hoverId || cur.hoverId === cur.fromId) return;
-      const fromId = cur.fromId;
-      const targetId = cur.hoverId;
-      const targetEdge = cur.hoverEdge;
-      // Phase 1: blink the overlay (CSS animation triggered by the
-      // `committing` flag) so the user sees confirmation before the
-      // tiles slide around.
-      setDrag((d) => (d && d.kind === 'swap' ? { ...d, committing: true } : d));
-      window.setTimeout(() => {
-        const latest = dragRef.current;
-        // Commit when either (a) the drag is still active and the
-        // hover hasn't drifted during the blink, or (b) the drag
-        // has already ended (user released during the blink) — the
-        // hover-hold authorisation should still apply rather than
-        // being silently swallowed by the late release.
-        const hoverIntact =
-          latest == null ||
-          (latest.kind === 'swap' &&
-            latest.hoverId === targetId &&
-            latest.hoverEdge === targetEdge);
-        if (hoverIntact) {
-          applyLayout((l) =>
-            targetEdge
-              ? restructureTile(l, fromId, targetId, targetEdge)
-              : swapTiles(l, fromId, targetId),
-          );
-        }
-        // Reset hover + committing on the drag so another auto-commit
-        // requires a fresh hover. The settle anchor is also reset so
-        // the next arm waits for the user to actually move first
-        // (otherwise the immediately-following pointermove with the
-        // same coordinates would rearm the timer).
-        setDrag((d) =>
-          d && d.kind === 'swap'
-            ? { ...d, hoverId: null, hoverEdge: null, committing: false }
-            : d,
-        );
-        settleRef.current = { ...settleRef.current, hoverId: null, hoverEdge: null };
-      }, 180);
-    };
-
     const onMove = (e: PointerEvent) => {
       if (drag.kind === 'resize') {
         const dPx = drag.axis === 'row' ? e.clientX - drag.startX : e.clientY - drag.startY;
@@ -802,37 +711,6 @@ export function TileGrid({
             : d,
         );
       });
-      // Hover-hold tracking. Skip in performance mode (the whole
-      // drag-polish bundle — shake, wider gap, mid-drag commit — is
-      // gated on the user *not* opting out of layout transitions).
-      if (!perfModeOnRef.current) {
-        const settle = settleRef.current;
-        const moved = Math.hypot(e.clientX - settle.x, e.clientY - settle.y) > 3;
-        const hoverChanged =
-          targetId !== settle.hoverId || edge !== settle.hoverEdge;
-        if (moved || hoverChanged) {
-          if (hoverHoldTimerRef.current != null) {
-            window.clearTimeout(hoverHoldTimerRef.current);
-            hoverHoldTimerRef.current = null;
-          }
-          settleRef.current = {
-            x: e.clientX,
-            y: e.clientY,
-            hoverId: targetId,
-            hoverEdge: edge,
-          };
-        }
-        const validDrop = active && !!targetId && targetId !== drag.fromId;
-        if (validDrop && hoverHoldTimerRef.current == null) {
-          hoverHoldTimerRef.current = window.setTimeout(
-            autoCommitFromHover,
-            HOVER_HOLD_MS,
-          );
-        } else if (!validDrop && hoverHoldTimerRef.current != null) {
-          window.clearTimeout(hoverHoldTimerRef.current);
-          hoverHoldTimerRef.current = null;
-        }
-      }
     };
 
     const onUp = (e: PointerEvent) => {
@@ -842,22 +720,10 @@ export function TileGrid({
         pendingRef.current?.();
         pendingRef.current = null;
       }
-      // Cancel any pending hover-hold so it doesn't fire after release.
-      if (hoverHoldTimerRef.current != null) {
-        window.clearTimeout(hoverHoldTimerRef.current);
-        hoverHoldTimerRef.current = null;
-      }
       if (drag.kind === 'swap') {
-        // If a hover-hold blink is in flight, skip the pointerup
-        // commit so we don't apply the same swap twice. The deferred
-        // commit inside `autoCommitFromHover` will fire on its own.
-        const committingNow =
-          dragRef.current && dragRef.current.kind === 'swap'
-            ? dragRef.current.committing
-            : false;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
-        if (!committingNow && Math.hypot(dx, dy) > 5) {
+        if (Math.hypot(dx, dy) > 5) {
           const probe = hitTest(e.clientX, e.clientY);
           const target = probe.id;
           const edge = probe.edge;
@@ -871,7 +737,6 @@ export function TileGrid({
         }
       }
       setDrag(null);
-      settleRef.current = { x: 0, y: 0, hoverId: null, hoverEdge: null };
     };
 
     window.addEventListener('pointermove', onMove);
@@ -879,14 +744,6 @@ export function TileGrid({
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      // The hover-hold timer is intentionally *not* cleared here. The
-      // drag effect re-runs on every drag-state change (every
-      // pointermove during rAF flush), so clearing the timer here
-      // would reset the hover-hold every frame and the auto-commit
-      // would never fire. The timer is cleared explicitly on:
-      //   - pointer up
-      //   - significant cursor move / hover change (in `onMove`)
-      //   - commit (in `autoCommitFromHover`)
       if (rafRef.current != null) {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -1033,11 +890,7 @@ export function TileGrid({
           )?.rect;
           if (!targetRect) return null;
           return (
-            <DropOverlay
-              rect={targetRect}
-              edge={swapDrag.hoverEdge}
-              committing={swapDrag.committing}
-            />
+            <DropOverlay rect={targetRect} edge={swapDrag.hoverEdge} />
           );
         })()}
 
@@ -1099,9 +952,6 @@ function SplitHandle({ dir, rect, gap, onPointerDown }: SplitHandleProps) {
 interface DropOverlayProps {
   rect: { x: number; y: number; w: number; h: number };
   edge: SplitEdge | null;
-  /** True for the brief blink window between hover-hold trigger and
-   *  the actual swap/restructure firing. */
-  committing: boolean;
 }
 
 /**
@@ -1118,7 +968,7 @@ interface DropOverlayProps {
  * what keeps the UX from flickering between layouts as the cursor
  * crosses zone boundaries.
  */
-function DropOverlay({ rect, edge, committing }: DropOverlayProps) {
+function DropOverlay({ rect, edge }: DropOverlayProps) {
   let left = rect.x;
   let top = rect.y;
   let width = rect.w;
@@ -1136,7 +986,7 @@ function DropOverlay({ rect, edge, committing }: DropOverlayProps) {
   }
   return (
     <div
-      className={`dash-drop-overlay ${committing ? 'dash-drop-overlay-committing' : ''}`}
+      className="dash-drop-overlay"
       style={{ left, top, width, height }}
       aria-hidden
     />

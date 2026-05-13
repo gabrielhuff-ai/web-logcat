@@ -236,6 +236,33 @@ export function App() {
     [connectFake, resetIngest, showToast],
   );
 
+  // ---- Stale-connection check on visibility regain -----------------------
+  // After the laptop wakes from sleep (or the tab regains focus after
+  // a long idle), the WDP WebSocket can be in a phantom "open" state —
+  // no close event fires, but no logs arrive either. We piggy-back on
+  // `visibilitychange` to probe the daemon when the tab comes back, and
+  // force-disconnect the session if the daemon is unreachable so the
+  // user gets the empty state (with a fresh Connect button) instead of
+  // a dashboard that silently isn't streaming. Scoped to WDP because we
+  // already have a cheap, side-effect-free probe for it; WebUSB doesn't
+  // have an equivalent without a real ADB round-trip.
+  useEffect(() => {
+    if (!device || usingFake || device.transport !== 'proxy') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void (async () => {
+        const { probeWdpReachable } = await import('../lib/wdp');
+        const reachable = await probeWdpReachable();
+        if (!reachable) {
+          showToast('Web Device Proxy unreachable — disconnected');
+          onDisconnect();
+        }
+      })();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [device, usingFake, onDisconnect, showToast]);
+
   // ---- Global keyboard shortcuts -----------------------------------------
   // Only the help dialog shortcut stays global — every per-widget shortcut
   // (Space / ⌘K / ⌘F / / / Esc) lives inside the widget so two Logcat
