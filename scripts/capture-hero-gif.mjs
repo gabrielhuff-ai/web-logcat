@@ -173,8 +173,8 @@ async function main() {
   console.log(`recorded ${webm} (${statSync(webm).size} bytes)`);
 
   const palette = path.join(videoDir, 'palette.png');
-  const fps = 6;
-  const width = 560;
+  const fps = 8;
+  const width = 720;
   // Trim the lead-in: the video starts before `page.goto`, so the
   // first ~1.5s is the dark splash. Skipping it makes the first GIF
   // frame match the last (logcat-only baseline) for a clean loop.
@@ -192,7 +192,7 @@ async function main() {
       '-y',
       '-ss', String(trimSeconds),
       '-i', webm,
-      '-vf', `${filterChain},palettegen=stats_mode=diff:max_colors=128`,
+      '-vf', `${filterChain},palettegen=stats_mode=diff`,
       palette,
     ],
     { stdio: 'inherit' },
