@@ -278,10 +278,16 @@
  * it leaves the surrounding tiles stable so the user can target a
  * drop zone cleanly while still seeing the dragged tile reads as
  * "picked up". */
+/* Wobble via the standalone `rotate` property rather than `transform:
+ * rotate(...)` so the keyframes don't clobber the cursor-follow
+ * `transform: translate(...)` set inline by `<TileGrid/>`. `rotate`
+ * (CSS Transforms Level 2, all evergreen browsers since 2022) is its
+ * own animatable property — `transform` and `rotate` compose into the
+ * final paint without one overriding the other. */
 @keyframes tile-shake {
-  0%   { transform: rotate(-0.6deg); }
-  50%  { transform: rotate( 0.6deg); }
-  100% { transform: rotate(-0.6deg); }
+  0%   { rotate: -0.6deg; }
+  50%  { rotate:  0.6deg; }
+  100% { rotate: -0.6deg; }
 }
 .dash-grid.drag-polish .tile.dragging {
   animation: tile-shake 280ms ease-in-out infinite;
@@ -371,23 +377,49 @@
    * structural change (add / remove / swap / restructure / split
    * resize end) animate cleanly. The dragged source tile and its
    * neighbours all reposition through this same rule, which gives
-   * the IDE-style "panes glide into place" feel during a drag. */
+   * the IDE-style "panes glide into place" feel during a drag.
+   *
+   * `transform` is also in the list (220ms) so the dragged tile's
+   * cursor-follow translate can interpolate back to identity when
+   * the drag releases — paired with the simultaneous `left/top`
+   * change to the new layout slot, the visual is a smooth glide
+   * from cursor to drop position. While the drag is live,
+   * `.tile.dragging` keeps `transform` in the list but at 0ms so
+   * the cursor tracking stays 1:1; on release the duration reverts
+   * to 220ms and the spec-required after-change transition fires
+   * cleanly (the previous design overrode the entire transition
+   * list during drag, which left both `transform` and `left/top`
+   * absent from the before-change list and made WebKit/Blink skip
+   * the source tile's drop animation per the well-known same-frame
+   * transition-restoration quirk — the target tile, whose
+   * transition list never changed, animated as expected). */
   transition:
+    transform 220ms var(--ease-out),
     left 220ms var(--ease-out),
     top 220ms var(--ease-out),
     width 220ms var(--ease-out),
     height 220ms var(--ease-out),
     box-shadow 160ms;
 }
-/* The dragged tile follows the cursor (see the `style` override in
- * `<TileGrid/>`). Kill the `left/top/width/height` transition so the
- * tile tracks pointermove without lag — the transition is restored on
- * drop so the tile glides back to its layout position smoothly. The
+/* The dragged tile follows the cursor via an inline `transform:
+ * translate(...)` set by `<TileGrid/>` — `left/top` stay pinned to
+ * the tile's layout rect throughout the drag so the transition can
+ * smoothly resolve from "cursor offset" to "no offset" when the drop
+ * fires. The only override here is `transform 0ms` so the cursor
+ * tracking remains 1:1; once the class lifts the duration reverts to
+ * 220ms and the inline transform clears, animating the source tile
+ * from its cursor visual position to the new layout slot. The
  * z-index lift floats the dragged tile above its siblings, and the
  * raised box-shadow reads as "I'm picked up". */
 .tile.dragging {
   z-index: 50 !important;
-  transition: box-shadow 160ms;
+  transition:
+    transform 0ms,
+    left 220ms var(--ease-out),
+    top 220ms var(--ease-out),
+    width 220ms var(--ease-out),
+    height 220ms var(--ease-out),
+    box-shadow 160ms;
   cursor: grabbing;
   /* Translucent while in flight so the user can see the drop target
    * (and any drop overlays the cursor crosses) through the tile being
