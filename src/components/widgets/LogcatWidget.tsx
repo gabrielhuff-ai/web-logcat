@@ -427,16 +427,30 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   // screen-Y synchronously, then flip the flag. LogList consumes the
   // capture in a useLayoutEffect to restore the same Y on the new
   // entries. Edge cases (row above/below the viewport) are clamped to
-  // the viewport edges inside LogList.
+  // the viewport edges inside LogList. We also disable autoScroll
+  // synchronously so the in-LogList "auto-scroll to bottom on entries
+  // change" useEffect doesn't race ahead of the preserve handoff and
+  // yank the view to the new buffer's tail.
   const onToggleOnlyMatches = useCallback(
     (v: boolean) => {
       if (activeMatchId != null) {
         preserveActivePositionRef.current?.();
+        setAutoScroll(false);
       }
       setOnlyMatches(v);
     },
-    [activeMatchId],
+    [activeMatchId, setAutoScroll],
   );
+
+  // Closing the search overlay restores focus to the widget root —
+  // otherwise focus lands on <body> after the input unmounts and the
+  // widget's keydown listener (gated on `root.contains(activeElement)`)
+  // stops catching ⌘G. The browser's own find-next then fires instead.
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearch('');
+    rootRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -476,10 +490,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         }
       }
       if (e.key === 'Escape') {
-        if (searchOpen) {
-          setSearchOpen(false);
-          setSearch('');
-        }
+        if (searchOpen) closeSearch();
       }
       if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -490,6 +501,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [
     searchOpen,
+    closeSearch,
     onClear,
     setPaused,
     activeFilterId,
@@ -670,10 +682,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         query={search}
         matchCount={filtered.length}
         onChange={setSearch}
-        onClose={() => {
-          setSearchOpen(false);
-          setSearch('');
-        }}
+        onClose={closeSearch}
       />
     </div>
   );

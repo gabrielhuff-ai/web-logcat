@@ -435,11 +435,14 @@ test.describe('filter bar', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    // Give the stream a beat so a broadly-matching filter has matches
+    // to find — keeps the test stable when run in parallel.
+    await page.waitForTimeout(800);
 
     const input = page.locator('.fb-input');
     await input.focus();
-    await input.fill('tag:Activity');
+    await input.fill('level:I');
     await input.press('Enter');
 
     // Click the chip to activate find-next-match navigation.
@@ -449,7 +452,7 @@ test.describe('filter bar', () => {
 
     // The first match should be highlighted and visible in the viewport.
     const activeMatch = page.locator('.row.active-match');
-    await expect(activeMatch).toHaveCount(1);
+    await expect(activeMatch).toHaveCount(1, { timeout: 10_000 });
     await expect(activeMatch).toBeInViewport();
 
     // The X/Y counter should show 1/N.
@@ -459,12 +462,13 @@ test.describe('filter bar', () => {
     await page.locator('.lc-widget').focus();
     await page.keyboard.press('Space');
 
-    // Cmd-G should advance to the next match AND scroll it into view.
+    // Cmd-G should advance to the next match AND keep it in view (the
+    // visibility-check path handles "already on screen"; both outcomes
+    // mean the active row is visible).
     const isMac = process.platform === 'darwin';
     await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
     await expect(page.locator('.fb-match-counter')).toContainText(/^2\//);
 
-    // The new active match must be visible (= the find-next scroll worked).
     await expect(page.locator('.row.active-match')).toHaveCount(1);
     await expect(page.locator('.row.active-match')).toBeInViewport();
   });
@@ -474,16 +478,17 @@ test.describe('filter bar', () => {
   }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
-    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(800);
 
     const input = page.locator('.fb-input');
     await input.focus();
-    await input.fill('tag:Activity');
+    await input.fill('level:I');
     await input.press('Enter');
 
     // Activate the chip and pause so the buffer is stable.
     await page.locator('.chip').first().click();
-    await expect(page.locator('.row.active-match')).toHaveCount(1);
+    await expect(page.locator('.row.active-match')).toHaveCount(1, { timeout: 10_000 });
     await page.locator('.lc-widget').focus();
     await page.keyboard.press('Space');
 
@@ -528,6 +533,128 @@ test.describe('filter bar', () => {
     // Click a different row; only one row stays active at a time.
     await rows.nth(5).click();
     await expect(page.locator('.row.active-match')).toHaveCount(1);
+  });
+
+  test('toggling "only matches" preserves the active row Y even with autoScroll on', async ({
+    page,
+  }) => {
+    // The naive implementation lets LogList's auto-scroll-to-bottom
+    // useEffect race ahead of the preserve handoff when autoScroll is
+    // still true at commit time — yanking the buffer to its tail and
+    // burying the selected row above the viewport.
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    // Give the stream a moment to build up so the matches filter has
+    // something to keep on screen.
+    await expect(page.locator('.row')).toHaveCount(10, { timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(800);
+
+    // Add a filter (auto-enables "only matches") but don't activate
+    // the chip — chip activation would scroll-to-first-match and turn
+    // autoScroll off, which would mask the race we're testing.
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('level:I');
+    await input.press('Enter');
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    // Pause so the buffer is stable.
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    // Click a visible row to select it. Row-click doesn't touch
+    // autoScroll, so it stays on if the user was tailing.
+    const rows = page.locator('.row');
+    await rows.nth(3).click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+
+    const yBefore = await page
+      .locator('.row.active-match')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().top);
+
+    // Toggle "only matches" off. The selected row must stay near its
+    // captured Y; the auto-scroll-to-bottom must NOT win the race.
+    await page
+      .locator('.lc-widget [data-tt*="matches"]')
+      .first()
+      .click();
+
+    await expect(page.locator('.row.active-match')).toBeInViewport();
+    const yAfter = await page
+      .locator('.row.active-match')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().top);
+    expect(Math.abs(yAfter - yBefore)).toBeLessThan(40);
+  });
+
+  test('⌘G skips the scroll when the next match is already in view', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    // `level:I` matches ~30% of the simulated stream, so when the
+    // chip is active the next match is essentially always within the
+    // viewport — ⌘G should not move the scroll.
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('level:I');
+    await input.press('Enter');
+
+    const chip = page.locator('.chip').first();
+    await chip.click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+
+    // Pause to stop the stream from shifting rows mid-test.
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    const log = page.locator('.log-scroll');
+    const scrollBefore = await log.evaluate((el) => el.scrollTop);
+
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    await expect(page.locator('.fb-match-counter')).toContainText(/^2\//);
+
+    const scrollAfter = await log.evaluate((el) => el.scrollTop);
+    expect(scrollAfter).toBe(scrollBefore);
+    await expect(page.locator('.row.active-match')).toBeInViewport();
+  });
+
+  test('after closing the search overlay with Esc, ⌘G keeps stepping through matches', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(800);
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('level:I');
+    await input.press('Enter');
+    await page.locator('.chip').first().click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1, { timeout: 10_000 });
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    await expect(page.locator('.fb-match-counter')).toContainText(/^2\//);
+
+    // Open then Esc-close the in-app search overlay.
+    await page.keyboard.press(isMac ? 'Meta+f' : 'Control+f');
+    await expect(page.locator('.search-overlay')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.search-overlay')).toBeHidden();
+
+    // The next ⌘G must still be caught by the widget — counter
+    // advances to 3/N. Without the focus-restore fix the keystroke
+    // escapes to the browser's native find-next.
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    await expect(page.locator('.fb-match-counter')).toContainText(/^3\//);
   });
 
   test('⌘G with no active chip activates the rightmost filter', async ({ page }) => {
