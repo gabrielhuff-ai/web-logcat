@@ -91,7 +91,15 @@ export function FilterBar({
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
   const [acIdx, setAcIdx] = useState(0);
+  // The suggestion dropdown can be temporarily collapsed with Esc
+  // while the input keeps focus, so the user can dismiss the menu
+  // without losing the cursor. Reopens on any typing / arrow / refocus.
+  const [acDismissed, setAcDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Defers the `focused → false` write so a click on a suggestion can
+  // still see `focused === true`. Tracked in a ref so a quick blur →
+  // refocus (e.g. the Esc-then-⌘F path) can cancel the pending write.
+  const blurTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     registerFocusHandler?.(() => inputRef.current?.focus());
@@ -154,10 +162,12 @@ export function FilterBar({
   };
   const removeFilter = (id: number) => setFilters(filters.filter((f) => f.id !== id));
 
+  const acOpen = focused && suggestions.length > 0 && !acDismissed;
+
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (suggestions.length && focused) {
+      if (acOpen) {
         const s = suggestions[acIdx];
         if (s.kind === 'type') {
           setDraft(s.insert);
@@ -171,16 +181,26 @@ export function FilterBar({
       removeFilter(filters[filters.length - 1].id);
     } else if (e.key === 'ArrowDown' && suggestions.length) {
       e.preventDefault();
+      setAcDismissed(false);
       setAcIdx((acIdx + 1) % suggestions.length);
     } else if (e.key === 'ArrowUp' && suggestions.length) {
       e.preventDefault();
+      setAcDismissed(false);
       setAcIdx((acIdx - 1 + suggestions.length) % suggestions.length);
     } else if (e.key === 'Tab' && suggestions.length) {
       e.preventDefault();
+      setAcDismissed(false);
       setDraft(suggestions[acIdx].insert);
     } else if (e.key === 'Escape') {
-      setDraft('');
-      (e.target as HTMLInputElement).blur();
+      // 1st Esc dismisses the suggestion menu but keeps the cursor in
+      // place so the user can keep typing. 2nd Esc (menu already
+      // closed) clears the draft and blurs the input.
+      if (acOpen) {
+        setAcDismissed(true);
+      } else {
+        setDraft('');
+        (e.target as HTMLInputElement).blur();
+      }
     }
   };
 
@@ -240,13 +260,31 @@ export function FilterBar({
                 ? ''
                 : 'Filter — type to highlight, or use  process:  tag:  pid:  level:'
             }
-            onChange={(e) => setDraft(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setTimeout(() => setFocused(false), 120)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setAcDismissed(false);
+            }}
+            onFocus={() => {
+              if (blurTimerRef.current != null) {
+                window.clearTimeout(blurTimerRef.current);
+                blurTimerRef.current = null;
+              }
+              setFocused(true);
+              setAcDismissed(false);
+            }}
+            onBlur={() => {
+              if (blurTimerRef.current != null) {
+                window.clearTimeout(blurTimerRef.current);
+              }
+              blurTimerRef.current = window.setTimeout(() => {
+                setFocused(false);
+                blurTimerRef.current = null;
+              }, 120);
+            }}
             onKeyDown={onKey}
             spellCheck={false}
           />
-          {focused && suggestions.length > 0 && (
+          {acOpen && (
             <div className="fb-ac">
               {!draft.trim() && (
                 <div className="fb-ac-head">

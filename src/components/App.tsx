@@ -264,9 +264,9 @@ export function App() {
   }, [device, usingFake, onDisconnect, showToast]);
 
   // ---- Global keyboard shortcuts -----------------------------------------
-  // Only the help dialog shortcut stays global — every per-widget shortcut
-  // (Space / ⌘K / ⌘F / / / Esc) lives inside the widget so two Logcat
-  // tiles don't toggle each other.
+  // Only the help dialog shortcut and the cross-widget ⌘F fallback stay
+  // global. Per-widget shortcuts (Space / ⌘K / ⌘G / /) live inside the
+  // widget so two Logcat tiles don't toggle each other.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -274,6 +274,21 @@ export function App() {
       if (e.key === '?' && !inField) {
         e.preventDefault();
         setHelpOpen((v) => !v);
+      }
+      // ⌘F / Ctrl+F — focus the filter bar of a logcat widget.
+      // When a logcat widget already owns focus its own keydown
+      // handler takes over (and the gate below short-circuits so we
+      // don't fight over the keystroke). Otherwise we pick the first
+      // logcat widget on the page; if there's none, fall through to
+      // the browser's native find.
+      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest('.lc-widget')) return;
+        const firstWidget = document.querySelector('.lc-widget');
+        const input = firstWidget?.querySelector<HTMLInputElement>('.fb-input');
+        if (!input) return;
+        e.preventDefault();
+        input.focus();
       }
     };
     window.addEventListener('keydown', onKey);
