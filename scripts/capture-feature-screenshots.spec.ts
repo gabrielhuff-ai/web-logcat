@@ -60,14 +60,22 @@ function out(theme: Theme, name: string): string {
 }
 
 /**
- * Wait until every webfont declared on the page has loaded. The
+ * Wait until JetBrains Mono is actually available on the page. The
  * dashboard's mono surfaces (logcat rows, shell, dumpsys tables)
- * depend on JetBrains Mono served from Google Fonts; without this
- * Playwright can snap mid-FOUT and ship a screenshot rendered in the
- * system fallback (DejaVu / Liberation Mono on Linux runners).
+ * render in JBM; without this assertion Playwright can snap mid-FOUT
+ * — or, worse, capture with the system fallback (DejaVu / Liberation
+ * Mono) when the Google Fonts fetch is blocked or `font-display: swap`
+ * decides the fallback is good enough. The screenshots that ship to
+ * the docs site must be JBM, so we fail the run rather than commit a
+ * silently-wrong PNG. If this assertion trips, install JBM locally
+ * (`apt install fonts-jetbrains-mono`) or unblock fonts.gstatic.com.
  */
 async function waitForFonts(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
+  const hasJbm = await page.evaluate(() =>
+    document.fonts.check('12px "JetBrains Mono"'),
+  );
+  expect(hasJbm, 'JetBrains Mono not loaded — screenshots would ship the system mono fallback').toBe(true);
 }
 
 /**
