@@ -623,6 +623,127 @@ test.describe('filter bar', () => {
     await expect(page.locator('.row.active-match')).toBeInViewport();
   });
 
+  test('switching to a chip that already includes the focal row keeps the selection', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(2500);
+
+    // Two filters that overlap on every row: `android` matches most
+    // packages; `level:` matches every row (every entry has a level).
+    // So the focal row is guaranteed to belong to both match sets.
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('android');
+    await input.press('Enter');
+    await input.fill('level:I');
+    await input.press('Enter');
+
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    // Activate the second chip (level:I); navigate to match 4.
+    await page.locator('.chip').nth(1).click();
+    await expect(page.locator('.fb-match-counter')).toContainText(/^1\//);
+    const isMac = process.platform === 'darwin';
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    }
+    await expect(page.locator('.fb-match-counter')).toContainText(/^4\//);
+    const focalText = await page.locator('.row.active-match').first().textContent();
+
+    // Click the first chip (android). The focal row is a level:I row,
+    // but does it also contain 'android'? Many do (com.android.*). If
+    // the focal row is a match of `android`, the selection should
+    // stay on the same row (counter shows its position within
+    // android matches, which may differ but isn't 1).
+    //
+    // We resolve the ambiguity by reading the focal row's text: if it
+    // doesn't include 'android' we skip the "stay" assertion and
+    // exercise the advance path instead.
+    await page.locator('.chip').nth(0).click();
+    await expect(page.locator('.chip').nth(0)).toHaveClass(/chip-active/);
+
+    const stillFocalText = await page
+      .locator('.row.active-match')
+      .first()
+      .textContent();
+    if (focalText && /android/i.test(focalText)) {
+      // Focal row is a match of `android` — selection must not move.
+      expect(stillFocalText).toBe(focalText);
+    } else {
+      // Focal row isn't a match — selection must advance, not snap to 1.
+      const counter = (await page.locator('.fb-match-counter').textContent()) ?? '';
+      const [pos] = counter.split('/').map((s) => parseInt(s, 10));
+      expect(pos).toBeGreaterThan(1);
+    }
+  });
+
+  test('⌘G after clicking a non-matching row advances from the focal row, not match #1', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(2500);
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('tag:Activity');
+    await input.press('Enter');
+
+    // Activate the chip and turn OFF "only matches" so non-matching
+    // rows stay clickable. Pause so the buffer is stable.
+    await page.locator('.chip').first().click();
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+    await page
+      .locator('.lc-widget [data-tt*="matches"]')
+      .first()
+      .click();
+
+    // Find a non-matching row near the TOP of the visible list so
+    // there are matches BELOW it (= ids greater than the focal id) —
+    // the wrap case would also pass the "advances past 1" check
+    // trivially, but here we want to exercise the find-after path.
+    const rows = page.locator('.row');
+    const rowCount = await rows.count();
+    let targetIdx = -1;
+    for (let i = 0; i < rowCount; i++) {
+      const cls = await rows.nth(i).getAttribute('class');
+      const text = await rows.nth(i).textContent();
+      if (!cls?.includes('match') && text && !/Activity/i.test(text)) {
+        targetIdx = i;
+        break;
+      }
+    }
+    expect(targetIdx).toBeGreaterThan(-1);
+
+    const focalText = await rows.nth(targetIdx).textContent();
+    await rows.nth(targetIdx).click();
+    await expect(page.locator('.fb-match-counter')).toContainText(/^0\//);
+
+    // ⌘G must jump to the next Activity match AFTER the clicked row,
+    // not snap to match 1/N. The previous bug picked matchEntryIds[0]
+    // unconditionally when currentMatchIndex < 0.
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+
+    const newText = await page
+      .locator('.row.active-match')
+      .first()
+      .textContent();
+    expect(newText).not.toBe(focalText);
+    // The advanced match must itself be an Activity row.
+    expect(newText).toMatch(/Activity/i);
+
+    const counter = (await page.locator('.fb-match-counter').textContent()) ?? '';
+    const [, total] = counter.split('/').map((s) => parseInt(s, 10));
+    expect(total).toBeGreaterThan(1);
+  });
+
   test('switching to a different filter chip jumps to the next match after the current row', async ({
     page,
   }) => {

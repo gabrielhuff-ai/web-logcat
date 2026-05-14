@@ -359,21 +359,53 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     }
   }, [activeMatchId, filteredIds]);
 
+  // ⌘G / ⌘⇧G handlers. When the focal row is itself a match
+  // (`currentMatchIndex >= 0`) we walk the match list with wrapping
+  // modulo arithmetic. When the focal row isn't a match (e.g. the
+  // user clicked a non-matching row to select it), we want "next /
+  // previous match relative to the focal row" — not "first / last
+  // match in the buffer". Entry ids are monotonic with viewport
+  // position, so the next-after-focal match is the first match with
+  // an id greater than `activeMatchId`; the previous-before-focal is
+  // the last match with an id smaller than `activeMatchId`. Wrap to
+  // first / last when nothing's after / before.
   const onAdvanceMatch = useCallback(() => {
     if (matchEntryIds.length === 0) return;
-    const next = currentMatchIndex < 0
-      ? 0
-      : (currentMatchIndex + 1) % matchEntryIds.length;
-    setActiveMatchId(matchEntryIds[next]);
-  }, [matchEntryIds, currentMatchIndex]);
+    if (currentMatchIndex >= 0) {
+      const next = (currentMatchIndex + 1) % matchEntryIds.length;
+      setActiveMatchId(matchEntryIds[next]);
+      return;
+    }
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[0]);
+      return;
+    }
+    const after = matchEntryIds.find((id) => id > activeMatchId);
+    setActiveMatchId(after ?? matchEntryIds[0]);
+  }, [matchEntryIds, currentMatchIndex, activeMatchId]);
 
   const onRetreatMatch = useCallback(() => {
     if (matchEntryIds.length === 0) return;
-    const prev = currentMatchIndex <= 0
-      ? matchEntryIds.length - 1
-      : currentMatchIndex - 1;
-    setActiveMatchId(matchEntryIds[prev]);
-  }, [matchEntryIds, currentMatchIndex]);
+    if (currentMatchIndex >= 0) {
+      const prev = currentMatchIndex === 0
+        ? matchEntryIds.length - 1
+        : currentMatchIndex - 1;
+      setActiveMatchId(matchEntryIds[prev]);
+      return;
+    }
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[matchEntryIds.length - 1]);
+      return;
+    }
+    let before: number | undefined;
+    for (let i = matchEntryIds.length - 1; i >= 0; i--) {
+      if (matchEntryIds[i] < activeMatchId) {
+        before = matchEntryIds[i];
+        break;
+      }
+    }
+    setActiveMatchId(before ?? matchEntryIds[matchEntryIds.length - 1]);
+  }, [matchEntryIds, currentMatchIndex, activeMatchId]);
 
   // Row-click selection: same visual + cursor semantics as find-next-
   // match, but the row is already on screen so suppress the scroll.
@@ -382,18 +414,15 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     setActiveMatchId(id);
   }, []);
 
-  // Selecting a filter: "continue navigation" from the current row.
-  //   - No current selection → jump to the first match.
-  //   - Otherwise → advance to the first match WHOSE id is greater
+  // Selecting a filter: "continue navigation" from the focal row.
+  //   - No selection → jump to the first match.
+  //   - Focal row is already a match of the new chip → stay (so
+  //     switching between two chips that share the focal row's match
+  //     doesn't lose the user's place).
+  //   - Otherwise → advance to the first match whose id is greater
   //     than the focal row's id (entry ids are monotonic, see
   //     lib/logGenerator.ts and lib/adb.ts). Wraps to the first match
   //     when there's nothing after.
-  //
-  // We advance unconditionally — even when the focal row itself is a
-  // match of the new filter — so clicking a different chip behaves
-  // like ⌘G in the new filter rather than re-snapping to match #1.
-  // The [activeMatchId] effect below picks up the new id and scrolls
-  // when the next match isn't already on screen.
   useEffect(() => {
     if (activeFilterId == null) return;
     if (matchEntryIds.length === 0) return;
@@ -401,9 +430,9 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
       setActiveMatchId(matchEntryIds[0]);
       return;
     }
+    if (matchEntryIds.includes(activeMatchId)) return;
     const after = matchEntryIds.find((id) => id > activeMatchId);
-    const next = after ?? matchEntryIds[0];
-    if (next !== activeMatchId) setActiveMatchId(next);
+    setActiveMatchId(after ?? matchEntryIds[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilterId, matchEntryIds.length]);
 
