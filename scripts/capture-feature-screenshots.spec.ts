@@ -60,6 +60,17 @@ function out(theme: Theme, name: string): string {
 }
 
 /**
+ * Wait until every webfont declared on the page has loaded. The
+ * dashboard's mono surfaces (logcat rows, shell, dumpsys tables)
+ * depend on JetBrains Mono served from Google Fonts; without this
+ * Playwright can snap mid-FOUT and ship a screenshot rendered in the
+ * system fallback (DejaVu / Liberation Mono on Linux runners).
+ */
+async function waitForFonts(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/**
  * Boot the simulator with the given theme + indigo accent +
  * performance mode. The accent matches the docs site's brand; the
  * performance flag matches tests/smoke.spec.ts so layout transitions
@@ -96,6 +107,7 @@ async function bootSimulator(page: Page, theme: Theme): Promise<void> {
   await page.addStyleTag({
     content: '.fake-badge,.toast{display:none!important}',
   });
+  await waitForFonts(page);
 }
 
 async function addWidget(
@@ -136,6 +148,7 @@ for (const theme of ['dark', 'light'] as const) {
         page.getByRole('heading', { name: /no device connected/i }),
       ).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await waitForFonts(page);
       await page.screenshot({ path: out(theme, 'empty-state'), fullPage: false });
     });
 
@@ -153,6 +166,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.goto('/');
       await page.getByRole('button', { name: /choose connection method/i }).click();
       await expect(page.getByRole('menu')).toBeVisible();
+      await waitForFonts(page);
       await page.screenshot({
         path: out(theme, 'connect-dropdown'),
         fullPage: false,
@@ -175,6 +189,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
       const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
       await expect(dialog).toContainText(/Daemon not detected/i);
+      await waitForFonts(page);
       await page.screenshot({
         path: out(theme, 'wdp-dialog'),
         fullPage: false,
@@ -362,6 +377,7 @@ test.describe('hero shots', () => {
       await page.addStyleTag({
         content: '.fake-badge,.toast{display:none!important}',
       });
+      await waitForFonts(page);
       const heroPath = theme === 'dark' ? HERO_PATH : HERO_LIGHT_PATH;
       await page.screenshot({ path: heroPath, fullPage: false });
     });
