@@ -39,7 +39,6 @@ const GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['Space'], desc: 'Pause / resume the live stream' },
       { keys: ['/'], desc: 'Focus the filter input' },
-      { keys: ['⌘', 'F'], desc: 'Open search overlay' },
       { keys: ['⌘', 'G'], desc: 'Next match (or activate the rightmost chip)' },
       { keys: ['⌘', '⇧', 'G'], desc: 'Previous match' },
       { keys: ['⌘', 'K'], desc: 'Clear the log buffer' },

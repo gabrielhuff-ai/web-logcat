@@ -49,7 +49,6 @@ const VIRTUAL_THRESHOLD = 800;
 export interface LogListProps {
   entries: LogEntry[];
   filters: Filter[];
-  search: string;
   pinned: Set<number>;
   pinnedEntries: LogEntry[];
   onTogglePin: (id: number) => void;
@@ -89,7 +88,6 @@ interface ScrollAnchor {
 export function LogList({
   entries,
   filters,
-  search,
   pinned,
   pinnedEntries,
   onTogglePin,
@@ -345,7 +343,6 @@ export function LogList({
       key={`${keyPrefix}${l.id}`}
       entry={l}
       filters={filters}
-      search={search}
       showTimestamps={tweaks.showTimestamps}
       showPid={tweaks.showPid}
       showProcess={tweaks.showProcess}

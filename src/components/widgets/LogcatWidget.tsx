@@ -4,8 +4,7 @@
 // level toggles, filters, autoScroll, paused) live in `useTileSettings`
 // and are shared with the per-widget settings modal. Bar controls and
 // modal controls write through the same setter — single source of truth.
-// Ephemeral state (logs, pinned, search overlay) stays on local
-// `useState`.
+// Ephemeral state (logs, pinned) stays on local `useState`.
 //
 // Read from context:
 //   - device                  — `useAdb()` (so the widget re-mounts cleanly
@@ -21,7 +20,7 @@
 // is folded into `settings.filters` by the migration registered in
 // `logcat/logcatSettings.ts` so existing users don't lose their chips.
 //
-// Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) only fire when this
+// Keyboard shortcuts (Space / ⌘K / ⌘G / /) only fire when this
 // widget owns focus — the listener is mounted on a `tabIndex=-1` wrapper
 // and gated on `document.activeElement` being inside it. The HANDOFF
 // §Interactions Cheat Sheet calls this out explicitly: with multiple
@@ -41,7 +40,6 @@ import { FilterBar } from '../FilterBar';
 import { LevelRow } from '../LevelRow';
 import { LogList } from '../LogList';
 import { Heatmap, type HeatmapBucket } from '../Heatmap';
-import { SearchOverlay } from '../SearchOverlay';
 import * as Icons from '../Icons';
 import { entryMatches, makeFilter } from '../../lib/filters';
 import { KNOWN_PROCESSES, KNOWN_TAGS } from '../../lib/knownNames';
@@ -101,8 +99,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
 
   // ---- Ephemeral state ---------------------------------------------------
   const [logs, setLogs] = useState<LogEntry[]>(() => [...hub.snapshot()]);
-  const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [onlyMatches, setOnlyMatches] = useState(false);
   // Find-next-match state. `activeFilterId` selects which chip drives
   // navigation; `activeMatchId` is the currently-highlighted entry.
@@ -224,22 +220,12 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         const head = closestCrashHead(e, logs, crashHeads);
         if (head < 0 || !expanded.has(head)) return false;
       }
-      if (search) {
-        const s = search.toLowerCase();
-        if (
-          !e.message.toLowerCase().includes(s) &&
-          !e.tag.toLowerCase().includes(s) &&
-          !e.pkg.toLowerCase().includes(s)
-        ) {
-          return false;
-        }
-      }
       if (onlyMatches && filters.length > 0) {
         if (!entryMatches(e, filters).length) return false;
       }
       return true;
     });
-  }, [logs, levelEnabled, search, onlyMatches, filters, expanded, crashHeads]);
+  }, [logs, levelEnabled, onlyMatches, filters, expanded, crashHeads]);
 
   const pinnedEntries = useMemo(
     () => logs.filter((l) => pinned.has(l.id)),
@@ -396,15 +382,27 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     setActiveMatchId(id);
   }, []);
 
-  // Selecting a filter: jump to the first match so "click a chip"
-  // gives instant feedback. Skip when the current selection already
-  // belongs to this filter (so switching between two filters that
-  // both match the focal row doesn't lose the user's place).
+  // Selecting a filter: "continue navigation" from the current row.
+  //   - No current selection → jump to the first match.
+  //   - Current selection is already a match of this filter → leave it
+  //     (so switching between two filters that share matches doesn't
+  //     lose the user's place).
+  //   - Otherwise → jump to the first match WHOSE id is greater than
+  //     the current selection's id, i.e. the next match after the
+  //     focal row. Wraps to the first match when there's nothing
+  //     after. Entry ids are assigned monotonically from a single
+  //     counter (see lib/logGenerator.ts and lib/adb.ts), so id
+  //     ordering matches viewport order.
   useEffect(() => {
     if (activeFilterId == null) return;
     if (matchEntryIds.length === 0) return;
     if (activeMatchId != null && matchEntryIds.includes(activeMatchId)) return;
-    setActiveMatchId(matchEntryIds[0]);
+    let nextId = matchEntryIds[0];
+    if (activeMatchId != null) {
+      const after = matchEntryIds.find((id) => id > activeMatchId);
+      if (after !== undefined) nextId = after;
+    }
+    setActiveMatchId(nextId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilterId, matchEntryIds.length]);
 
@@ -442,16 +440,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     [activeMatchId, setAutoScroll],
   );
 
-  // Closing the search overlay restores focus to the widget root —
-  // otherwise focus lands on <body> after the input unmounts and the
-  // widget's keydown listener (gated on `root.contains(activeElement)`)
-  // stops catching ⌘G. The browser's own find-next then fires instead.
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSearch('');
-    rootRef.current?.focus();
-  }, []);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const root = rootRef.current;
@@ -469,10 +457,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         e.preventDefault();
         focusFilterRef.current?.();
       }
-      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
       // ⌘G / ⌘⇧G — find-next / find-previous (mirrors browsers,
       // editors, and Finder). With no active chip, fall back to the
       // rightmost filter so the shortcut still does something useful
@@ -489,9 +473,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           setActiveFilterId(filters[filters.length - 1].id);
         }
       }
-      if (e.key === 'Escape') {
-        if (searchOpen) closeSearch();
-      }
       if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         onClear();
@@ -500,8 +481,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
-    searchOpen,
-    closeSearch,
     onClear,
     setPaused,
     activeFilterId,
@@ -516,6 +495,36 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     if (!root || root.contains(document.activeElement)) return;
     if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
     root.focus();
+  }, []);
+
+  // Clicks on the tile chrome (header, drag grip, eye / settings /
+  // close buttons) live OUTSIDE `.lc-widget` so `onMouseDownWidget`
+  // never fires for them. TileGrid's pointerdown handler also blurs
+  // whatever input had focus, so without recovery the activeElement
+  // falls back to <body> and the widget's keydown listener — gated on
+  // `root.contains(activeElement)` — stops catching ⌘G. Re-focus the
+  // widget root via a microtask so the recovery happens AFTER the
+  // synthetic React handlers (which run on the bubble at the document
+  // root) have had a chance to perform the blur.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const tile = root.closest('.tile');
+    if (!tile) return;
+    const onTilePointerDown = (e: Event) => {
+      const tgt = e.target as HTMLElement | null;
+      if (!tgt) return;
+      // Clicks inside the widget body are covered by `onMouseDownWidget`.
+      if (root.contains(tgt)) return;
+      if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
+      queueMicrotask(() => {
+        if (!root.isConnected) return;
+        if (root.contains(document.activeElement)) return;
+        root.focus();
+      });
+    };
+    tile.addEventListener('pointerdown', onTilePointerDown);
+    return () => tile.removeEventListener('pointerdown', onTilePointerDown);
   }, []);
 
   // ---- Compose a Tweaks-shaped object for LogList ------------------------
@@ -642,7 +651,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         <LogList
           entries={filtered}
           filters={filters}
-          search={search}
           pinned={pinned}
           pinnedEntries={pinnedEntries}
           onTogglePin={togglePin}
@@ -676,14 +684,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           <Icons.Down size={13} /> Resume tail
         </button>
       )}
-
-      <SearchOverlay
-        open={searchOpen}
-        query={search}
-        matchCount={filtered.length}
-        onChange={setSearch}
-        onClose={closeSearch}
-      />
     </div>
   );
 }

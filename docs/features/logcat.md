@@ -54,11 +54,6 @@ level.
 - **Double-click** to *solo* — turns every other level off.
 - A struck-through pill means the level is hidden.
 
-## Search overlay
-
-`⌘F` (or `Ctrl+F`) opens a floating search box that matches across the
-visible rows and scrolls the next match into view. `Esc` dismisses it.
-
 ## Pinned rows
 
 Hover a row and click the pin icon to stick it to the top of the log.
@@ -107,7 +102,6 @@ never toggle each other.
 | --- | --- |
 | `Space` | Pause / resume the live stream |
 | `/` | Focus the filter input |
-| `⌘F` / `Ctrl+F` | Open the search overlay |
 | `⌘G` / `Ctrl+G` | Next match for the active chip (or activate the rightmost chip) |
 | `⇧⌘G` / `Ctrl+Shift+G` | Previous match for the active chip |
 | `⌘K` / `Ctrl+K` | Clear the log buffer |
