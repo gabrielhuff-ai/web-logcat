@@ -26,6 +26,21 @@ everything again.
 
 <ThemeImage src-dark="/img/features/logcat-chips.png" src-light="/img/features/logcat-chips-light.png" alt="Filter chips" />
 
+## Find-next-match
+
+Click a filter chip to activate it for navigation — the first
+matching row is highlighted (the *active match*) and the up/down
+buttons next to the chip step through the rest. `⌘G` / `Ctrl+G`
+advances; `⇧⌘G` / `Ctrl+Shift+G` goes backward. Pressing `⌘G`
+without an active chip falls back to activating the rightmost chip,
+so you can chain *add filter → ⌘G* without clicking.
+
+Clicking a log row selects it the same way — the row gets the
+active-match highlight. From there, `⌘G` resumes navigation in the
+active filter's match list. Toggling *show only matches* keeps the
+active row at the same on-screen position; rows scrolled off the top
+or bottom snap to the nearest edge of the viewport.
+
 ## Level pills
 
 The five level pills (V/D/I/W/E) above the log show the live rate per
@@ -89,6 +104,8 @@ never toggle each other.
 | `Space` | Pause / resume the live stream |
 | `/` | Focus the filter input |
 | `⌘F` / `Ctrl+F` | Open the search overlay |
+| `⌘G` / `Ctrl+G` | Next match for the active chip (or activate the rightmost chip) |
+| `⇧⌘G` / `Ctrl+Shift+G` | Previous match for the active chip |
 | `⌘K` / `Ctrl+K` | Clear the log buffer |
 | `?` | Open the in-app shortcut reference |
 | `Esc` | Close any open overlay |

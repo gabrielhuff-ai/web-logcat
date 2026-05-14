@@ -329,6 +329,13 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const focusFilterRef = useRef<(() => void) | null>(null);
   const scrollToTsRef = useRef<((ts: number) => void) | null>(null);
   const scrollToIdRef = useRef<((id: number) => void) | null>(null);
+  const preserveActivePositionRef = useRef<(() => void) | null>(null);
+  // Suppresses the scroll-to-active-match effect for a specific entry
+  // id. Used by row-click selection (the user clicked the row, so it's
+  // already on screen — no scroll needed). Keyed by id rather than a
+  // boolean so that clicking the same row twice doesn't leave a stale
+  // flag that would later swallow a real navigation scroll.
+  const skipScrollForIdRef = useRef<number | null>(null);
 
   // ---- Find-next-match orchestration -----------------------------------
   const activeFilter = useMemo(
@@ -351,27 +358,27 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     ? matchEntryIds.indexOf(activeMatchId)
     : -1;
 
-  // Reset the highlight when the active filter changes or when the
-  // currently-highlighted entry falls out of the match set (e.g. a
-  // level toggle hid it).
+  // Selection survives as long as the row is still in the visible
+  // buffer. We tolerate non-matching selections (row-click can pick
+  // anything) and only clear when the entry is gone — e.g. trimmed
+  // from the FIFO or hidden by a level toggle.
+  const filteredIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const e of filtered) s.add(e.id);
+    return s;
+  }, [filtered]);
   useEffect(() => {
-    if (activeFilter == null) {
-      setActiveMatchId(null);
-      return;
-    }
-    if (activeMatchId != null && !matchEntryIds.includes(activeMatchId)) {
+    if (activeMatchId != null && !filteredIds.has(activeMatchId)) {
       setActiveMatchId(null);
     }
-  }, [activeFilter, activeMatchId, matchEntryIds]);
+  }, [activeMatchId, filteredIds]);
 
   const onAdvanceMatch = useCallback(() => {
     if (matchEntryIds.length === 0) return;
     const next = currentMatchIndex < 0
       ? 0
       : (currentMatchIndex + 1) % matchEntryIds.length;
-    const id = matchEntryIds[next];
-    setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
+    setActiveMatchId(matchEntryIds[next]);
   }, [matchEntryIds, currentMatchIndex]);
 
   const onRetreatMatch = useCallback(() => {
@@ -379,30 +386,57 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     const prev = currentMatchIndex <= 0
       ? matchEntryIds.length - 1
       : currentMatchIndex - 1;
-    const id = matchEntryIds[prev];
-    setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
+    setActiveMatchId(matchEntryIds[prev]);
   }, [matchEntryIds, currentMatchIndex]);
 
-  // Re-centre the highlighted match when the user toggles "only
-  // matches" — without this the viewport often jumps the highlight
-  // out of view because the row's index in `filtered` shifts.
-  useEffect(() => {
-    if (activeMatchId == null) return;
-    scrollToIdRef.current?.(activeMatchId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlyMatches]);
-
-  // Setting a filter active without a previous highlight: jump to the
-  // first match immediately so "click a chip" gives instant feedback.
-  useEffect(() => {
-    if (activeFilterId == null || activeMatchId != null) return;
-    if (matchEntryIds.length === 0) return;
-    const id = matchEntryIds[0];
+  // Row-click selection: same visual + cursor semantics as find-next-
+  // match, but the row is already on screen so suppress the scroll.
+  const onSelectRow = useCallback((id: number) => {
+    skipScrollForIdRef.current = id;
     setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
+  }, []);
+
+  // Selecting a filter: jump to the first match so "click a chip"
+  // gives instant feedback. Skip when the current selection already
+  // belongs to this filter (so switching between two filters that
+  // both match the focal row doesn't lose the user's place).
+  useEffect(() => {
+    if (activeFilterId == null) return;
+    if (matchEntryIds.length === 0) return;
+    if (activeMatchId != null && matchEntryIds.includes(activeMatchId)) return;
+    setActiveMatchId(matchEntryIds[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilterId, matchEntryIds.length]);
+
+  // Single source of truth for "scroll to the active match" — fires
+  // once activeMatchId settles, which means all cascading state
+  // updates (onlyMatches toggle, filtered recompute) have committed
+  // first. Skips when the activation came from a row click on this
+  // exact id.
+  useEffect(() => {
+    if (activeMatchId == null) return;
+    if (skipScrollForIdRef.current === activeMatchId) {
+      skipScrollForIdRef.current = null;
+      return;
+    }
+    skipScrollForIdRef.current = null;
+    scrollToIdRef.current?.(activeMatchId);
+  }, [activeMatchId]);
+
+  // "Show only matches" toggle: capture the active row's current
+  // screen-Y synchronously, then flip the flag. LogList consumes the
+  // capture in a useLayoutEffect to restore the same Y on the new
+  // entries. Edge cases (row above/below the viewport) are clamped to
+  // the viewport edges inside LogList.
+  const onToggleOnlyMatches = useCallback(
+    (v: boolean) => {
+      if (activeMatchId != null) {
+        preserveActivePositionRef.current?.();
+      }
+      setOnlyMatches(v);
+    },
+    [activeMatchId],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -426,13 +460,19 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         setSearchOpen(true);
       }
       // ⌘G / ⌘⇧G — find-next / find-previous (mirrors browsers,
-      // editors, and Finder). Only fires while a chip is the active
-      // filter — otherwise there's no "find" to step through.
+      // editors, and Finder). With no active chip, fall back to the
+      // rightmost filter so the shortcut still does something useful
+      // after a fresh chip add. The activation triggers the existing
+      // "first match on filter select" effect, so the user lands on
+      // matchEntryIds[0]; subsequent ⌘G then steps through.
       if (e.key.toLowerCase() === 'g' && (e.metaKey || e.ctrlKey)) {
         if (activeFilterId !== null) {
           e.preventDefault();
           if (e.shiftKey) onRetreatMatch();
           else onAdvanceMatch();
+        } else if (filters.length > 0) {
+          e.preventDefault();
+          setActiveFilterId(filters[filters.length - 1].id);
         }
       }
       if (e.key === 'Escape') {
@@ -448,7 +488,15 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchOpen, onClear, setPaused, activeFilterId, onAdvanceMatch, onRetreatMatch]);
+  }, [
+    searchOpen,
+    onClear,
+    setPaused,
+    activeFilterId,
+    filters,
+    onAdvanceMatch,
+    onRetreatMatch,
+  ]);
 
   const onMouseDownWidget = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const root = rootRef.current;
@@ -526,7 +574,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         filters={filters}
         setFilters={setFiltersBoth}
         onlyMatches={onlyMatches}
-        setOnlyMatches={setOnlyMatches}
+        setOnlyMatches={onToggleOnlyMatches}
         knownProcesses={knownProcesses}
         knownTags={knownTags}
         paused={paused}
@@ -595,11 +643,15 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           deviceModel={device.model}
           hasFilters={filters.length > 0}
           activeMatchId={activeMatchId}
+          onSelectRow={onSelectRow}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
           }}
           registerScrollToId={(fn) => {
             scrollToIdRef.current = fn;
+          }}
+          registerPreserveActivePosition={(fn) => {
+            preserveActivePositionRef.current = fn;
           }}
         />
       </div>
