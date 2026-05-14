@@ -63,11 +63,19 @@ export interface LogListProps {
   hasFilters: boolean;
   /** Highlight this entry id and let `registerScrollToId` jump to it. */
   activeMatchId?: number | null;
+  /** Clicking a row's body selects it (same effect as find-next-match). */
+  onSelectRow?: (id: number) => void;
   /** Imperative API: parent calls this to scroll to a given timestamp. */
   registerScrollToTs?: (fn: (ts: number) => void) => void;
   /** Imperative API: parent calls this to scroll a specific entry id
    *  into the centre of the viewport (used by find-next-match). */
   registerScrollToId?: (fn: (id: number) => void) => void;
+  /** Imperative API: capture the active row's current screen-Y so that
+   *  on the next entries change (e.g. "only matches" toggle) the row is
+   *  restored to the same screen position rather than re-centred. Rows
+   *  off-screen above clamp to the top of the viewport; rows below
+   *  clamp to the bottom. */
+  registerPreserveActivePosition?: (fn: () => void) => void;
 }
 
 interface ScrollAnchor {
@@ -94,8 +102,10 @@ export function LogList({
   deviceModel,
   hasFilters,
   activeMatchId,
+  onSelectRow,
   registerScrollToTs,
   registerScrollToId,
+  registerPreserveActivePosition,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowHeight = rowHeightFor(tweaks.density);
@@ -229,6 +239,72 @@ export function LogList({
     });
   }, [entries, virtualize, virtualizer, rowHeight, setAutoScroll, registerScrollToId]);
 
+  // Imperative "preserve active match's screen-Y across the next
+  // entries change" — used by the "only matches" toggle so the user's
+  // current focal row stays put instead of jumping to the centre.
+  // Captures the row's current top-Y relative to the viewport into a
+  // ref. The useLayoutEffect below consumes the ref on the next
+  // entries commit.
+  const preserveCaptureRef = useRef<{
+    id: number;
+    screenY: number;
+    viewportH: number;
+  } | null>(null);
+  useEffect(() => {
+    registerPreserveActivePosition?.(() => {
+      const el = scrollRef.current;
+      if (!el || activeMatchId == null) return;
+      const idx = entries.findIndex((l) => l.id === activeMatchId);
+      if (idx < 0) return;
+      const rowTop = virtualize
+        ? virtualizer.getOffsetForIndex(idx, 'start')?.[0] ?? idx * rowHeight
+        : idx * rowHeight;
+      preserveCaptureRef.current = {
+        id: activeMatchId,
+        screenY: rowTop - el.scrollTop,
+        viewportH: el.clientHeight,
+      };
+    });
+  }, [
+    activeMatchId,
+    entries,
+    virtualize,
+    virtualizer,
+    rowHeight,
+    registerPreserveActivePosition,
+  ]);
+
+  // Restore captured screen-Y when entries change. Declared after the
+  // anchor-restore useLayoutEffect so it overrides that effect's scroll
+  // adjustment on the toggle commit. Edge cases: rows above the
+  // viewport snap to the top; rows below snap to the bottom.
+  useLayoutEffect(() => {
+    const cap = preserveCaptureRef.current;
+    if (!cap) return;
+    preserveCaptureRef.current = null;
+    const el = scrollRef.current;
+    if (!el) return;
+    const idx = entries.findIndex((l) => l.id === cap.id);
+    if (idx < 0) return;
+    const rowTop = virtualize
+      ? virtualizer.getOffsetForIndex(idx, 'start')?.[0] ?? idx * rowHeight
+      : idx * rowHeight;
+    let targetY = cap.screenY;
+    if (cap.screenY < 0) {
+      targetY = 0;
+    } else if (cap.screenY + rowHeight > cap.viewportH) {
+      targetY = Math.max(0, cap.viewportH - rowHeight);
+    }
+    const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.max(0, Math.min(maxScroll, rowTop - targetY));
+    // Suppress the auto-scroll-to-bottom side effect of being close
+    // to the end: the user just toggled, they didn't request tail mode.
+    setAutoScroll(false);
+    // Reset the anchor so the streaming-anchor restore doesn't fight
+    // with the freshly-applied position on the next render.
+    anchorRef.current = null;
+  }, [entries, virtualize, virtualizer, rowHeight, setAutoScroll]);
+
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -273,6 +349,7 @@ export function LogList({
       isCrashHead={crashHeads.has(l.id)}
       expanded={expanded.has(l.id)}
       onToggleExpand={onToggleExpand}
+      onSelect={onSelectRow}
     />
   );
 

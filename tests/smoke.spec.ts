@@ -429,6 +429,134 @@ test.describe('filter bar', () => {
     await expect(page.locator('.chip')).toHaveCount(1);
     await expect(page.locator('.chip')).toContainText('Activity');
   });
+
+  test('activating a filter chip highlights the first match and ⌘G steps through', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('tag:Activity');
+    await input.press('Enter');
+
+    // Click the chip to activate find-next-match navigation.
+    const chip = page.locator('.chip').first();
+    await chip.click();
+    await expect(chip).toHaveClass(/chip-active/);
+
+    // The first match should be highlighted and visible in the viewport.
+    const activeMatch = page.locator('.row.active-match');
+    await expect(activeMatch).toHaveCount(1);
+    await expect(activeMatch).toBeInViewport();
+
+    // The X/Y counter should show 1/N.
+    await expect(page.locator('.fb-match-counter')).toContainText(/^1\//);
+
+    // Pause the stream so the matches don't shift mid-test.
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    // Cmd-G should advance to the next match AND scroll it into view.
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    await expect(page.locator('.fb-match-counter')).toContainText(/^2\//);
+
+    // The new active match must be visible (= the find-next scroll worked).
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+    await expect(page.locator('.row.active-match')).toBeInViewport();
+  });
+
+  test('toggling "show only matches" keeps the active row at the same screen-Y', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('tag:Activity');
+    await input.press('Enter');
+
+    // Activate the chip and pause so the buffer is stable.
+    await page.locator('.chip').first().click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    // Capture the active row's Y before the toggle.
+    const yBefore = await page
+      .locator('.row.active-match')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().top);
+
+    // Toggle "only matches" off (it auto-enabled on first chip).
+    await page
+      .locator('.lc-widget [data-tt*="matches"]')
+      .first()
+      .click();
+
+    // After the entries widen, the active row should still be on screen
+    // at roughly the same Y (within a row's height tolerance for the
+    // sub-pixel rounding inside the virtualiser).
+    await expect(page.locator('.row.active-match')).toBeInViewport();
+    const yAfter = await page
+      .locator('.row.active-match')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().top);
+    expect(Math.abs(yAfter - yBefore)).toBeLessThan(40);
+  });
+
+  test('clicking a log row selects it without scrolling', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    // Pause so rows don't stream away during the test.
+    await page.keyboard.press('Space');
+
+    // Click a specific row in the visible area.
+    const rows = page.locator('.row');
+    await rows.nth(2).click();
+
+    // Selected rows wear the active-match class.
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+
+    // Click a different row; only one row stays active at a time.
+    await rows.nth(5).click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+  });
+
+  test('⌘G with no active chip activates the rightmost filter', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('tag:Activity');
+    await input.press('Enter');
+    await input.fill('level:I');
+    await input.press('Enter');
+
+    // Two chips, neither is active.
+    await expect(page.locator('.chip')).toHaveCount(2);
+    await expect(page.locator('.chip.chip-active')).toHaveCount(0);
+
+    // Focus the widget so the shortcut handler picks up the key.
+    await page.locator('.lc-widget').focus();
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+
+    // The rightmost chip (level:I) should now be active and the first
+    // match highlighted.
+    const lastChip = page.locator('.chip').last();
+    await expect(lastChip).toHaveClass(/chip-active/);
+    await expect(page.locator('.row.active-match')).toHaveCount(1);
+  });
 });
 
 test.describe('keyboard shortcuts', () => {
