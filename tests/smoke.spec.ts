@@ -666,9 +666,9 @@ test.describe('filter bar', () => {
     await expect(page.locator('.chip').nth(1)).toHaveClass(/chip-active/);
     await expect(page.locator('.row.active-match')).toBeInViewport();
 
-    const counter = await page.locator('.fb-match-counter').textContent();
-    expect(counter).not.toBeNull();
-    const [pos, total] = counter!.split('/').map((s) => parseInt(s, 10));
+    const counter = (await page.locator('.fb-match-counter').textContent()) ?? '';
+    expect(counter).not.toBe('');
+    const [pos, total] = counter.split('/').map((s) => parseInt(s, 10));
     expect(total).toBeGreaterThan(1);
     // We had 3 I-matches behind us; D is ~50% more common than I in
     // the simulator's distribution, so the next-D-after-row index
