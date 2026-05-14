@@ -6,15 +6,13 @@ import * as Icons from './Icons';
 import { formatTs } from '../lib/format';
 import type { Filter, LogEntry } from '../types';
 
-type RangeColor = number | 'search';
-
 interface FieldRange {
   start: number;
   end: number;
-  color: RangeColor;
+  color: number;
 }
 
-function highlightField(text: string, value: string, color: RangeColor): FieldRange[] {
+function highlightField(text: string, value: string, color: number): FieldRange[] {
   if (!value) return [];
   const out: FieldRange[] = [];
   const lower = text.toLowerCase();
@@ -52,9 +50,8 @@ function HighlightedText({ text, ranges }: HighlightedTextProps) {
     if (r.start > cursor) {
       parts.push(<Fragment key={cursor}>{text.slice(cursor, r.start)}</Fragment>);
     }
-    const cls = `hl ${r.color === 'search' ? 'hl-search' : `hl-c${r.color}`}`;
     parts.push(
-      <mark key={r.start} className={cls}>
+      <mark key={r.start} className={`hl hl-c${r.color}`}>
         {text.slice(r.start, r.end)}
       </mark>,
     );
@@ -69,7 +66,6 @@ function HighlightedText({ text, ranges }: HighlightedTextProps) {
 export interface LogRowProps {
   entry: LogEntry;
   filters: Filter[];
-  search: string;
   showTimestamps: boolean;
   showPid: boolean;
   showProcess: boolean;
@@ -84,12 +80,13 @@ export interface LogRowProps {
   isCrashHead: boolean;
   expanded: boolean;
   onToggleExpand: (id: number) => void;
+  /** Clicking the row body selects it (mirrors find-next-match). */
+  onSelect?: (id: number) => void;
 }
 
 export const LogRow = memo(function LogRow({
   entry,
   filters,
-  search,
   showTimestamps,
   showPid,
   showProcess,
@@ -104,15 +101,15 @@ export const LogRow = memo(function LogRow({
   isCrashHead,
   expanded,
   onToggleExpand,
+  onSelect,
 }: LogRowProps) {
   const msgRanges = useMemo(() => {
     const out: FieldRange[] = [];
     for (const f of filters) {
       if (f.type === 'message') out.push(...highlightField(entry.message, f.value, f.color));
     }
-    if (search) out.push(...highlightField(entry.message, search, 'search'));
     return out;
-  }, [entry.message, filters, search]);
+  }, [entry.message, filters]);
 
   const tagRanges = useMemo(() => {
     const out: FieldRange[] = [];
@@ -150,11 +147,15 @@ export const LogRow = memo(function LogRow({
       data-level={entry.level}
       data-density={density}
       data-wrap={wrapLines ? 'true' : 'false'}
+      onClick={onSelect ? () => onSelect(entry.id) : undefined}
     >
       <div className="row-rail" />
       <button
         className="row-pin"
-        onClick={() => onTogglePin(entry.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onTogglePin(entry.id);
+        }}
         title={pinned ? 'Unpin' : 'Pin line'}
       >
         {pinned ? <Icons.PinFilled size={11} /> : <Icons.Pin size={11} />}
@@ -179,7 +180,13 @@ export const LogRow = memo(function LogRow({
       <span className={`cell msg ${wrapLines ? 'wrap' : ''}`}>
         <HighlightedText text={entry.message} ranges={msgRanges} />
         {isCrashHead && (
-          <button className="crash-toggle" onClick={() => onToggleExpand(entry.id)}>
+          <button
+            className="crash-toggle"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand(entry.id);
+            }}
+          >
             {expanded ? 'Collapse stack trace' : 'Show stack trace'}
             <Icons.Chevron
               size={11}

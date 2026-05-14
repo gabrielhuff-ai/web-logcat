@@ -4,8 +4,7 @@
 // level toggles, filters, autoScroll, paused) live in `useTileSettings`
 // and are shared with the per-widget settings modal. Bar controls and
 // modal controls write through the same setter — single source of truth.
-// Ephemeral state (logs, pinned, search overlay) stays on local
-// `useState`.
+// Ephemeral state (logs, pinned) stays on local `useState`.
 //
 // Read from context:
 //   - device                  — `useAdb()` (so the widget re-mounts cleanly
@@ -21,7 +20,7 @@
 // is folded into `settings.filters` by the migration registered in
 // `logcat/logcatSettings.ts` so existing users don't lose their chips.
 //
-// Keyboard shortcuts (Space / ⌘K / ⌘F / / / Esc) only fire when this
+// Keyboard shortcuts (Space / ⌘K / ⌘G / /) only fire when this
 // widget owns focus — the listener is mounted on a `tabIndex=-1` wrapper
 // and gated on `document.activeElement` being inside it. The HANDOFF
 // §Interactions Cheat Sheet calls this out explicitly: with multiple
@@ -41,7 +40,6 @@ import { FilterBar } from '../FilterBar';
 import { LevelRow } from '../LevelRow';
 import { LogList } from '../LogList';
 import { Heatmap, type HeatmapBucket } from '../Heatmap';
-import { SearchOverlay } from '../SearchOverlay';
 import * as Icons from '../Icons';
 import { entryMatches, makeFilter } from '../../lib/filters';
 import { KNOWN_PROCESSES, KNOWN_TAGS } from '../../lib/knownNames';
@@ -101,8 +99,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
 
   // ---- Ephemeral state ---------------------------------------------------
   const [logs, setLogs] = useState<LogEntry[]>(() => [...hub.snapshot()]);
-  const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [onlyMatches, setOnlyMatches] = useState(false);
   // Find-next-match state. `activeFilterId` selects which chip drives
   // navigation; `activeMatchId` is the currently-highlighted entry.
@@ -224,22 +220,12 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         const head = closestCrashHead(e, logs, crashHeads);
         if (head < 0 || !expanded.has(head)) return false;
       }
-      if (search) {
-        const s = search.toLowerCase();
-        if (
-          !e.message.toLowerCase().includes(s) &&
-          !e.tag.toLowerCase().includes(s) &&
-          !e.pkg.toLowerCase().includes(s)
-        ) {
-          return false;
-        }
-      }
       if (onlyMatches && filters.length > 0) {
         if (!entryMatches(e, filters).length) return false;
       }
       return true;
     });
-  }, [logs, levelEnabled, search, onlyMatches, filters, expanded, crashHeads]);
+  }, [logs, levelEnabled, onlyMatches, filters, expanded, crashHeads]);
 
   const pinnedEntries = useMemo(
     () => logs.filter((l) => pinned.has(l.id)),
@@ -329,6 +315,13 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
   const focusFilterRef = useRef<(() => void) | null>(null);
   const scrollToTsRef = useRef<((ts: number) => void) | null>(null);
   const scrollToIdRef = useRef<((id: number) => void) | null>(null);
+  const preserveActivePositionRef = useRef<(() => void) | null>(null);
+  // Suppresses the scroll-to-active-match effect for a specific entry
+  // id. Used by row-click selection (the user clicked the row, so it's
+  // already on screen — no scroll needed). Keyed by id rather than a
+  // boolean so that clicking the same row twice doesn't leave a stale
+  // flag that would later swallow a real navigation scroll.
+  const skipScrollForIdRef = useRef<number | null>(null);
 
   // ---- Find-next-match orchestration -----------------------------------
   const activeFilter = useMemo(
@@ -351,58 +344,131 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     ? matchEntryIds.indexOf(activeMatchId)
     : -1;
 
-  // Reset the highlight when the active filter changes or when the
-  // currently-highlighted entry falls out of the match set (e.g. a
-  // level toggle hid it).
+  // Selection survives as long as the row is still in the visible
+  // buffer. We tolerate non-matching selections (row-click can pick
+  // anything) and only clear when the entry is gone — e.g. trimmed
+  // from the FIFO or hidden by a level toggle.
+  const filteredIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const e of filtered) s.add(e.id);
+    return s;
+  }, [filtered]);
   useEffect(() => {
-    if (activeFilter == null) {
-      setActiveMatchId(null);
-      return;
-    }
-    if (activeMatchId != null && !matchEntryIds.includes(activeMatchId)) {
+    if (activeMatchId != null && !filteredIds.has(activeMatchId)) {
       setActiveMatchId(null);
     }
-  }, [activeFilter, activeMatchId, matchEntryIds]);
+  }, [activeMatchId, filteredIds]);
 
+  // ⌘G / ⌘⇧G handlers. When the focal row is itself a match
+  // (`currentMatchIndex >= 0`) we walk the match list with wrapping
+  // modulo arithmetic. When the focal row isn't a match (e.g. the
+  // user clicked a non-matching row to select it), we want "next /
+  // previous match relative to the focal row" — not "first / last
+  // match in the buffer". Entry ids are monotonic with viewport
+  // position, so the next-after-focal match is the first match with
+  // an id greater than `activeMatchId`; the previous-before-focal is
+  // the last match with an id smaller than `activeMatchId`. Wrap to
+  // first / last when nothing's after / before.
   const onAdvanceMatch = useCallback(() => {
     if (matchEntryIds.length === 0) return;
-    const next = currentMatchIndex < 0
-      ? 0
-      : (currentMatchIndex + 1) % matchEntryIds.length;
-    const id = matchEntryIds[next];
-    setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
-  }, [matchEntryIds, currentMatchIndex]);
+    if (currentMatchIndex >= 0) {
+      const next = (currentMatchIndex + 1) % matchEntryIds.length;
+      setActiveMatchId(matchEntryIds[next]);
+      return;
+    }
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[0]);
+      return;
+    }
+    const after = matchEntryIds.find((id) => id > activeMatchId);
+    setActiveMatchId(after ?? matchEntryIds[0]);
+  }, [matchEntryIds, currentMatchIndex, activeMatchId]);
 
   const onRetreatMatch = useCallback(() => {
     if (matchEntryIds.length === 0) return;
-    const prev = currentMatchIndex <= 0
-      ? matchEntryIds.length - 1
-      : currentMatchIndex - 1;
-    const id = matchEntryIds[prev];
+    if (currentMatchIndex >= 0) {
+      const prev = currentMatchIndex === 0
+        ? matchEntryIds.length - 1
+        : currentMatchIndex - 1;
+      setActiveMatchId(matchEntryIds[prev]);
+      return;
+    }
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[matchEntryIds.length - 1]);
+      return;
+    }
+    let before: number | undefined;
+    for (let i = matchEntryIds.length - 1; i >= 0; i--) {
+      if (matchEntryIds[i] < activeMatchId) {
+        before = matchEntryIds[i];
+        break;
+      }
+    }
+    setActiveMatchId(before ?? matchEntryIds[matchEntryIds.length - 1]);
+  }, [matchEntryIds, currentMatchIndex, activeMatchId]);
+
+  // Row-click selection: same visual + cursor semantics as find-next-
+  // match, but the row is already on screen so suppress the scroll.
+  const onSelectRow = useCallback((id: number) => {
+    skipScrollForIdRef.current = id;
     setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
-  }, [matchEntryIds, currentMatchIndex]);
+  }, []);
 
-  // Re-centre the highlighted match when the user toggles "only
-  // matches" — without this the viewport often jumps the highlight
-  // out of view because the row's index in `filtered` shifts.
+  // Selecting a filter: "continue navigation" from the focal row.
+  //   - No selection → jump to the first match.
+  //   - Focal row is already a match of the new chip → stay (so
+  //     switching between two chips that share the focal row's match
+  //     doesn't lose the user's place).
+  //   - Otherwise → advance to the first match whose id is greater
+  //     than the focal row's id (entry ids are monotonic, see
+  //     lib/logGenerator.ts and lib/adb.ts). Wraps to the first match
+  //     when there's nothing after.
   useEffect(() => {
-    if (activeMatchId == null) return;
-    scrollToIdRef.current?.(activeMatchId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlyMatches]);
-
-  // Setting a filter active without a previous highlight: jump to the
-  // first match immediately so "click a chip" gives instant feedback.
-  useEffect(() => {
-    if (activeFilterId == null || activeMatchId != null) return;
+    if (activeFilterId == null) return;
     if (matchEntryIds.length === 0) return;
-    const id = matchEntryIds[0];
-    setActiveMatchId(id);
-    scrollToIdRef.current?.(id);
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[0]);
+      return;
+    }
+    if (matchEntryIds.includes(activeMatchId)) return;
+    const after = matchEntryIds.find((id) => id > activeMatchId);
+    setActiveMatchId(after ?? matchEntryIds[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilterId, matchEntryIds.length]);
+
+  // Single source of truth for "scroll to the active match" — fires
+  // once activeMatchId settles, which means all cascading state
+  // updates (onlyMatches toggle, filtered recompute) have committed
+  // first. Skips when the activation came from a row click on this
+  // exact id.
+  useEffect(() => {
+    if (activeMatchId == null) return;
+    if (skipScrollForIdRef.current === activeMatchId) {
+      skipScrollForIdRef.current = null;
+      return;
+    }
+    skipScrollForIdRef.current = null;
+    scrollToIdRef.current?.(activeMatchId);
+  }, [activeMatchId]);
+
+  // "Show only matches" toggle: capture the active row's current
+  // screen-Y synchronously, then flip the flag. LogList consumes the
+  // capture in a useLayoutEffect to restore the same Y on the new
+  // entries. Edge cases (row above/below the viewport) are clamped to
+  // the viewport edges inside LogList. We also disable autoScroll
+  // synchronously so the in-LogList "auto-scroll to bottom on entries
+  // change" useEffect doesn't race ahead of the preserve handoff and
+  // yank the view to the new buffer's tail.
+  const onToggleOnlyMatches = useCallback(
+    (v: boolean) => {
+      if (activeMatchId != null) {
+        preserveActivePositionRef.current?.();
+        setAutoScroll(false);
+      }
+      setOnlyMatches(v);
+    },
+    [activeMatchId, setAutoScroll],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -421,24 +487,28 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         e.preventDefault();
         focusFilterRef.current?.();
       }
+      // ⌘F / Ctrl+F — focus the filter input. Mirrors browsers' find
+      // shortcut but redirects to the chip input (the filter chips
+      // already cover "find in logs"). Cross-widget fallback when no
+      // widget is focused lives in App.tsx's global keydown listener.
       if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setSearchOpen(true);
+        focusFilterRef.current?.();
       }
       // ⌘G / ⌘⇧G — find-next / find-previous (mirrors browsers,
-      // editors, and Finder). Only fires while a chip is the active
-      // filter — otherwise there's no "find" to step through.
+      // editors, and Finder). With no active chip, fall back to the
+      // rightmost filter so the shortcut still does something useful
+      // after a fresh chip add. The activation triggers the existing
+      // "first match on filter select" effect, so the user lands on
+      // matchEntryIds[0]; subsequent ⌘G then steps through.
       if (e.key.toLowerCase() === 'g' && (e.metaKey || e.ctrlKey)) {
         if (activeFilterId !== null) {
           e.preventDefault();
           if (e.shiftKey) onRetreatMatch();
           else onAdvanceMatch();
-        }
-      }
-      if (e.key === 'Escape') {
-        if (searchOpen) {
-          setSearchOpen(false);
-          setSearch('');
+        } else if (filters.length > 0) {
+          e.preventDefault();
+          setActiveFilterId(filters[filters.length - 1].id);
         }
       }
       if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
@@ -448,7 +518,14 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchOpen, onClear, setPaused, activeFilterId, onAdvanceMatch, onRetreatMatch]);
+  }, [
+    onClear,
+    setPaused,
+    activeFilterId,
+    filters,
+    onAdvanceMatch,
+    onRetreatMatch,
+  ]);
 
   const onMouseDownWidget = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const root = rootRef.current;
@@ -456,6 +533,36 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
     if (!root || root.contains(document.activeElement)) return;
     if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
     root.focus();
+  }, []);
+
+  // Clicks on the tile chrome (header, drag grip, eye / settings /
+  // close buttons) live OUTSIDE `.lc-widget` so `onMouseDownWidget`
+  // never fires for them. TileGrid's pointerdown handler also blurs
+  // whatever input had focus, so without recovery the activeElement
+  // falls back to <body> and the widget's keydown listener — gated on
+  // `root.contains(activeElement)` — stops catching ⌘G. Re-focus the
+  // widget root via a microtask so the recovery happens AFTER the
+  // synthetic React handlers (which run on the bubble at the document
+  // root) have had a chance to perform the blur.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const tile = root.closest('.tile');
+    if (!tile) return;
+    const onTilePointerDown = (e: Event) => {
+      const tgt = e.target as HTMLElement | null;
+      if (!tgt) return;
+      // Clicks inside the widget body are covered by `onMouseDownWidget`.
+      if (root.contains(tgt)) return;
+      if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
+      queueMicrotask(() => {
+        if (!root.isConnected) return;
+        if (root.contains(document.activeElement)) return;
+        root.focus();
+      });
+    };
+    tile.addEventListener('pointerdown', onTilePointerDown);
+    return () => tile.removeEventListener('pointerdown', onTilePointerDown);
   }, []);
 
   // ---- Compose a Tweaks-shaped object for LogList ------------------------
@@ -526,7 +633,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         filters={filters}
         setFilters={setFiltersBoth}
         onlyMatches={onlyMatches}
-        setOnlyMatches={setOnlyMatches}
+        setOnlyMatches={onToggleOnlyMatches}
         knownProcesses={knownProcesses}
         knownTags={knownTags}
         paused={paused}
@@ -582,7 +689,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         <LogList
           entries={filtered}
           filters={filters}
-          search={search}
           pinned={pinned}
           pinnedEntries={pinnedEntries}
           onTogglePin={togglePin}
@@ -595,11 +701,15 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           deviceModel={device.model}
           hasFilters={filters.length > 0}
           activeMatchId={activeMatchId}
+          onSelectRow={onSelectRow}
           registerScrollToTs={(fn) => {
             scrollToTsRef.current = fn;
           }}
           registerScrollToId={(fn) => {
             scrollToIdRef.current = fn;
+          }}
+          registerPreserveActivePosition={(fn) => {
+            preserveActivePositionRef.current = fn;
           }}
         />
       </div>
@@ -612,17 +722,6 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
           <Icons.Down size={13} /> Resume tail
         </button>
       )}
-
-      <SearchOverlay
-        open={searchOpen}
-        query={search}
-        matchCount={filtered.length}
-        onChange={setSearch}
-        onClose={() => {
-          setSearchOpen(false);
-          setSearch('');
-        }}
-      />
     </div>
   );
 }

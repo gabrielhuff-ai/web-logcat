@@ -353,11 +353,6 @@
 .hl-c4 { --mark-hue: var(--fc-4); }
 .hl-c5 { --mark-hue: var(--fc-5); }
 .hl-c6 { --mark-hue: var(--fc-6); }
-.hl-search {
-  background: oklch(from var(--accent) l c h / 0.4);
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
 
 /* ===== Pinned block ===== */
 .pinned-block {
@@ -419,32 +414,6 @@
   letter-spacing: 0.04em;
   z-index: 20;
 }
-
-/* ===== Search overlay (Cmd+F) ===== */
-.search-overlay {
-  position: absolute;
-  top: 60px; right: 18px;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 8px 6px 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-2);
-  z-index: 90;
-  min-width: 320px;
-  animation: slideUp 200ms var(--ease-spring) both;
-  color: var(--fg-2);
-}
-.search-overlay input {
-  flex: 1;
-  background: transparent;
-  border: 0; outline: none;
-  font-size: var(--t-base);
-  color: var(--fg-0);
-  height: 24px;
-}
-.search-overlay input::placeholder { color: var(--fg-3); }
-.search-count { font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
 
 /* ===== Toast ===== */
 .toast {

@@ -236,10 +236,37 @@ export function App() {
     [connectFake, resetIngest, showToast],
   );
 
+  // ---- Stale-connection check on visibility regain -----------------------
+  // After the laptop wakes from sleep (or the tab regains focus after
+  // a long idle), the WDP WebSocket can be in a phantom "open" state —
+  // no close event fires, but no logs arrive either. We piggy-back on
+  // `visibilitychange` to probe the daemon when the tab comes back, and
+  // force-disconnect the session if the daemon is unreachable so the
+  // user gets the empty state (with a fresh Connect button) instead of
+  // a dashboard that silently isn't streaming. Scoped to WDP because we
+  // already have a cheap, side-effect-free probe for it; WebUSB doesn't
+  // have an equivalent without a real ADB round-trip.
+  useEffect(() => {
+    if (!device || usingFake || device.transport !== 'proxy') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void (async () => {
+        const { probeWdpReachable } = await import('../lib/wdp');
+        const reachable = await probeWdpReachable();
+        if (!reachable) {
+          showToast('Web Device Proxy unreachable — disconnected');
+          onDisconnect();
+        }
+      })();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [device, usingFake, onDisconnect, showToast]);
+
   // ---- Global keyboard shortcuts -----------------------------------------
-  // Only the help dialog shortcut stays global — every per-widget shortcut
-  // (Space / ⌘K / ⌘F / / / Esc) lives inside the widget so two Logcat
-  // tiles don't toggle each other.
+  // Only the help dialog shortcut and the cross-widget ⌘F fallback stay
+  // global. Per-widget shortcuts (Space / ⌘K / ⌘G / /) live inside the
+  // widget so two Logcat tiles don't toggle each other.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -247,6 +274,21 @@ export function App() {
       if (e.key === '?' && !inField) {
         e.preventDefault();
         setHelpOpen((v) => !v);
+      }
+      // ⌘F / Ctrl+F — focus the filter bar of a logcat widget.
+      // When a logcat widget already owns focus its own keydown
+      // handler takes over (and the gate below short-circuits so we
+      // don't fight over the keystroke). Otherwise we pick the first
+      // logcat widget on the page; if there's none, fall through to
+      // the browser's native find.
+      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest('.lc-widget')) return;
+        const firstWidget = document.querySelector('.lc-widget');
+        const input = firstWidget?.querySelector<HTMLInputElement>('.fb-input');
+        if (!input) return;
+        e.preventDefault();
+        input.focus();
       }
     };
     window.addEventListener('keydown', onKey);
