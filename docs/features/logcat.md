@@ -35,6 +35,10 @@ advances; `⇧⌘G` / `Ctrl+Shift+G` goes backward. Pressing `⌘G`
 without an active chip falls back to activating the rightmost chip,
 so you can chain *add filter → ⌘G* without clicking.
 
+Stepping with `⌘G` only scrolls when it has to: if the next match is
+already on screen the viewport stays put and the highlight moves to
+it; if the match is off-screen the row is centred.
+
 Clicking a log row selects it the same way — the row gets the
 active-match highlight. From there, `⌘G` resumes navigation in the
 active filter's match list. Toggling *show only matches* keeps the
