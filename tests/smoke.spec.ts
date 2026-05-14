@@ -676,6 +676,59 @@ test.describe('filter bar', () => {
     expect(pos).toBeGreaterThan(1);
   });
 
+  test('⌘F focuses the filter input (and refocuses from outside the widget)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+
+    const input = page.locator('.fb-input');
+    const isMac = process.platform === 'darwin';
+
+    // Click the app brand area — focus is outside any logcat widget.
+    await page.locator('.dash-brand-name, .dash-top, .lc-widget').first().click();
+
+    // ⌘F from outside should still land on the widget's filter input.
+    await page.keyboard.press(isMac ? 'Meta+f' : 'Control+f');
+    await expect(input).toBeFocused();
+
+    // Blur and re-focus inside the widget (filter the autocomplete via
+    // Esc) — ⌘F again should re-focus the input.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(input).not.toBeFocused();
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press(isMac ? 'Meta+f' : 'Control+f');
+    await expect(input).toBeFocused();
+  });
+
+  test('Esc in the filter input dismisses the autocomplete first, then blurs', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await expect(page.locator('.fb-ac-head')).toBeVisible();
+
+    // 1st Esc: dismiss menu, keep focus.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.fb-ac-head')).toBeHidden();
+    await expect(input).toBeFocused();
+
+    // 2nd Esc: blur.
+    await page.keyboard.press('Escape');
+    await expect(input).not.toBeFocused();
+
+    // Typing after re-focus brings the menu back.
+    await input.focus();
+    await input.fill('t');
+    await expect(page.locator('.fb-ac')).toBeVisible();
+  });
+
   test('clicking the tile header keeps ⌘G firing in the widget (no browser find)', async ({
     page,
   }) => {

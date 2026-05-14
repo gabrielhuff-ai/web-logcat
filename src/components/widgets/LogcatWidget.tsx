@@ -384,25 +384,26 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
 
   // Selecting a filter: "continue navigation" from the current row.
   //   - No current selection → jump to the first match.
-  //   - Current selection is already a match of this filter → leave it
-  //     (so switching between two filters that share matches doesn't
-  //     lose the user's place).
-  //   - Otherwise → jump to the first match WHOSE id is greater than
-  //     the current selection's id, i.e. the next match after the
-  //     focal row. Wraps to the first match when there's nothing
-  //     after. Entry ids are assigned monotonically from a single
-  //     counter (see lib/logGenerator.ts and lib/adb.ts), so id
-  //     ordering matches viewport order.
+  //   - Otherwise → advance to the first match WHOSE id is greater
+  //     than the focal row's id (entry ids are monotonic, see
+  //     lib/logGenerator.ts and lib/adb.ts). Wraps to the first match
+  //     when there's nothing after.
+  //
+  // We advance unconditionally — even when the focal row itself is a
+  // match of the new filter — so clicking a different chip behaves
+  // like ⌘G in the new filter rather than re-snapping to match #1.
+  // The [activeMatchId] effect below picks up the new id and scrolls
+  // when the next match isn't already on screen.
   useEffect(() => {
     if (activeFilterId == null) return;
     if (matchEntryIds.length === 0) return;
-    if (activeMatchId != null && matchEntryIds.includes(activeMatchId)) return;
-    let nextId = matchEntryIds[0];
-    if (activeMatchId != null) {
-      const after = matchEntryIds.find((id) => id > activeMatchId);
-      if (after !== undefined) nextId = after;
+    if (activeMatchId == null) {
+      setActiveMatchId(matchEntryIds[0]);
+      return;
     }
-    setActiveMatchId(nextId);
+    const after = matchEntryIds.find((id) => id > activeMatchId);
+    const next = after ?? matchEntryIds[0];
+    if (next !== activeMatchId) setActiveMatchId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilterId, matchEntryIds.length]);
 
@@ -454,6 +455,14 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         setPaused((p) => !p);
       }
       if (e.key === '/' && !inField) {
+        e.preventDefault();
+        focusFilterRef.current?.();
+      }
+      // ⌘F / Ctrl+F — focus the filter input. Mirrors browsers' find
+      // shortcut but redirects to the chip input (the filter chips
+      // already cover "find in logs"). Cross-widget fallback when no
+      // widget is focused lives in App.tsx's global keydown listener.
+      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         focusFilterRef.current?.();
       }

@@ -102,6 +102,7 @@ never toggle each other.
 | --- | --- |
 | `Space` | Pause / resume the live stream |
 | `/` | Focus the filter input |
+| `⌘F` / `Ctrl+F` | Focus the filter input (same as `/`; cross-widget fallback when no widget is focused) |
 | `⌘G` / `Ctrl+G` | Next match for the active chip (or activate the rightmost chip) |
 | `⇧⌘G` / `Ctrl+Shift+G` | Previous match for the active chip |
 | `⌘K` / `Ctrl+K` | Clear the log buffer |
