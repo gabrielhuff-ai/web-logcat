@@ -623,7 +623,60 @@ test.describe('filter bar', () => {
     await expect(page.locator('.row.active-match')).toBeInViewport();
   });
 
-  test('after closing the search overlay with Esc, ⌘G keeps stepping through matches', async ({
+  test('switching to a different filter chip jumps to the next match after the current row', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.row').first()).toBeVisible({ timeout: 10_000 });
+    // Wait for plenty of matches to accumulate so both filters have a
+    // healthy stream of hits to navigate through (the assertion below
+    // relies on the second filter having matches AFTER our focal row).
+    await page.waitForTimeout(2500);
+
+    // Two filters with separate match sets — `level:I` and `level:D`
+    // together cover ~75% of the simulated log distribution.
+    const input = page.locator('.fb-input');
+    await input.focus();
+    await input.fill('level:I');
+    await input.press('Enter');
+    await input.fill('level:D');
+    await input.press('Enter');
+
+    // Pause first so the matchCount the test reads doesn't drift
+    // between the chip click and the assertions.
+    await page.locator('.lc-widget').focus();
+    await page.keyboard.press('Space');
+
+    // Activate the first chip — lands on match 1/N.
+    await page.locator('.chip').nth(0).click();
+    await expect(page.locator('.row.active-match')).toHaveCount(1, { timeout: 10_000 });
+    await expect(page.locator('.fb-match-counter')).toContainText(/^1\//);
+
+    // Advance a few matches inside the first filter.
+    const isMac = process.platform === 'darwin';
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
+    }
+    await expect(page.locator('.fb-match-counter')).toContainText(/^4\//);
+
+    // Click the second chip — should jump to the next D match AFTER
+    // the current row, not back to match #1 of D.
+    await page.locator('.chip').nth(1).click();
+    await expect(page.locator('.chip').nth(1)).toHaveClass(/chip-active/);
+    await expect(page.locator('.row.active-match')).toBeInViewport();
+
+    const counter = (await page.locator('.fb-match-counter').textContent()) ?? '';
+    expect(counter).not.toBe('');
+    const [pos, total] = counter.split('/').map((s) => parseInt(s, 10));
+    expect(total).toBeGreaterThan(1);
+    // We had 3 I-matches behind us; D is ~50% more common than I in
+    // the simulator's distribution, so the next-D-after-row index
+    // should comfortably exceed 1.
+    expect(pos).toBeGreaterThan(1);
+  });
+
+  test('clicking the tile header keeps ⌘G firing in the widget (no browser find)', async ({
     page,
   }) => {
     await page.goto('/');
@@ -644,15 +697,10 @@ test.describe('filter bar', () => {
     await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
     await expect(page.locator('.fb-match-counter')).toContainText(/^2\//);
 
-    // Open then Esc-close the in-app search overlay.
-    await page.keyboard.press(isMac ? 'Meta+f' : 'Control+f');
-    await expect(page.locator('.search-overlay')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.search-overlay')).toBeHidden();
-
-    // The next ⌘G must still be caught by the widget — counter
-    // advances to 3/N. Without the focus-restore fix the keystroke
-    // escapes to the browser's native find-next.
+    // Click on the tile title (the draggable header) — TileGrid blurs
+    // whatever input had focus, so without the focus-recovery hook the
+    // widget's keydown listener stops catching ⌘G.
+    await page.locator('.tile-title').first().click();
     await page.keyboard.press(isMac ? 'Meta+g' : 'Control+g');
     await expect(page.locator('.fb-match-counter')).toContainText(/^3\//);
   });

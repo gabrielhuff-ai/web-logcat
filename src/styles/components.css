@@ -657,9 +657,18 @@
 }
 
 /* Active match row — distinguishes the row jumped-to by find-next
- * from the merely-matching rows (which already use `.row.match`). */
+ * (or clicked to select) from the merely-matching rows. Uses an
+ * inset accent outline to mirror the dashboard's `.tile.focused`
+ * treatment, so "selected" reads as primary-colour focus, not just
+ * another match tint. `position: relative` keeps the outline above
+ * the row stripes; `outline-offset: -2px` paints inside the box so
+ * it survives the scroll container's overflow-clip. */
 .row.active-match {
+  position: relative;
   background: oklch(from var(--accent) l c h / 0.18);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 1;
 }
 .row.active-match:hover {
   background: oklch(from var(--accent) l c h / 0.24);
