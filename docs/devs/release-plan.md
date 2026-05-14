@@ -6,7 +6,7 @@ HN-style channels) to general availability (drop the beta pill, ship
 v1.0). It's written so a human can follow it directly *and* so an
 agent can be pointed at a single phase and execute it.
 
-The repo currently sits in **alpha**. The pre-release cleanup pass is
+The repo currently sits in **beta**. The pre-release cleanup pass is
 done.
 
 ---
@@ -72,7 +72,7 @@ This is recorded for completeness; the actions are already on `main`.
 
 ---
 
-## Phase 1 — Alpha (current)
+## Phase 1 — Alpha
 
 **Goal:** small private cohort uses the staging URL and reports back.
 
@@ -120,7 +120,7 @@ Don't:
 
 ---
 
-## Phase 2 — Beta (broader sharing)
+## Phase 2 — Beta (current)
 
 **Goal:** the app is shared on Reddit / HN-style channels and absorbs
 public feedback.
