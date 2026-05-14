@@ -114,7 +114,7 @@
   color: var(--accent-fg);
   margin-bottom: 12px;
 }
-/* Alpha release pill on the empty/connect screen — same look as the
+/* Release-tier pill on the empty/connect screen — same look as the
    `dash-brand-beta` pill in the topbar so the release tier reads
    consistently across both views. */
 .empty-alpha {

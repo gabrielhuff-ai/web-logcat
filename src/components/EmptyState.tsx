@@ -139,7 +139,7 @@ export function EmptyState({ onConnect, onUseFakeData, onConnectWdp }: EmptyStat
         </div>
 
         <div className="empty-eyebrow">
-          WEBLOGCAT <span className="empty-alpha" aria-label="Alpha release">alpha</span>
+          WEBLOGCAT <span className="empty-alpha" aria-label="Beta release">beta</span>
         </div>
         <h1 className="empty-title">No device connected</h1>
         <p className="empty-sub">

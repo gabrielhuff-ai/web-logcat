@@ -60,6 +60,25 @@ function out(theme: Theme, name: string): string {
 }
 
 /**
+ * Wait until JetBrains Mono is actually available on the page. The
+ * dashboard's mono surfaces (logcat rows, shell, dumpsys tables)
+ * render in JBM; without this assertion Playwright can snap mid-FOUT
+ * — or, worse, capture with the system fallback (DejaVu / Liberation
+ * Mono) when the Google Fonts fetch is blocked or `font-display: swap`
+ * decides the fallback is good enough. The screenshots that ship to
+ * the docs site must be JBM, so we fail the run rather than commit a
+ * silently-wrong PNG. If this assertion trips, install JBM locally
+ * (`apt install fonts-jetbrains-mono`) or unblock fonts.gstatic.com.
+ */
+async function waitForFonts(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+  const hasJbm = await page.evaluate(() =>
+    document.fonts.check('12px "JetBrains Mono"'),
+  );
+  expect(hasJbm, 'JetBrains Mono not loaded — screenshots would ship the system mono fallback').toBe(true);
+}
+
+/**
  * Boot the simulator with the given theme + indigo accent +
  * performance mode. The accent matches the docs site's brand; the
  * performance flag matches tests/smoke.spec.ts so layout transitions
@@ -96,6 +115,7 @@ async function bootSimulator(page: Page, theme: Theme): Promise<void> {
   await page.addStyleTag({
     content: '.fake-badge,.toast{display:none!important}',
   });
+  await waitForFonts(page);
 }
 
 async function addWidget(
@@ -136,6 +156,7 @@ for (const theme of ['dark', 'light'] as const) {
         page.getByRole('heading', { name: /no device connected/i }),
       ).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await waitForFonts(page);
       await page.screenshot({ path: out(theme, 'empty-state'), fullPage: false });
     });
 
@@ -153,6 +174,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.goto('/');
       await page.getByRole('button', { name: /choose connection method/i }).click();
       await expect(page.getByRole('menu')).toBeVisible();
+      await waitForFonts(page);
       await page.screenshot({
         path: out(theme, 'connect-dropdown'),
         fullPage: false,
@@ -175,6 +197,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.getByRole('menuitem', { name: /Connect via Web Device Proxy/i }).click();
       const dialog = page.getByRole('dialog', { name: /Connect via Web Device Proxy/i });
       await expect(dialog).toContainText(/Daemon not detected/i);
+      await waitForFonts(page);
       await page.screenshot({
         path: out(theme, 'wdp-dialog'),
         fullPage: false,
@@ -362,6 +385,7 @@ test.describe('hero shots', () => {
       await page.addStyleTag({
         content: '.fake-badge,.toast{display:none!important}',
       });
+      await waitForFonts(page);
       const heroPath = theme === 'dark' ? HERO_PATH : HERO_LIGHT_PATH;
       await page.screenshot({ path: heroPath, fullPage: false });
     });
