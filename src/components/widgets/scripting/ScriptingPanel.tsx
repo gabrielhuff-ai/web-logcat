@@ -20,31 +20,11 @@ import {
   ScStepper,
   ScText,
   ScToggle,
-  type ConsoleLine,
   type CtrlState,
-  type DisplayState,
-  type LedColor,
 } from './controls';
 import { groupControls, type Group } from './panelLayout';
+import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
 import type { ControlConfig, ControlValue } from './scriptingSettings';
-
-/** Per-display runtime value (filled by a run; M5 wires the producers). */
-export interface DisplayValue {
-  text: string;
-  number: number;
-  state: DisplayState;
-  ledColor: LedColor;
-  ledState: string;
-  stale: boolean;
-}
-
-export interface ConsoleView {
-  lines: ConsoleLine[];
-  state: CtrlState;
-  exit: number;
-  empty: boolean;
-  copied: boolean;
-}
 
 export interface ScriptingPanelProps {
   controls: ControlConfig[];
@@ -55,8 +35,9 @@ export interface ScriptingPanelProps {
   onRun: (id: string) => void;
   /** Per-display value, keyed by control id. */
   displayValues: Record<string, DisplayValue>;
-  console: ConsoleView;
-  onCopyConsole: () => void;
+  /** Per-console view, keyed by console control id. */
+  consoleViews: Record<string, ConsoleView>;
+  onCopyConsole: (id: string) => void;
 }
 
 const toNum = (v: ControlValue | undefined, fallback = 0): number => {
@@ -255,7 +236,7 @@ function renderDisplay(c: ControlConfig, props: ScriptingPanelProps): ReactNode 
 
 function renderConsole(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
   if (c.kind !== 'console') return null;
-  const view = props.console;
+  const view = props.consoleViews[c.id] ?? EMPTY_CONSOLE;
   return (
     <ScConsole
       key={c.id}
@@ -266,7 +247,7 @@ function renderConsole(c: ControlConfig, props: ScriptingPanelProps): ReactNode 
       empty={view.empty}
       copied={view.copied}
       showCopy={c.copyButton}
-      onCopy={props.onCopyConsole}
+      onCopy={() => props.onCopyConsole(c.id)}
     />
   );
 }
