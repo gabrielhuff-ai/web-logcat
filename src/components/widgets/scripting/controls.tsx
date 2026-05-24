@@ -8,11 +8,13 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
 
 /** Run lifecycle reflected by interactive controls. */
@@ -101,8 +103,18 @@ export function ScButton({
     onRun?.();
   };
 
+  // Esc cancels the confirmation, matching the other modals.
+  useEffect(() => {
+    if (!confirming) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setConfirming(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirming]);
+
   return (
-    <span className="sc-btn-wrap">
+    <>
       <button
         type="button"
         className={cls}
@@ -115,30 +127,34 @@ export function ScButton({
         {confirm && !busy && !err && <Icons.Lock size={10} />}
         {err && <span className="sc-btn-exit">exit {exitCode}</span>}
       </button>
-      {confirming && (
-        <>
-          <div className="sc-confirm-back" onClick={() => setConfirming(false)} />
-          <div className="sc-confirm-pop" role="dialog" aria-label={`Confirm ${label}`}>
-            <div className="sc-confirm-pop-msg">Run {label}?</div>
-            <div className="sc-confirm-pop-row">
-              <button type="button" className="sc-confirm-pop-btn" onClick={() => setConfirming(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="sc-confirm-pop-btn run"
-                onClick={() => {
-                  setConfirming(false);
-                  onRun?.();
-                }}
-              >
-                Run
-              </button>
+      {/* Portaled to body + centred so it can't be clipped by the tile's
+          overflow — a dimmed/blurred backdrop like the other dialogs. */}
+      {confirming &&
+        createPortal(
+          <>
+            <div className="sc-confirm-back" onClick={() => setConfirming(false)} />
+            <div className="sc-confirm-pop" role="dialog" aria-label={`Confirm ${label}`}>
+              <div className="sc-confirm-pop-msg">Run {label}?</div>
+              <div className="sc-confirm-pop-row">
+                <button type="button" className="sc-confirm-pop-btn" onClick={() => setConfirming(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="sc-confirm-pop-btn run"
+                  onClick={() => {
+                    setConfirming(false);
+                    onRun?.();
+                  }}
+                >
+                  Run
+                </button>
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </span>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 

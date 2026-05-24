@@ -150,6 +150,30 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-text')).toContainText('Package');
   });
 
+  test('a confirm-before-run button prompts via a centred modal before running', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page
+      .locator('.palette-card')
+      .filter({ has: page.locator('.palette-card-title', { hasText: 'Scripting' }) })
+      .click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /^example$/i }).click();
+
+    // "Clear data" is a confirm-before-run button.
+    await tile.locator('.sc-btn').filter({ hasText: 'Clear data' }).click();
+    const dialog = page.locator('.sc-confirm-pop');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/Run Clear data\?/i);
+
+    await dialog.getByRole('button', { name: /^run$/i }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(tile.locator('.sc-console-body')).toContainText('clear_data');
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
