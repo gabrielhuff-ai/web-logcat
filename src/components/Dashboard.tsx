@@ -14,7 +14,7 @@ import { WidgetPalette } from './WidgetPalette';
 import { QuickAddMenu } from './QuickAddMenu';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
 import { DashboardShareModal } from './DashboardShareModal';
-import { applySnapshot, takePendingImport } from '../lib/dashboardShare';
+import { applySnapshot, onPendingImport, takePendingImport } from '../lib/dashboardShare';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
@@ -41,19 +41,24 @@ export function Dashboard({
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // Bumped to remount <TileGrid/> so it re-reads the layout + per-tile settings
+  // after an import — applying a shared dashboard live, without a reload (which
+  // would drop the in-memory device connection and bounce to the connect screen).
+  const [gridEpoch, setGridEpoch] = useState(0);
 
-  // Apply a dashboard shared via `#share=…` link once we have a device serial
-  // to key per-tile settings under. Runs once; reloads to re-hydrate cleanly.
-  const importedRef = useRef(false);
-  useEffect(() => {
-    if (importedRef.current) return;
-    importedRef.current = true;
+  // Apply a dashboard shared via `#share=…` link. The device is already
+  // connected by the time the dashboard is mounted, so we apply in place. Runs
+  // on mount (boot-stashed payload) and when a same-tab navigation stashes one.
+  const applyPending = useCallback(() => {
     const pending = takePendingImport();
-    if (pending) {
-      applySnapshot(pending, device.serial);
-      window.location.reload();
-    }
+    if (!pending) return;
+    applySnapshot(pending, device.serial);
+    setGridEpoch((e) => e + 1);
   }, [device.serial]);
+  useEffect(() => {
+    applyPending();
+  }, [applyPending]);
+  useEffect(() => onPendingImport(applyPending), [applyPending]);
   // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` /
   // `removeFocusedSignal` / `focusDirSignal` are bumped to push
   // imperative actions down into `<TileGrid/>` without lifting its
@@ -172,6 +177,7 @@ export function Dashboard({
       />
 
       <TileGrid
+        key={gridEpoch}
         clearSignal={clearSignal}
         undoSignal={undoSignal}
         redoSignal={redoSignal}
@@ -211,7 +217,14 @@ export function Dashboard({
       )}
 
       {shareOpen && (
-        <DashboardShareModal serial={device.serial} onClose={() => setShareOpen(false)} />
+        <DashboardShareModal
+          serial={device.serial}
+          onClose={() => setShareOpen(false)}
+          onImported={() => {
+            setGridEpoch((e) => e + 1);
+            setShareOpen(false);
+          }}
+        />
       )}
     </div>
   );

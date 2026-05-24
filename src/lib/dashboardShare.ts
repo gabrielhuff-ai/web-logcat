@@ -215,6 +215,24 @@ export function stashPendingImport(s: DashboardSnapshot): void {
   }
 }
 
+// A pending import can arrive after the dashboard is already mounted (e.g. the
+// user navigates to a share link in the same tab). This bus lets the dashboard
+// consume it live instead of waiting for a reload.
+const pendingListeners = new Set<() => void>();
+
+/** Subscribe to "a pending import is available". Returns an unsubscribe fn. */
+export function onPendingImport(cb: () => void): () => void {
+  pendingListeners.add(cb);
+  return () => {
+    pendingListeners.delete(cb);
+  };
+}
+
+/** Wake subscribers after stashing a pending import. */
+export function notifyPendingImport(): void {
+  for (const cb of pendingListeners) cb();
+}
+
 /** Take (read + clear) any pending import stashed at boot. */
 export function takePendingImport(): DashboardSnapshot | null {
   try {

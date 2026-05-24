@@ -1281,4 +1281,17 @@
   line-height: 1.5;
 }
 .imex-ack input { margin-top: 2px; accent-color: var(--accent); }
+.imex-ack.shake { animation: imex-shake 420ms var(--ease-out); }
+@keyframes imex-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+/* Visually disabled but still clickable, so clicking nudges the user toward
+   the acknowledgement (a real `disabled` attribute would swallow the click). */
+.imex-btn-disabled { opacity: 0.5; cursor: not-allowed; }
+.imex-btn-disabled:hover { background: var(--accent); }
 

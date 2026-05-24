@@ -139,7 +139,7 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
   },
   scripting: {
     name: 'Scripting',
-    icon: Icons.Wand,
+    icon: Icons.Code,
     desc: 'Build your own ADB control panel — one shell script, your controls.',
     comp: ScriptingWidgetLazy,
     defaultSize: { w: 6, h: 7 },
