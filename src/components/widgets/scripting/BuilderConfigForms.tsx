@@ -135,16 +135,14 @@ function ConfigInput({ control, onPatch }: { control: InputControl; onPatch: (p:
         />
       </FormRow>
       {inlineSupported && (
-        <FormRow label="" help="Render the description under the control instead of only on hover.">
-          <label className="bdr-checkbox">
-            <input
-              type="checkbox"
-              checked={control.descInline ?? false}
-              onChange={(e) => onPatch({ descInline: e.target.checked })}
-            />
-            <span>Show description inline</span>
-          </label>
-        </FormRow>
+        <label className="bdr-form-inlinecheck">
+          <input
+            type="checkbox"
+            checked={control.descInline ?? false}
+            onChange={(e) => onPatch({ descInline: e.target.checked })}
+          />
+          <span>Render the description under the control instead of only on hover.</span>
+        </label>
       )}
 
       {control.kind === 'toggle' ? (
