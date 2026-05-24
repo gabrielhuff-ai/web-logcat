@@ -6,8 +6,9 @@
 // draggable split that can collapse the right pane. Portaled to document.body
 // so it escapes the tile's backdrop-filter containing block.
 //
-// Edits accumulate in a local draft; "Save panel" commits to per-tile
-// settings, "Discard" / Esc / scrim-click cancels.
+// Edits apply live — every interaction writes straight to per-tile settings, so
+// the panel updates as you build it. "Clear" resets to the initial state;
+// Esc / scrim-click / × just close.
 
 import {
   useCallback,
@@ -48,10 +49,7 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
     SCRIPTING_DEFAULTS,
   );
 
-  const [draft, setDraft] = useState<ScriptingSettings>(settings);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    settings.controls[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(settings.controls[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState(false);
   const [split, setSplit] = useState(60);
   const [collapsed, setCollapsed] = useState(false);
@@ -84,66 +82,68 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
     }
   }, []);
 
-  const highlighted = useMemo(() => highlightShell(draft.script), [draft.script]);
-  const lineCount = useMemo(() => Math.max(1, draft.script.split('\n').length), [draft.script]);
+  const { script, controls, runAsRoot } = settings;
 
-  const functions = useMemo(() => extractFunctions(draft.script), [draft.script]);
+  const highlighted = useMemo(() => highlightShell(script), [script]);
+  const lineCount = useMemo(() => Math.max(1, script.split('\n').length), [script]);
+  const functions = useMemo(() => extractFunctions(script), [script]);
   const inputVars = useMemo(
     () =>
-      draft.controls
+      controls
         .filter((c) => isInputKind(c.kind))
         .map((c) => ({ name: varFromLabel(labelOf(c)), label: labelOf(c) })),
-    [draft.controls],
+    [controls],
   );
   const bindTargets = useMemo<BindTarget[]>(() => {
-    const consoles = draft.controls.filter((c) => c.kind === 'console');
+    const consoles = controls.filter((c) => c.kind === 'console');
     return [
       { value: 'console', label: 'console (default)' },
       ...consoles.map((c) => ({ value: c.id, label: labelOf(c) })),
     ];
-  }, [draft.controls]);
+  }, [controls]);
 
-  const selected = draft.controls.find((c) => c.id === selectedId) ?? null;
+  const selected = controls.find((c) => c.id === selectedId) ?? null;
 
-  const patchControl = useCallback(
-    <T extends ControlConfig>(id: string, patch: Partial<T>) => {
-      setDraft((d) => ({
-        ...d,
-        controls: d.controls.map((c) => (c.id === id ? ({ ...c, ...patch } as ControlConfig) : c)),
-      }));
-    },
-    [],
-  );
+  // Edits write straight through to settings (live).
+  const patchControl = <T extends ControlConfig>(id: string, patch: Partial<T>) => {
+    setSettings({
+      controls: controls.map((c) => (c.id === id ? ({ ...c, ...patch } as ControlConfig) : c)),
+    });
+  };
 
-  const addControl = useCallback((kind: ControlKind) => {
+  const addControl = (kind: ControlKind) => {
     const c = makeControl(kind);
-    setDraft((d) => ({ ...d, controls: [...d.controls, c] }));
+    setSettings({ controls: [...controls, c] });
     setSelectedId(c.id);
     setAddOpen(false);
-  }, []);
+  };
 
-  const removeControl = useCallback((id: string) => {
-    setDraft((d) => ({ ...d, controls: d.controls.filter((c) => c.id !== id) }));
-    setSelectedId((cur) => (cur === id ? null : cur));
-  }, []);
+  const removeControl = (id: string) => {
+    setSettings({ controls: controls.filter((c) => c.id !== id) });
+    if (selectedId === id) setSelectedId(null);
+  };
 
-  const reorder = useCallback((fromId: string, toId: string) => {
+  const reorder = (fromId: string, toId: string) => {
     if (fromId === toId) return;
-    setDraft((d) => {
-      const list = [...d.controls];
-      const from = list.findIndex((c) => c.id === fromId);
-      const to = list.findIndex((c) => c.id === toId);
-      if (from === -1 || to === -1) return d;
-      const [moved] = list.splice(from, 1);
-      list.splice(to, 0, moved);
-      return { ...d, controls: list };
-    });
-  }, []);
+    const list = [...controls];
+    const from = list.findIndex((c) => c.id === fromId);
+    const to = list.findIndex((c) => c.id === toId);
+    if (from === -1 || to === -1) return;
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    setSettings({ controls: list });
+  };
 
-  const save = useCallback(() => {
-    setSettings(draft);
-    onClose();
-  }, [draft, setSettings, onClose]);
+  const clearAll = () => {
+    setSettings({
+      script: SCRIPTING_DEFAULTS.script,
+      runAsRoot: SCRIPTING_DEFAULTS.runAsRoot,
+      controls: [],
+      fontSize: SCRIPTING_DEFAULTS.fontSize,
+    });
+    setSelectedId(null);
+    setAddOpen(false);
+  };
 
   // Resizer drag — translate pointer X into a clamped split percentage.
   const onResizeDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -178,11 +178,13 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
             </div>
           </div>
           <span style={{ flex: 1 }} />
-          <button className="bdr-pillbtn ghost" onClick={onClose}>
-            Discard
-          </button>
-          <button className="bdr-pillbtn primary" onClick={save}>
-            Save panel
+          <button
+            className="bdr-pillbtn ghost"
+            onClick={clearAll}
+            aria-label="Clear"
+            data-tip="Reset script and controls"
+          >
+            <Icons.Trash size={12} /> Clear
           </button>
           <button className="bdr-close" onClick={onClose} aria-label="Close">
             <Icons.Close size={13} />
@@ -202,13 +204,13 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
               </span>
               <button
                 type="button"
-                className={'bdr-root-toggle' + (draft.runAsRoot ? ' on' : '')}
+                className={'bdr-root-toggle' + (runAsRoot ? ' on' : '')}
                 data-tip="Run as root (su). Falls back to user shell if su is unavailable."
-                aria-pressed={draft.runAsRoot}
-                onClick={() => setDraft((d) => ({ ...d, runAsRoot: !d.runAsRoot }))}
+                aria-pressed={runAsRoot}
+                onClick={() => setSettings({ runAsRoot: !runAsRoot })}
               >
                 <span className="bdr-root-text">Run as root</span>
-                <span className={'bdr-root-tg ' + (draft.runAsRoot ? 'on' : '')}>
+                <span className={'bdr-root-tg ' + (runAsRoot ? 'on' : '')}>
                   <span className="bdr-root-tg-dot" />
                 </span>
               </button>
@@ -226,8 +228,8 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
                 <textarea
                   className="bdr-editor-text"
                   ref={editorRef}
-                  value={draft.script}
-                  onChange={(e) => setDraft((d) => ({ ...d, script: e.target.value }))}
+                  value={script}
+                  onChange={(e) => setSettings({ script: e.target.value })}
                   onScroll={syncScroll}
                   spellCheck={false}
                   autoComplete="off"
@@ -294,7 +296,7 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
             <div className="bdr-right">
               <div className="bdr-section-head">
                 <span>
-                  Controls <span style={{ color: 'var(--fg-3)' }}>· {draft.controls.length}</span>
+                  Controls <span style={{ color: 'var(--fg-3)' }}>· {controls.length}</span>
                 </span>
                 <span style={{ flex: 1 }} />
                 <button
@@ -328,10 +330,10 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
               )}
 
               <div className="bdr-ctrl-list">
-                {draft.controls.length === 0 ? (
+                {controls.length === 0 ? (
                   <div className="bdr-ctrl-empty">No controls yet — use “+ Add”.</div>
                 ) : (
-                  draft.controls.map((c) => (
+                  controls.map((c) => (
                     <div
                       key={c.id}
                       className={
@@ -390,7 +392,7 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
                       onPatch={patchControl}
                       functions={functions}
                       bindTargets={bindTargets}
-                      script={draft.script}
+                      script={script}
                     />
                   </div>
                 </>
@@ -411,7 +413,7 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
               <span style={{ transform: 'rotate(180deg)', display: 'inline-flex' }}>
                 <Icons.ChevronRight size={14} />
               </span>
-              <span className="bdr-expand-count">{draft.controls.length} controls</span>
+              <span className="bdr-expand-count">{controls.length} controls</span>
             </button>
           )}
         </div>

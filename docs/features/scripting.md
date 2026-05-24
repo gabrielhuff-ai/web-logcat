@@ -82,8 +82,10 @@ The tile's cog opens the builder: the shell script on the left (with a
 **Run as root** toggle and a live legend of the variables and functions
 in scope), the controls list and per-control settings on the right. Drag
 to reorder controls; the split between panes is draggable and the
-controls pane can collapse to give the editor the full width. Changes are
-staged until you hit **Save panel**.
+controls pane can collapse to give the editor the full width. Edits apply
+live as you make them — the script editor has line numbers and syntax
+highlighting. **Clear** resets the script and controls to the starting
+state.
 
 If the script fails a syntax check on a real device, the tile shows a
 **script error** banner — click it to jump back into the builder — and

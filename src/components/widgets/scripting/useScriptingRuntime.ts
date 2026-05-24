@@ -250,24 +250,27 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     }
   }, [values, controls, script, runDisplay, execToConsole, resolveConsoleId]);
 
-  // Authoritative syntax check via `sh -n` on a real device. The script only
-  // changes on builder Save, so no debounce is needed. Skipped on the
-  // simulator (no shell to validate against).
+  // Authoritative syntax check via `sh -n` on a real device. Debounced —
+  // the script is edited live in the builder, so we don't want a device
+  // round-trip on every keystroke. Skipped on the simulator (no shell).
   useEffect(() => {
     if (usingFake || !adb) {
       setScriptError(null);
       return;
     }
     let cancelled = false;
-    checkScript(adb, script)
-      .then((err) => {
-        if (!cancelled) setScriptError(err);
-      })
-      .catch(() => {
-        if (!cancelled) setScriptError(null);
-      });
+    const t = window.setTimeout(() => {
+      checkScript(adb, script)
+        .then((err) => {
+          if (!cancelled) setScriptError(err);
+        })
+        .catch(() => {
+          if (!cancelled) setScriptError(null);
+        });
+    }, 500);
     return () => {
       cancelled = true;
+      window.clearTimeout(t);
     };
   }, [script, adb, usingFake]);
 

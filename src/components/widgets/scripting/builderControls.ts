@@ -59,19 +59,19 @@ export interface PickerEntry {
 }
 
 export const PICKER: readonly PickerEntry[] = [
-  { kind: 'text', label: 'Text field', group: 'Inputs' },
-  { kind: 'slider', label: 'Slider', group: 'Inputs' },
-  { kind: 'knob', label: 'Knob', group: 'Inputs' },
-  { kind: 'toggle', label: 'Toggle', group: 'Inputs' },
-  { kind: 'select', label: 'Select', group: 'Inputs' },
-  { kind: 'stepper', label: 'Stepper', group: 'Inputs' },
   { kind: 'button', label: 'Action button', group: 'Inputs' },
   { kind: 'console', label: 'Console', group: 'Displays' },
-  { kind: 'readout', label: 'Readout', group: 'Displays' },
-  { kind: 'status', label: 'Status pill', group: 'Displays' },
   { kind: 'gauge', label: 'Gauge', group: 'Displays' },
+  { kind: 'knob', label: 'Knob', group: 'Inputs' },
   { kind: 'led', label: 'LED', group: 'Displays' },
+  { kind: 'readout', label: 'Readout', group: 'Displays' },
   { kind: 'section', label: 'Section', group: 'Layout' },
+  { kind: 'select', label: 'Select', group: 'Inputs' },
+  { kind: 'slider', label: 'Slider', group: 'Inputs' },
+  { kind: 'status', label: 'Status pill', group: 'Displays' },
+  { kind: 'stepper', label: 'Stepper', group: 'Inputs' },
+  { kind: 'text', label: 'Text field', group: 'Inputs' },
+  { kind: 'toggle', label: 'Toggle', group: 'Inputs' },
 ];
 
 /** The shell name (env var or function) a control row shows next to its label. */
