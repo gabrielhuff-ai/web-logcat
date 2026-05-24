@@ -1,15 +1,19 @@
 // Scripting widget — one-shot, injection-safe function execution.
 //
-// Every run re-sources the whole script and calls one function, with input
-// values supplied as environment variables. The command is built as argv
-// tokens for `env` + `sh -c`, never by concatenating user values into the
-// command string, so a value like `; rm -rf /` is inert data, not code:
+// The ADB shell-protocol transport sends a single command STRING (it joins any
+// argv array with spaces and does no quoting — see @yume-chan/adb
+// `shell,v2,raw:${command.join(" ")}`). So we build the command string
+// ourselves and single-quote every input value, which keeps user values inert
+// data rather than executable code:
 //
-//   env NAME=value … sh -c '<script>\n"$1"' weblogcat <fn>
+//   PACKAGE='com.example'     # each input, single-quoted (literal)
+//   <the whole script>        # defines the functions
+//   info                      # call the chosen function
 //
-// `$0` is `weblogcat`, `$1` is the function name, and `"$1"` invokes the
-// function by name (command lookup resolves shell functions). Run-as-root
-// prefixes `su 0` (Magisk/AOSP argv form) — best-effort per the panel setting.
+// Variable assignments and the function definitions run in the same shell, so
+// the function sees the values via $PACKAGE. No shebang is required — the
+// device runs the string in its own shell, and any `#!` line is just a comment.
+// Run-as-root wraps the whole thing in `su -c '<escaped>'` (best-effort).
 
 import type { Adb } from '@yume-chan/adb';
 
@@ -34,14 +38,21 @@ export class ShellUnsupportedError extends Error {
   }
 }
 
-/** Build the argv for a run. Pure — unit tested. */
-export function buildRunArgv(opts: RunOpts): string[] {
+/** Wrap a string in single quotes, escaping any embedded single quotes. The
+ *  result is a single shell word whose contents are taken literally. */
+export function shQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Build the command string for a run. Pure — unit tested. */
+export function buildCommand(opts: RunOpts): string {
   const { script, fn, env, runAsRoot } = opts;
-  const envPairs = Object.entries(env).map(([k, v]) => `${k}=${v}`);
-  // Re-source the script, then invoke the function named by $1.
-  const command = `${script}\n"$1"`;
-  const base = ['env', ...envPairs, 'sh', '-c', command, 'weblogcat', fn];
-  return runAsRoot ? ['su', '0', ...base] : base;
+  const assigns = Object.entries(env)
+    .map(([k, v]) => `${k}=${shQuote(v)}`)
+    .join('\n');
+  // assignments → script (function defs) → call the function.
+  const body = `${assigns ? assigns + '\n' : ''}${script}\n${fn}`;
+  return runAsRoot ? `su -c ${shQuote(body)}` : body;
 }
 
 /** Run one function against a real device. Throws ShellUnsupportedError on
@@ -49,19 +60,19 @@ export function buildRunArgv(opts: RunOpts): string[] {
 export async function runFunction(adb: Adb, opts: RunOpts): Promise<RunResult> {
   const sp = adb.subprocess.shellProtocol;
   if (!sp) throw new ShellUnsupportedError();
-  const { stdout, stderr, exitCode } = await sp.spawnWaitText(buildRunArgv(opts));
+  const { stdout, stderr, exitCode } = await sp.spawnWaitText(buildCommand(opts));
   return { stdout, stderr, exitCode };
 }
 
 /**
  * Syntax-check the script with `sh -n` (parse, don't execute). Returns an
- * error message when invalid, or null when fine / unsupported. This is the
- * authoritative parse check (the client-side parser only powers UI hints).
+ * error message when invalid, or null when fine / unsupported. Passed as a
+ * single quoted string so a multi-line script survives the transport intact.
  */
 export async function checkScript(adb: Adb, script: string): Promise<string | null> {
   const sp = adb.subprocess.shellProtocol;
   if (!sp) return null;
-  const { stderr, exitCode } = await sp.spawnWaitText(['sh', '-n', '-c', script]);
+  const { stderr, exitCode } = await sp.spawnWaitText(`sh -n -c ${shQuote(script)}`);
   if (exitCode === 0) return null;
   return stderr.trim() || 'Script has a syntax error.';
 }
