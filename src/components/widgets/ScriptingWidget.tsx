@@ -114,7 +114,11 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
       )}
 
       {builderOpen && (
-        <ScriptingBuilderModal tileId={tileId} onClose={() => setBuilderOpen(false)} />
+        <ScriptingBuilderModal
+          tileId={tileId}
+          onClose={() => setBuilderOpen(false)}
+          scriptError={runtime.scriptError}
+        />
       )}
     </div>
   );

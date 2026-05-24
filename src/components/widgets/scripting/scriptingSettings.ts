@@ -123,27 +123,37 @@ export const SCRIPTING_DEFAULTS: ScriptingSettings = {
 };
 
 /**
- * A ready-made demo panel loaded from the empty-state "example" link — a
- * small package toolbox. The `info` function echoes a line so it produces
- * visible output on the simulator (no device); `force_stop` / `clear_data`
- * are real on a device and no-ops worth running on hardware.
+ * A ready-made demo panel loaded from the empty-state "example" link. It
+ * exercises every control kind. The shell functions are echo-based stubs so
+ * the panel produces visible output on the simulator (no device) — on a real
+ * device you'd swap in `am` / `pm` / `dumpsys` / `settings` commands.
  */
 export const EXAMPLE_PANEL: ScriptingSettings = {
   script: [
     '#!/system/bin/sh',
-    '# Example: a small package toolbox. Type a package, then act on it.',
+    '# Demo toolbox. Inputs export $VARS; buttons and displays call the',
+    '# functions below. These are echo stubs so they show output on the',
+    '# simulator — replace them with real am/pm/dumpsys/settings on a device.',
     '',
     'info() {',
     '  echo "Package: $PACKAGE"',
-    '  dumpsys package "$PACKAGE" 2>/dev/null | grep versionName | head -1',
+    '  echo "User: $USER   Verbose: $VERBOSE"',
     '}',
+    'force_stop() { echo "force-stopped $PACKAGE (user $USER)"; }',
+    'clear_data() { echo "cleared data for $PACKAGE"; }',
     '',
-    'force_stop() { am force-stop "$PACKAGE"; }',
-    'clear_data() { pm clear "$PACKAGE"; }',
+    'brightness() { echo "brightness -> $BRIGHTNESS"; }',
+    '',
+    '# Bound to the live displays below.',
+    'battery_temp() { echo 31.2; }',
+    'cpu()          { echo 38; }',
+    'network()      { echo online; }',
+    'charging()     { echo green; }',
   ].join('\n'),
   runAsRoot: false,
   fontSize: 12,
   controls: [
+    { id: 'ex_s1', kind: 'section', title: 'Target', description: 'What the actions below operate on.' },
     {
       id: 'ex_pkg',
       kind: 'text',
@@ -152,6 +162,44 @@ export const EXAMPLE_PANEL: ScriptingSettings = {
       defaultValue: 'com.android.settings',
       onChange: 'none',
     },
+    {
+      id: 'ex_user',
+      kind: 'select',
+      label: 'User',
+      options: ['0', '10'],
+      defaultValue: '0',
+      onChange: 'none',
+    },
+    { id: 'ex_verbose', kind: 'toggle', label: 'Verbose', defaultValue: false, onChange: 'none' },
+
+    { id: 'ex_s2', kind: 'section', title: 'Tweaks' },
+    {
+      id: 'ex_bright',
+      kind: 'slider',
+      label: 'Brightness',
+      description: 'Runs brightness() on change.',
+      descInline: true,
+      defaultValue: 180,
+      min: 0,
+      max: 255,
+      step: 5,
+      onChange: 'run',
+      bindOutputTo: 'console',
+    },
+    { id: 'ex_vol', kind: 'knob', label: 'Volume', defaultValue: 60, min: 0, max: 100, step: 1, unit: '%', onChange: 'none' },
+    {
+      id: 'ex_anim',
+      kind: 'stepper',
+      label: 'Anim scale',
+      defaultValue: 1,
+      min: 0,
+      max: 5,
+      step: 0.5,
+      unit: 'x',
+      onChange: 'none',
+    },
+
+    { id: 'ex_s3', kind: 'section', title: 'Actions' },
     { id: 'ex_info', kind: 'button', label: 'Info', variant: 'default', confirm: false, bindOutputTo: 'console' },
     { id: 'ex_stop', kind: 'button', label: 'Force stop', variant: 'default', confirm: false, bindOutputTo: 'console' },
     {
@@ -162,6 +210,45 @@ export const EXAMPLE_PANEL: ScriptingSettings = {
       confirm: true,
       bindOutputTo: 'console',
     },
+
+    { id: 'ex_s4', kind: 'section', title: 'Live', description: 'Polled every few seconds.' },
+    {
+      id: 'ex_batt',
+      kind: 'readout',
+      label: 'Battery temp',
+      boundTo: 'battery_temp',
+      unit: '°C',
+      autoPoll: { enabled: true, intervalSec: 3 },
+      refreshOnChange: false,
+    },
+    {
+      id: 'ex_cpu',
+      kind: 'gauge',
+      label: 'CPU',
+      boundTo: 'cpu',
+      unit: '%',
+      min: 0,
+      max: 100,
+      autoPoll: { enabled: true, intervalSec: 3 },
+      refreshOnChange: false,
+    },
+    {
+      id: 'ex_net',
+      kind: 'status',
+      label: 'Network',
+      boundTo: 'network',
+      autoPoll: { enabled: true, intervalSec: 5 },
+      refreshOnChange: false,
+    },
+    {
+      id: 'ex_charge',
+      kind: 'led',
+      label: 'Charging',
+      boundTo: 'charging',
+      autoPoll: { enabled: true, intervalSec: 5 },
+      refreshOnChange: false,
+    },
+
     { id: 'ex_con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
   ],
 };

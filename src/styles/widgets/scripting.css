@@ -637,6 +637,7 @@
   border-radius: 7px;
   font-size: var(--t-sm);
   font-weight: 500;
+  text-decoration: none;
 }
 .bdr-pillbtn.ghost { background: transparent; color: var(--fg-1); }
 .bdr-pillbtn.ghost:hover { background: var(--bg-2); }
@@ -782,6 +783,31 @@
   caret-color: var(--fg-0);
   resize: none;
   outline: 0;
+}
+
+/* Inline syntax-error box below the editor (real-device `sh -n` output). */
+.bdr-script-error {
+  flex-shrink: 0;
+  border-top: 1px solid oklch(from var(--lvl-e-fg) l c h / 0.4);
+  background: oklch(from var(--lvl-e-bg) l c h / 0.5);
+  color: var(--lvl-e-fg);
+  padding: 8px 14px 10px;
+  max-height: 28%;
+  overflow: auto;
+}
+.bdr-script-error-head {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.bdr-script-error pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .bdr-legend {
@@ -939,12 +965,14 @@
 .bdr-seg button.active { background: var(--bg-0); color: var(--fg-0); box-shadow: var(--shadow-1); }
 .bdr-checkbox { display: inline-flex; align-items: center; gap: 7px; color: var(--fg-1); font-size: var(--t-sm); cursor: pointer; }
 .bdr-checkbox input { width: 14px; height: 14px; accent-color: var(--accent); }
-/* Inline-description checkbox: left-aligned with the form's other controls,
-   with the explanatory text (help font) to its right. */
-.bdr-form-inlinecheck {
+/* Inline-description checkbox: sits in the input column, with the explanatory
+   text (help font) to its right. The compound selector outranks the generic
+   `.bdr-form-row > label` rule so the help font + a small checkbox win. */
+.bdr-form-row > label.bdr-form-inlinecheck {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
+  padding-top: 2px;
   cursor: pointer;
   font-size: var(--t-xs);
   color: var(--fg-3);

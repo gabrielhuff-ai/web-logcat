@@ -29,6 +29,14 @@ describe('runFunctionSim', () => {
     expect(r.stdout).toBe('$NAME stays literal');
   });
 
+  it('simulates inline one-liner functions', () => {
+    expect(runFunctionSim('temp() { echo 31.2; }', 'temp', {}).stdout).toBe('31.2');
+  });
+
+  it('simulates multiple inline echoes separated by semicolons', () => {
+    expect(runFunctionSim('f() { echo a; echo b; }', 'f', {}).stdout).toBe('a\nb');
+  });
+
   it('reports 127 for an unknown function', () => {
     const r = runFunctionSim(SCRIPT, 'missing', {});
     expect(r.exitCode).toBe(127);

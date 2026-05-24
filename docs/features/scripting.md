@@ -76,6 +76,68 @@ default) and, optionally, whenever an input they read changes.
 **Sections** group controls under a heading. They're visual only — they
 don't change the shared environment.
 
+## Control reference
+
+Each control's **label** is the only name you set — it derives the env var
+(inputs) or, for action buttons, the function called. Pair each control with a
+function in the script. The examples below assume one script with these
+functions:
+
+```sh
+force_stop()    { am force-stop "$PACKAGE"; }
+set_brightness(){ settings put system screen_brightness "$BRIGHTNESS"; }
+battery_temp()  { dumpsys battery | awk '/temperature/ { print $2 / 10 }'; }
+charging()      { dumpsys battery | grep -q 'powered: true' && echo green || echo off; }
+```
+
+### Inputs
+
+Inputs hold a value and export it as `$LABEL` (uppercased, snake-cased) on every
+run. Their **On change** setting is one of: *Refresh displays* that read the
+var, *Run a function* (the one derived from the label, fired on change — e.g. a
+toggle that broadcasts on flip), or *Do nothing*.
+
+| Control | Value | Notes |
+| --- | --- | --- |
+| **Text field** | string | Free text, e.g. a `$PACKAGE` name. |
+| **Slider** | number | `min` / `max` / `step`; optional unit. |
+| **Knob** | number | Same value model as the slider, rotary UI. |
+| **Stepper** | number | `−` / `+` by `step`, clamped to `min` / `max`. |
+| **Toggle** | `1` / `0` | Test with `[ "$VERBOSE" = 1 ]`. |
+| **Select** | string | One of a fixed option list. |
+
+Example — a `Package` text field ↦ `$PACKAGE`, and a `Brightness` slider
+(0–255) set to *Run a function* ↦ runs `set_brightness()` on every change.
+
+### Action button
+
+Runs the function derived from its label (`Force stop` ↦ `force_stop`), exports
+all input values first, and sends stdout/stderr/exit to the console it's bound
+to. **Variant** styles it (Default / Subtle / Destructive); **Confirm before
+running** opens a Cancel / Run dialog first — use it for destructive actions.
+
+### Displays
+
+Displays run a **bound function** (on mount, on their poll interval, and
+optionally when an input they read changes) and render its output:
+
+| Display | Renders the function's output as |
+| --- | --- |
+| **Console** | The most recent run: the command, stdout, stderr, and exit code. Bound to "last run" rather than one function. |
+| **Readout** | The first number on the last non-empty line, plus a unit — e.g. `battery_temp` ↦ `31.2 °C`. |
+| **Status pill** | The last line as text, coloured green / red by exit status. |
+| **Gauge** | That number on a `min`/`max` arc (warns past ~85%). |
+| **LED** | A colour from the output: the words `green` / `amber` / `red` / `blue` / `off`, else on (non-empty / non-zero) vs off. `charging` ↦ a green dot. |
+
+Each bound display has **Auto-poll** (off by default; on ⇒ re-runs every N
+seconds) and **Refresh on input change** (re-run when an input its function
+reads changes).
+
+### Section
+
+A non-interactive heading (with optional description) that groups the controls
+below it. Display only — it doesn't scope the shell environment.
+
 ## The builder
 
 The tile's cog opens the builder: the shell script on the left (with a

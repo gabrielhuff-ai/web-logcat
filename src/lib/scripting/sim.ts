@@ -36,13 +36,16 @@ export function runFunctionSim(
   if (body == null) {
     return { stdout: '', stderr: `sh: ${fn}: not found`, exitCode: 127 };
   }
+  // Find `echo`/`printf` statements anywhere — at line start, after `{`, or
+  // after `;` — so inline one-liners like `f() { echo hi; }` simulate too. The
+  // argument runs up to the next `;`, newline, or closing `}`.
   const out: string[] = [];
-  for (const raw of body.split('\n')) {
-    const line = raw.trim();
-    const m = /^(?:echo|printf)\s+(.*)$/.exec(line);
-    if (!m) continue;
-    // Single-quoted args are literal; otherwise expand env references.
+  const re = /(?:^|[\s;{])(?:echo|printf)\s+([^;\n}]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
     const arg = m[1].trim();
+    if (!arg) continue;
+    // Single-quoted args are literal; otherwise expand env references.
     const literal = arg.startsWith("'");
     const text = stripQuotes(arg);
     out.push(literal ? text : substEnv(text, env));

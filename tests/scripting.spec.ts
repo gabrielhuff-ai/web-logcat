@@ -63,6 +63,11 @@ test.describe('scripting widget', () => {
     const dialog = page.getByRole('dialog', { name: /scripting settings/i });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Shell script')).toBeVisible();
+    // Help links to the docs.
+    await expect(dialog.getByRole('link', { name: /help/i })).toHaveAttribute(
+      'href',
+      /docs\/features\/scripting/,
+    );
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
 
@@ -185,7 +190,7 @@ test.describe('scripting widget', () => {
     const dialog = page.getByRole('dialog', { name: /scripting settings/i });
     await expect(dialog.locator('.bdr-ctrl-row').first()).toBeVisible();
 
-    await dialog.locator('.bdr-pillbtn.ghost').click();
+    await dialog.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(dialog.locator('.bdr-ctrl-row')).toHaveCount(0);
     await dialog.getByRole('button', { name: /^close$/i }).click();
     // Back to the empty state — no controls remain.
