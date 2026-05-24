@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
 import { useTileSettings } from '../../../lib/tileSettings';
 import { extractFunctions } from '../../../lib/scripting/parseScript';
+import { highlightShell } from '../../../lib/scripting/highlight';
 import { varFromLabel } from '../../../lib/scripting/derive';
 import {
   SCRIPTING_DEFAULTS,
@@ -57,6 +58,9 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
   const [dragId, setDragId] = useState<string | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -65,6 +69,23 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Keep the highlight overlay + line-number gutter aligned with the textarea
+  // as it scrolls.
+  const syncScroll = useCallback(() => {
+    const ta = editorRef.current;
+    if (!ta) return;
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop = ta.scrollTop;
+      highlightRef.current.scrollLeft = ta.scrollLeft;
+    }
+    if (gutterRef.current) {
+      gutterRef.current.style.transform = `translateY(${-ta.scrollTop}px)`;
+    }
+  }, []);
+
+  const highlighted = useMemo(() => highlightShell(draft.script), [draft.script]);
+  const lineCount = useMemo(() => Math.max(1, draft.script.split('\n').length), [draft.script]);
 
   const functions = useMemo(() => extractFunctions(draft.script), [draft.script]);
   const inputVars = useMemo(
@@ -193,14 +214,26 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
               </button>
             </div>
             <div className="bdr-editor">
-              <textarea
-                className="bdr-editor-text"
-                value={draft.script}
-                onChange={(e) => setDraft((d) => ({ ...d, script: e.target.value }))}
-                spellCheck={false}
-                autoComplete="off"
-                aria-label="Shell script"
-              />
+              <div className="bdr-editor-gutter">
+                <div className="bdr-editor-gutter-inner" ref={gutterRef}>
+                  {Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')}
+                </div>
+              </div>
+              <div className="bdr-editor-code">
+                <pre className="bdr-editor-hl" ref={highlightRef} aria-hidden>
+                  <code dangerouslySetInnerHTML={{ __html: highlighted + '\n' }} />
+                </pre>
+                <textarea
+                  className="bdr-editor-text"
+                  ref={editorRef}
+                  value={draft.script}
+                  onChange={(e) => setDraft((d) => ({ ...d, script: e.target.value }))}
+                  onScroll={syncScroll}
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-label="Shell script"
+                />
+              </div>
             </div>
             <div className="bdr-legend">
               <div className="bdr-legend-head">

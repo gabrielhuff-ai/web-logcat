@@ -557,24 +557,33 @@
 }
 .sc-script-error:hover { background: oklch(from var(--lvl-e-bg) l c h / 1); }
 
-/* ───────────────────────── Confirm popover ───────────────────────── */
-.sc-btn-wrap { position: relative; display: inline-flex; }
-.sc-confirm-back { position: fixed; inset: 0; z-index: 199; }
-.sc-confirm-pop {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
+/* ───────────────────────── Confirm dialog ─────────────────────────
+   Portaled + centred (not anchored to the button) so the tile's
+   overflow:hidden can't clip it — a dimmed/blurred backdrop like the
+   other modal dialogs. */
+.sc-confirm-back {
+  position: fixed; inset: 0;
+  background: oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(4px);
   z-index: 200;
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 10px;
+  animation: fadeIn 200ms var(--ease-out);
+}
+.sc-confirm-pop {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px 18px;
   background: oklch(from var(--bg-1) l c h / 0.98);
   border: 1px solid var(--glass-line);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px oklch(0 0 0 / 0.5);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
   font-size: var(--t-sm);
-  min-width: 180px;
+  min-width: 260px;
+  max-width: 90vw;
 }
-.sc-confirm-pop-msg { color: var(--fg-1); }
+.sc-confirm-pop-msg { color: var(--fg-0); font-weight: 500; }
 .sc-confirm-pop-row { display: flex; gap: 6px; justify-content: flex-end; }
 .sc-confirm-pop-btn { padding: 5px 10px; border-radius: 6px; font-size: var(--t-sm); background: var(--bg-2); color: var(--fg-1); }
 .sc-confirm-pop-btn:hover { background: var(--bg-3); }
@@ -716,40 +725,63 @@
 .bdr-root-tg-dot { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-0); transition: transform 160ms var(--ease-spring); }
 .bdr-root-tg.on .bdr-root-tg-dot { transform: translateX(12px); background: oklch(0.99 0 0); }
 
+/* Editor: a line-number gutter + a highlight overlay painted behind a
+   transparent textarea. The <pre> and <textarea> share an identical box so
+   the coloured tokens line up exactly with the caret; the gutter is translated
+   to track vertical scroll. All three share font + line-height. */
 .bdr-editor {
+  --editor-pad: 12px;
   flex: 1;
   min-height: 0;
   display: flex;
   overflow: hidden;
   background: oklch(from var(--bg-0) calc(l - 0.02) c h);
-  font-family: var(--font-mono);
-  font-size: var(--t-sm);
-  line-height: 1.55;
 }
 .bdr-editor-gutter {
   flex-shrink: 0;
+  overflow: hidden;
+  padding: var(--editor-pad) 10px var(--editor-pad) 14px;
+  border-right: 1px solid var(--glass-line);
+}
+.bdr-editor-gutter-inner {
   text-align: right;
-  padding: 12px 10px 12px 14px;
   color: var(--fg-3);
   opacity: 0.55;
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-  border-right: 1px solid var(--glass-line);
-  overflow: hidden;
-}
-.bdr-editor-text {
-  flex: 1;
-  margin: 0;
-  padding: 12px 14px;
-  color: var(--fg-0);
-  background: transparent;
-  border: 0; outline: 0; resize: none;
-  white-space: pre;
-  tab-size: 2;
-  overflow: auto;
   font-family: var(--font-mono);
   font-size: var(--t-sm);
   line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  white-space: pre;
+  will-change: transform;
+}
+.bdr-editor-code { position: relative; flex: 1; min-width: 0; }
+.bdr-editor-hl,
+.bdr-editor-text {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--editor-pad) 14px;
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+  border: 0;
+}
+.bdr-editor-hl {
+  overflow: hidden;
+  color: var(--fg-1);
+  pointer-events: none;
+}
+.bdr-editor-hl code { font: inherit; }
+.bdr-editor-text {
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--fg-0);
+  resize: none;
+  outline: 0;
 }
 
 .bdr-legend {
@@ -907,6 +939,24 @@
 .bdr-seg button.active { background: var(--bg-0); color: var(--fg-0); box-shadow: var(--shadow-1); }
 .bdr-checkbox { display: inline-flex; align-items: center; gap: 7px; color: var(--fg-1); font-size: var(--t-sm); cursor: pointer; }
 .bdr-checkbox input { width: 14px; height: 14px; accent-color: var(--accent); }
+/* Inline-description checkbox: left-aligned with the form's other controls,
+   with the explanatory text (help font) to its right. */
+.bdr-form-inlinecheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  line-height: 1.5;
+}
+.bdr-form-inlinecheck input {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
 .bdr-tg { width: 32px; height: 18px; border-radius: 999px; background: var(--bg-3); position: relative; transition: background 160ms; flex-shrink: 0; }
 .bdr-tg.on { background: var(--accent); }
 .bdr-tg-dot { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg-0); transition: transform 160ms var(--ease-spring); }

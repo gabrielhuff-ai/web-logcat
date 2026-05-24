@@ -1271,7 +1271,7 @@
 .imex-textarea:focus { outline: 0; border-color: oklch(from var(--accent) l c h / 0.55); }
 .imex-ack {
   display: flex; align-items: flex-start; gap: 8px;
-  margin-top: 12px;
+  margin: 4px 0 16px;
   padding: 10px;
   border-radius: 8px;
   background: oklch(from var(--lvl-w-bg) l c h / 0.4);
