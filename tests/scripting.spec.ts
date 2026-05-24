@@ -106,6 +106,39 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-exit')).toContainText(/exit 0/);
   });
 
+  test('a toggle set to run-on-change runs its function when flipped', async ({ page }) => {
+    const panel = {
+      script: 'notify() {\n  echo "flipped $NOTIFY"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'tg', kind: 'toggle', label: 'Notify', defaultValue: false, onChange: 'run', bindOutputTo: 'console' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([serial, tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${serial}:${tileId}:scripting`, JSON.stringify(p));
+      },
+      [FAKE_SERIAL, 't_tg', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // Flipping the toggle runs notify() with NOTIFY=1 (no button needed).
+    await tile.getByRole('switch', { name: 'Notify' }).click();
+    await expect(tile.locator('.sc-console-body')).toContainText('flipped 1');
+  });
+
   test('building a panel in the builder and saving persists it to the widget', async ({
     page,
   }) => {

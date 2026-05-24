@@ -108,52 +108,54 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     setConsoleViews((prev) => ({ ...prev, [id]: view }));
   }, []);
 
+  // Run a function and stream its result into a console. Returns the run so
+  // callers can react to the exit code (e.g. a button's lifecycle).
+  const execToConsole = useCallback(
+    (fn: string, consoleId: string | null): Promise<RunResult> => {
+      setConsole(consoleId, { ...EMPTY_CONSOLE, empty: false, state: 'busy' });
+      const p = exec(fn);
+      p.then((r) => {
+        setConsole(consoleId, {
+          lines: toConsoleLines(fn, r),
+          state: r.exitCode === 0 ? 'idle' : 'error',
+          exit: r.exitCode,
+          empty: false,
+          copied: false,
+        });
+      }).catch((err: unknown) => {
+        const msg =
+          err instanceof ShellUnsupportedError
+            ? 'This device does not support shell-protocol v2.'
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        setConsole(consoleId, {
+          lines: [
+            { kind: 'cmd', text: `$ ${fn}` },
+            { kind: 'err', text: msg },
+          ],
+          state: 'error',
+          exit: 1,
+          empty: false,
+          copied: false,
+        });
+        showToast(`scripting: ${msg}`);
+      });
+      return p;
+    },
+    [exec, setConsole, showToast],
+  );
+
   const onRun = useCallback(
     (buttonId: string) => {
       const ctl = controls.find((c) => c.id === buttonId);
       if (!ctl || ctl.kind !== 'button') return;
-      setButtonState((s) => {
-        if (s[buttonId] === 'busy') return s;
-        return { ...s, [buttonId]: 'busy' };
-      });
-      const fn = fnFromLabel(ctl.label);
-      const consoleId = resolveConsoleId(ctl.bindOutputTo);
-      setConsole(consoleId, { ...EMPTY_CONSOLE, empty: false, state: 'busy' });
-
-      exec(fn)
-        .then((r) => {
-          const ok = r.exitCode === 0;
-          setButtonState((s) => ({ ...s, [buttonId]: ok ? 'idle' : 'error' }));
-          setConsole(consoleId, {
-            lines: toConsoleLines(fn, r),
-            state: ok ? 'idle' : 'error',
-            exit: r.exitCode,
-            empty: false,
-            copied: false,
-          });
-        })
-        .catch((err: unknown) => {
-          const msg =
-            err instanceof ShellUnsupportedError
-              ? 'This device does not support shell-protocol v2.'
-              : err instanceof Error
-                ? err.message
-                : String(err);
-          setButtonState((s) => ({ ...s, [buttonId]: 'error' }));
-          setConsole(consoleId, {
-            lines: [
-              { kind: 'cmd', text: `$ ${fn}` },
-              { kind: 'err', text: msg },
-            ],
-            state: 'error',
-            exit: 1,
-            empty: false,
-            copied: false,
-          });
-          showToast(`scripting: ${msg}`);
-        });
+      setButtonState((s) => (s[buttonId] === 'busy' ? s : { ...s, [buttonId]: 'busy' }));
+      execToConsole(fnFromLabel(ctl.label), resolveConsoleId(ctl.bindOutputTo))
+        .then((r) => setButtonState((s) => ({ ...s, [buttonId]: r.exitCode === 0 ? 'idle' : 'error' })))
+        .catch(() => setButtonState((s) => ({ ...s, [buttonId]: 'error' })));
     },
-    [controls, exec, resolveConsoleId, setConsole, showToast],
+    [controls, execToConsole, resolveConsoleId],
   );
 
   const onCopyConsole = useCallback(
@@ -220,16 +222,23 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     return () => timers.forEach((t) => window.clearInterval(t));
   }, [controls, runDisplay]);
 
-  // Refresh-on-change: when an input flagged onChange:'refresh' changes, re-run
-  // any refresh-on-change display whose bound function reads that variable.
+  // React to an input's value changing. An input set to onChange:'refresh'
+  // re-runs displays that read its var; one set to onChange:'run' runs its own
+  // function (derived from its label) and routes output to its bound console.
+  // Only fires for inputs that already existed last render (so a builder-save
+  // that seeds a new input never auto-fires).
   const prevValuesRef = useRef(values);
   useEffect(() => {
     const prev = prevValuesRef.current;
     prevValuesRef.current = values;
     const changedVars = new Set<string>();
     for (const c of controls) {
-      if (isInputControl(c) && c.onChange === 'refresh' && prev[c.id] !== values[c.id]) {
+      if (!isInputControl(c)) continue;
+      if (!(c.id in prev) || prev[c.id] === values[c.id]) continue;
+      if (c.onChange === 'refresh') {
         changedVars.add(varNameFromLabel(c.label));
+      } else if (c.onChange === 'run') {
+        execToConsole(fnFromLabel(c.label), resolveConsoleId(c.bindOutputTo ?? 'console'));
       }
     }
     if (changedVars.size === 0) return;
@@ -239,7 +248,7 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
       const reads = [...changedVars].some((v) => body.includes('$' + v) || body.includes('${' + v));
       if (reads) runDisplay(c);
     }
-  }, [values, controls, script, runDisplay]);
+  }, [values, controls, script, runDisplay, execToConsole, resolveConsoleId]);
 
   // Authoritative syntax check via `sh -n` on a real device. The script only
   // changes on builder Save, so no debounce is needed. Skipped on the
