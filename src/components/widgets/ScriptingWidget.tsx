@@ -15,6 +15,7 @@ import { useAdb } from '../../lib/adbContext';
 import { useDashboardChrome } from '../../lib/dashboardChrome';
 import { useTileSettings } from '../../lib/tileSettings';
 import {
+  EXAMPLE_PANEL,
   SCRIPTING_DEFAULTS,
   type ControlConfig,
   type ControlValue,
@@ -42,7 +43,11 @@ export interface ScriptingWidgetProps {
 export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
   const { adb, usingFake } = useAdb();
   const { showToast } = useDashboardChrome();
-  const [settings] = useTileSettings<ScriptingSettings>(tileId, 'scripting', SCRIPTING_DEFAULTS);
+  const [settings, setSettings] = useTileSettings<ScriptingSettings>(
+    tileId,
+    'scripting',
+    SCRIPTING_DEFAULTS,
+  );
   const [builderOpen, setBuilderOpen] = useState(false);
 
   const controls = settings.controls;
@@ -102,7 +107,10 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
           actionsDisabled={runtime.scriptError != null}
         />
       ) : (
-        <EmptyState onBuild={() => setBuilderOpen(true)} />
+        <EmptyState
+          onBuild={() => setBuilderOpen(true)}
+          onLoadExample={() => setSettings(EXAMPLE_PANEL)}
+        />
       )}
 
       {builderOpen && (
@@ -112,7 +120,8 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
   );
 }
 
-function EmptyState({ onBuild }: { onBuild: () => void }) {
+function EmptyState({ onBuild, onLoadExample }: { onBuild: () => void; onLoadExample: () => void }) {
+  const docsHref = `${import.meta.env.BASE_URL}docs/features/scripting`;
   return (
     <div className="empty-script">
       <div className="empty-script-art">
@@ -132,14 +141,21 @@ function EmptyState({ onBuild }: { onBuild: () => void }) {
       </div>
       <h3>Build your control panel</h3>
       <p>
-        Write shell functions, then add inputs and displays that call them. Everything lives in one
-        shared environment.
+        Write shell functions, then add inputs and displays that call them. See the{' '}
+        <a className="empty-script-link" href={docsHref} target="_blank" rel="noopener noreferrer">
+          docs
+        </a>{' '}
+        for more info.
       </p>
       <button type="button" className="empty-script-cta" onClick={onBuild}>
         <Icons.Settings size={12} /> Open settings to build
       </button>
       <div className="empty-script-tip">
-        <Icons.Settings size={9} /> Same as the <strong>cog</strong> in this tile&apos;s header
+        or load an{' '}
+        <button type="button" className="empty-script-link" onClick={onLoadExample}>
+          example
+        </button>{' '}
+        config
       </div>
     </div>
   );

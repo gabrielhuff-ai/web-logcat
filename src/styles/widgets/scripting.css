@@ -76,6 +76,17 @@
   margin-top: 4px;
 }
 .empty-script-tip strong { color: var(--fg-1); font-weight: 600; }
+.empty-script-link {
+  color: var(--accent-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+.empty-script-link:hover { color: var(--accent); }
 
 /* ───────────────────────── Control labels / tooltips ───────────────────────── */
 .sc-lbl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
@@ -574,8 +585,9 @@
 .bdr-back {
   position: fixed; inset: 0;
   background: oklch(0 0 0 / 0.5);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
   z-index: 60;
+  animation: fadeIn 200ms var(--ease-out);
 }
 .bdr-modal {
   position: fixed;
@@ -922,11 +934,34 @@
 .hl-var { color: oklch(0.82 0.13 150); }
 .hl-kw { color: oklch(0.78 0.13 300); }
 
+/* Collapsed-pane re-expand bar — an in-flow column pinned to the right edge
+   so it's always visible (an absolutely-positioned tab was easy to miss). */
+.bdr-expand-bar {
+  flex: 0 0 auto;
+  width: 44px;
+  align-self: stretch;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: oklch(from var(--accent) l c h / 0.14);
+  border-left: 1px solid oklch(from var(--accent) l c h / 0.3);
+  color: var(--accent-fg);
+  transition: background 120ms;
+}
+.bdr-expand-bar:hover { background: oklch(from var(--accent) l c h / 0.26); }
+.bdr-expand-count {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 /* ───────────────────────── Performance mode ───────────────────────── */
 [data-perf="on"] .sc-btn,
 [data-perf="on"] .sc-fill,
 [data-perf="on"] .sc-thumb,
 [data-perf="on"] .sc-tg,
 [data-perf="on"] .sc-tg-dot { transition: none !important; }
-[data-perf="on"] .bdr-modal,
-[data-perf="on"] .bdr-back { backdrop-filter: none !important; }
+/* The builder modal keeps its backdrop blur under performance mode, to
+   match the other modal dialogs (.ws-back) — perf mode only drops the
+   tile-level backdrop filters, not modal scrims. */

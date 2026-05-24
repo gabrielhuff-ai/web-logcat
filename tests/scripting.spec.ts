@@ -105,4 +105,67 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('hello world');
     await expect(tile.locator('.sc-exit')).toContainText(/exit 0/);
   });
+
+  test('building a panel in the builder and saving persists it to the widget', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+    await expect(dialog).toBeVisible();
+
+    // Write a function, add an action button + a console, then Save.
+    await dialog.getByLabel('Shell script').fill('action() {\n  echo "it worked"\n}\n');
+    await dialog.getByRole('button', { name: /^add$/i }).click();
+    await dialog.locator('.bdr-add-item').filter({ hasText: 'Action button' }).click();
+    await dialog.getByRole('button', { name: /^add$/i }).click();
+    await dialog.locator('.bdr-add-item').filter({ hasText: 'Console' }).click();
+    await dialog.getByRole('button', { name: /save panel/i }).click();
+
+    // Regression: the saved panel must reach the widget (the modal unmounts
+    // on save, which previously dropped the persisting state update).
+    await expect(dialog).not.toBeVisible();
+    const action = tile.locator('.sc-btn').filter({ hasText: 'Action' });
+    await expect(action).toBeVisible();
+    await action.click();
+    await expect(tile.locator('.sc-console-body')).toContainText('it worked');
+  });
+
+  test('the empty-state "example" link loads a ready-made panel', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /^example$/i }).click();
+
+    // The example panel renders its controls.
+    await expect(tile.locator('.sc-btn').filter({ hasText: 'Force stop' })).toBeVisible();
+    await expect(tile.locator('.sc-text')).toContainText('Package');
+  });
+
+  test('the builder controls pane collapses and re-expands', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+
+    await expect(dialog.locator('.bdr-right')).toBeVisible();
+    await dialog.getByRole('button', { name: /collapse controls pane/i }).click();
+    await expect(dialog.locator('.bdr-right')).toHaveCount(0);
+    const expandBar = dialog.getByRole('button', { name: /expand controls pane/i });
+    await expect(expandBar).toBeVisible();
+    await expandBar.click();
+    await expect(dialog.locator('.bdr-right')).toBeVisible();
+  });
 });

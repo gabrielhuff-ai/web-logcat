@@ -170,7 +170,10 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
 
         <div className="bdr-body" ref={bodyRef}>
           {/* LEFT — script + legend */}
-          <div className="bdr-left" style={{ flexBasis: collapsed ? '100%' : `${split}%` }}>
+          <div
+            className="bdr-left"
+            style={collapsed ? { flex: '1 1 auto' } : { flexBasis: `${split}%` }}
+          >
             <div className="bdr-section-head">
               <span>Shell script</span>
               <span className="bdr-mini-hint">
@@ -367,12 +370,13 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
           {collapsed && (
             <button
               type="button"
-              className="bdr-expand-tab"
+              className="bdr-expand-bar"
               data-tip="Expand controls pane"
+              aria-label="Expand controls pane"
               onClick={() => setCollapsed(false)}
             >
               <span style={{ transform: 'rotate(180deg)', display: 'inline-flex' }}>
-                <Icons.ChevronRight size={12} />
+                <Icons.ChevronRight size={14} />
               </span>
               <span className="bdr-expand-count">{draft.controls.length} controls</span>
             </button>
