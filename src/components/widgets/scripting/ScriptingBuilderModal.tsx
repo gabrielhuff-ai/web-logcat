@@ -73,16 +73,19 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
   }, [onClose]);
 
   // Keep the highlight overlay + line-number gutter aligned with the textarea
-  // as it scrolls.
+  // as it scrolls. Both are moved with `transform` (compositor-friendly) rather
+  // than `scrollTop`, which lagged the textarea's async scroll and made the
+  // coloured text snap to the final position.
   const syncScroll = useCallback(() => {
     const ta = editorRef.current;
     if (!ta) return;
+    const x = -ta.scrollLeft;
+    const y = -ta.scrollTop;
     if (highlightRef.current) {
-      highlightRef.current.scrollTop = ta.scrollTop;
-      highlightRef.current.scrollLeft = ta.scrollLeft;
+      highlightRef.current.style.transform = `translate(${x}px, ${y}px)`;
     }
     if (gutterRef.current) {
-      gutterRef.current.style.transform = `translateY(${-ta.scrollTop}px)`;
+      gutterRef.current.style.transform = `translateY(${y}px)`;
     }
   }, []);
 

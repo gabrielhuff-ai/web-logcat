@@ -756,11 +756,12 @@
   white-space: pre;
   will-change: transform;
 }
-.bdr-editor-code { position: relative; flex: 1; min-width: 0; }
+.bdr-editor-code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
 .bdr-editor-hl,
 .bdr-editor-text {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   margin: 0;
   padding: var(--editor-pad) 14px;
   font-family: var(--font-mono);
@@ -770,13 +771,18 @@
   tab-size: 2;
   border: 0;
 }
+/* Content-sized highlight overlay, clipped by .bdr-editor-code and moved with
+   `transform` to track the textarea's (compositor) scroll. */
 .bdr-editor-hl {
-  overflow: hidden;
   color: var(--fg-1);
   pointer-events: none;
+  will-change: transform;
 }
 .bdr-editor-hl code { font: inherit; }
+/* The textarea fills the viewport and is the actual scroller. */
 .bdr-editor-text {
+  right: 0;
+  bottom: 0;
   overflow: auto;
   background: transparent;
   color: transparent;
