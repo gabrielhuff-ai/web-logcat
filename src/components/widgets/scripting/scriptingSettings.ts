@@ -113,3 +113,47 @@ export const SCRIPTING_DEFAULTS: ScriptingSettings = {
   controls: [],
   fontSize: 12,
 };
+
+/**
+ * A ready-made demo panel loaded from the empty-state "example" link — a
+ * small package toolbox. The `info` function echoes a line so it produces
+ * visible output on the simulator (no device); `force_stop` / `clear_data`
+ * are real on a device and no-ops worth running on hardware.
+ */
+export const EXAMPLE_PANEL: ScriptingSettings = {
+  script: [
+    '#!/system/bin/sh',
+    '# Example: a small package toolbox. Type a package, then act on it.',
+    '',
+    'info() {',
+    '  echo "Package: $PACKAGE"',
+    '  dumpsys package "$PACKAGE" 2>/dev/null | grep versionName | head -1',
+    '}',
+    '',
+    'force_stop() { am force-stop "$PACKAGE"; }',
+    'clear_data() { pm clear "$PACKAGE"; }',
+  ].join('\n'),
+  runAsRoot: false,
+  fontSize: 12,
+  controls: [
+    {
+      id: 'ex_pkg',
+      kind: 'text',
+      label: 'Package',
+      description: 'The target package name.',
+      defaultValue: 'com.android.settings',
+      onChange: 'none',
+    },
+    { id: 'ex_info', kind: 'button', label: 'Info', variant: 'default', confirm: false, bindOutputTo: 'console' },
+    { id: 'ex_stop', kind: 'button', label: 'Force stop', variant: 'default', confirm: false, bindOutputTo: 'console' },
+    {
+      id: 'ex_clear',
+      kind: 'button',
+      label: 'Clear data',
+      variant: 'destructive',
+      confirm: true,
+      bindOutputTo: 'console',
+    },
+    { id: 'ex_con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+  ],
+};

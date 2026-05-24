@@ -213,6 +213,17 @@ export function useTileSettings<T extends object>(
     hydrateTileSettings(kind, serial, tileId, defaults),
   );
 
+  // Mirror of the committed state, kept current every render. `set` reads
+  // this instead of relying on a functional updater so the persist + notify
+  // side-effects run synchronously and unconditionally — a functional
+  // updater is dropped when the owning component unmounts in the same tick
+  // (e.g. the builder modal's "Save" closes itself), which silently lost
+  // writes.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  });
+
   // Re-hydrate when the storage key changes (device swap).
   const lastKeyRef = useRef(key);
   useEffect(() => {
@@ -243,12 +254,13 @@ export function useTileSettings<T extends object>(
 
   const set = useCallback(
     (patch: Partial<T>) => {
-      setState((prev) => {
-        const next = { ...prev, ...patch };
-        writeSettings(key, next);
-        notify(key);
-        return next;
-      });
+      const next = { ...stateRef.current, ...patch };
+      // Pre-update the ref so a burst of `set` calls in one tick chains
+      // off each other's result rather than the last committed render.
+      stateRef.current = next;
+      writeSettings(key, next);
+      notify(key);
+      setState(next);
     },
     [key],
   );
