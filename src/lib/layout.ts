@@ -59,6 +59,7 @@ const KNOWN_KINDS: ReadonlySet<WidgetKind> = new Set([
   'dumpsys',
   'files',
   'mirror',
+  'scripting',
 ]);
 
 /** Read the persisted layout, falling back to the current default. */

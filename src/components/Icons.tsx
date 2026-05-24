@@ -170,3 +170,11 @@ export const Rotate = make(
   'M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5',
   1.6,
 );
+
+// ---- Dashboard import / export ---------------------------------------------
+export const Upload = make('M12 16V4M6 10l6-6 6 6M4 18v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 1.7);
+export const Download = make('M12 4v12M6 10l6 6 6-6M4 18v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 1.7);
+export const Share = make(
+  'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4',
+  1.6,
+);
