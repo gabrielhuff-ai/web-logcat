@@ -43,10 +43,9 @@ describe('buildCommand', () => {
     );
   });
 
-  it('wraps the whole command in su -c when running as root', () => {
+  it('wraps the body in `su 0 sh -c` when running as root', () => {
     const cmd = buildCommand({ script: 's', fn: 'f', env: {}, runAsRoot: true });
-    expect(cmd.startsWith('su -c ')).toBe(true);
-    // The body is a single quoted argument to su.
-    expect(cmd).toBe(`su -c ${shQuote('s\nf')}`);
+    // `su <uid> <command…>` form — works on AOSP and Magisk su.
+    expect(cmd).toBe(`su 0 sh -c ${shQuote('s\nf')}`);
   });
 });

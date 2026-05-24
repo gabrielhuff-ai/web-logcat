@@ -13,7 +13,8 @@
 // Variable assignments and the function definitions run in the same shell, so
 // the function sees the values via $PACKAGE. No shebang is required — the
 // device runs the string in its own shell, and any `#!` line is just a comment.
-// Run-as-root wraps the whole thing in `su -c '<escaped>'` (best-effort).
+// Run-as-root uses `su 0 sh -c '<escaped>'` — the `su <uid> <command…>` form
+// both AOSP and Magisk `su` accept (`su -c` is treated as a uid by AOSP `su`).
 
 import type { Adb } from '@yume-chan/adb';
 
@@ -52,7 +53,7 @@ export function buildCommand(opts: RunOpts): string {
     .join('\n');
   // assignments → script (function defs) → call the function.
   const body = `${assigns ? assigns + '\n' : ''}${script}\n${fn}`;
-  return runAsRoot ? `su -c ${shQuote(body)}` : body;
+  return runAsRoot ? `su 0 sh -c ${shQuote(body)}` : body;
 }
 
 /** Run one function against a real device. Throws ShellUnsupportedError on
