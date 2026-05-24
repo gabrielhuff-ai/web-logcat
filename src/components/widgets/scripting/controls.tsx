@@ -9,6 +9,7 @@
 import {
   useCallback,
   useRef,
+  useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -80,6 +81,7 @@ export function ScButton({
   const busy = state === 'busy';
   const err = state === 'error';
   const active = state === 'active';
+  const [confirming, setConfirming] = useState(false);
   const cls = [
     'sc-btn',
     variant === 'subtle' && 'subtle',
@@ -90,19 +92,53 @@ export function ScButton({
   ]
     .filter(Boolean)
     .join(' ');
+
+  const handleClick = () => {
+    if (confirm && !confirming) {
+      setConfirming(true);
+      return;
+    }
+    onRun?.();
+  };
+
   return (
-    <button
-      type="button"
-      className={cls}
-      data-tip={description || undefined}
-      disabled={disabled || busy}
-      onClick={onRun}
-    >
-      {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
-      <span>{label}</span>
-      {confirm && !busy && !err && <Icons.Lock size={10} />}
-      {err && <span className="sc-btn-exit">exit {exitCode}</span>}
-    </button>
+    <span className="sc-btn-wrap">
+      <button
+        type="button"
+        className={cls}
+        data-tip={description || undefined}
+        disabled={disabled || busy}
+        onClick={handleClick}
+      >
+        {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
+        <span>{label}</span>
+        {confirm && !busy && !err && <Icons.Lock size={10} />}
+        {err && <span className="sc-btn-exit">exit {exitCode}</span>}
+      </button>
+      {confirming && (
+        <>
+          <div className="sc-confirm-back" onClick={() => setConfirming(false)} />
+          <div className="sc-confirm-pop" role="dialog" aria-label={`Confirm ${label}`}>
+            <div className="sc-confirm-pop-msg">Run {label}?</div>
+            <div className="sc-confirm-pop-row">
+              <button type="button" className="sc-confirm-pop-btn" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sc-confirm-pop-btn run"
+                onClick={() => {
+                  setConfirming(false);
+                  onRun?.();
+                }}
+              >
+                Run
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </span>
   );
 }
 

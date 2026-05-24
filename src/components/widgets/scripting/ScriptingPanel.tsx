@@ -38,6 +38,8 @@ export interface ScriptingPanelProps {
   /** Per-console view, keyed by console control id. */
   consoleViews: Record<string, ConsoleView>;
   onCopyConsole: (id: string) => void;
+  /** When the script fails `sh -n`, action buttons are disabled. */
+  actionsDisabled?: boolean;
 }
 
 const toNum = (v: ControlValue | undefined, fallback = 0): number => {
@@ -179,6 +181,7 @@ function renderButton(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
       confirm={c.confirm}
       variant={c.variant}
       state={props.buttonState[c.id] ?? 'idle'}
+      disabled={props.actionsDisabled}
       onRun={() => props.onRun(c.id)}
     />
   );

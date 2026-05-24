@@ -531,9 +531,28 @@
 
 @keyframes sc-spin { to { transform: rotate(360deg); } }
 
+/* ───────────────────────── Script-error banner ───────────────────────── */
+.sc-script-error {
+  display: inline-flex; align-items: center; gap: 6px;
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: oklch(from var(--lvl-e-bg) l c h / 0.85);
+  color: var(--lvl-e-fg);
+  border: 1px solid oklch(from var(--lvl-e-fg) l c h / 0.4);
+}
+.sc-script-error:hover { background: oklch(from var(--lvl-e-bg) l c h / 1); }
+
 /* ───────────────────────── Confirm popover ───────────────────────── */
+.sc-btn-wrap { position: relative; display: inline-flex; }
+.sc-confirm-back { position: fixed; inset: 0; z-index: 199; }
 .sc-confirm-pop {
   position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
   z-index: 200;
   display: flex; flex-direction: column; gap: 8px;
   padding: 10px;

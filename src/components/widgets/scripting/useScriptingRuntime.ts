@@ -10,7 +10,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Adb } from '@yume-chan/adb';
 import { fnFromLabel, varNameFromLabel } from '../../../lib/scripting/derive';
 import { extractFunctionBody } from '../../../lib/scripting/parseScript';
-import { runFunction, ShellUnsupportedError, type RunResult } from '../../../lib/scripting/runner';
+import {
+  checkScript,
+  runFunction,
+  ShellUnsupportedError,
+  type RunResult,
+} from '../../../lib/scripting/runner';
 import { runFunctionSim } from '../../../lib/scripting/sim';
 import { envFromControls, isInputControl } from './env';
 import { isBoundDisplay, parseDisplayValue } from './displayParse';
@@ -51,6 +56,8 @@ export interface ScriptingRuntime {
   buttonState: Record<string, CtrlState>;
   consoleViews: Record<string, ConsoleView>;
   displayValues: Record<string, DisplayValue>;
+  /** Non-null when `sh -n` rejected the script (real devices only). */
+  scriptError: string | null;
   onRun: (buttonId: string) => void;
   onCopyConsole: (consoleId: string) => void;
 }
@@ -61,6 +68,7 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   const [buttonState, setButtonState] = useState<Record<string, CtrlState>>({});
   const [consoleViews, setConsoleViews] = useState<Record<string, ConsoleView>>({});
   const [displayValues, setDisplayValues] = useState<Record<string, DisplayValue>>({});
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   // Latest values for run handlers without re-creating callbacks per keystroke.
   const valuesRef = useRef(values);
@@ -231,5 +239,26 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     }
   }, [values, controls, script, runDisplay]);
 
-  return { buttonState, consoleViews, displayValues, onRun, onCopyConsole };
+  // Authoritative syntax check via `sh -n` on a real device. The script only
+  // changes on builder Save, so no debounce is needed. Skipped on the
+  // simulator (no shell to validate against).
+  useEffect(() => {
+    if (usingFake || !adb) {
+      setScriptError(null);
+      return;
+    }
+    let cancelled = false;
+    checkScript(adb, script)
+      .then((err) => {
+        if (!cancelled) setScriptError(err);
+      })
+      .catch(() => {
+        if (!cancelled) setScriptError(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [script, adb, usingFake]);
+
+  return { buttonState, consoleViews, displayValues, scriptError, onRun, onCopyConsole };
 }

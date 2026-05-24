@@ -78,6 +78,17 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
 
   return (
     <div className="sw-body" style={fontStyle}>
+      {runtime.scriptError && (
+        <button
+          type="button"
+          className="sc-script-error"
+          data-tip={runtime.scriptError}
+          onClick={() => setBuilderOpen(true)}
+        >
+          <Icons.Wand size={11} />
+          <span>Script error — open settings to fix</span>
+        </button>
+      )}
       {controls.length > 0 ? (
         <ScriptingPanel
           controls={controls}
@@ -88,6 +99,7 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
           displayValues={runtime.displayValues}
           consoleViews={runtime.consoleViews}
           onCopyConsole={runtime.onCopyConsole}
+          actionsDisabled={runtime.scriptError != null}
         />
       ) : (
         <EmptyState onBuild={() => setBuilderOpen(true)} />
