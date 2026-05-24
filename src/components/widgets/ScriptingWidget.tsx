@@ -1,18 +1,49 @@
 // Scripting widget — a user-built control panel over one shell script.
 //
-// The runtime body renders the authored controls (built out across later
-// milestones); for now it shows the empty state until controls exist. The
-// builder is a large standalone modal owned here and opened from two places:
-// this body's empty-state CTA and the tile-header cog (which signals us via
+// Renders the authored controls as a responsive panel; shows the empty state
+// until controls exist. Holds runtime state: current input values (seeded
+// from each control's default), per-button run lifecycle, per-display values,
+// and the console view. Execution is wired in a later milestone — for now
+// inputs are live and actions/displays are inert.
+//
+// The builder is a large standalone modal owned here, opened from this body's
+// empty-state CTA and from the tile-header cog (which signals us via
 // builderBus, since the cog lives in the generic Tile chrome).
 
 import '../../styles/widgets/scripting.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as Icons from '../Icons';
 import { useTileSettings } from '../../lib/tileSettings';
-import { SCRIPTING_DEFAULTS, type ScriptingSettings } from './scripting/scriptingSettings';
+import {
+  SCRIPTING_DEFAULTS,
+  type ControlConfig,
+  type ControlValue,
+  type ScriptingSettings,
+} from './scripting/scriptingSettings';
 import { ScriptingBuilderModal } from './scripting/ScriptingBuilderModal';
+import { ScriptingPanel, type ConsoleView, type DisplayValue } from './scripting/ScriptingPanel';
 import { onOpenBuilder } from './scripting/builderBus';
+import type { CtrlState } from './scripting/controls';
+
+const INPUT_KINDS = new Set(['text', 'slider', 'toggle', 'select', 'stepper', 'knob']);
+const isInput = (c: ControlConfig): boolean => INPUT_KINDS.has(c.kind);
+
+const EMPTY_CONSOLE: ConsoleView = {
+  lines: [],
+  state: 'idle',
+  exit: 0,
+  empty: true,
+  copied: false,
+};
+
+/** Build the initial value map from input controls' defaults. */
+function seedValues(controls: ControlConfig[]): Record<string, ControlValue> {
+  const out: Record<string, ControlValue> = {};
+  for (const c of controls) {
+    if (isInput(c) && 'defaultValue' in c) out[c.id] = c.defaultValue;
+  }
+  return out;
+}
 
 export interface ScriptingWidgetProps {
   /** Stable id of the host tile — namespaces per-instance state. */
@@ -20,27 +51,57 @@ export interface ScriptingWidgetProps {
 }
 
 export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
-  const [settings] = useTileSettings<ScriptingSettings>(
-    tileId,
-    'scripting',
-    SCRIPTING_DEFAULTS,
-  );
+  const [settings] = useTileSettings<ScriptingSettings>(tileId, 'scripting', SCRIPTING_DEFAULTS);
   const [builderOpen, setBuilderOpen] = useState(false);
 
-  // The tile-header cog opens us through the bus (it can't reach our state
-  // directly — it lives in the generic Tile chrome).
+  const controls = settings.controls;
+
+  // Runtime state — not persisted.
+  const [values, setValues] = useState<Record<string, ControlValue>>(() => seedValues(controls));
+  const [buttonState] = useState<Record<string, CtrlState>>({});
+  const [displayValues] = useState<Record<string, DisplayValue>>({});
+  const consoleView = EMPTY_CONSOLE;
+
+  // Reconcile the value map when the controls config changes (builder save):
+  // keep current values for surviving inputs, seed new ones from defaults,
+  // drop removed ones.
+  useEffect(() => {
+    setValues((prev) => {
+      const seeded = seedValues(controls);
+      const next: Record<string, ControlValue> = {};
+      for (const id of Object.keys(seeded)) {
+        next[id] = id in prev ? prev[id] : seeded[id];
+      }
+      return next;
+    });
+  }, [controls]);
+
+  // The tile-header cog opens us through the bus.
   useEffect(() => onOpenBuilder(tileId, () => setBuilderOpen(true)), [tileId]);
 
-  const fontStyle = { ['--widget-font-size' as string]: `${settings.fontSize}px` } as const;
-  const hasControls = settings.controls.length > 0;
+  const fontStyle = useMemo(
+    () => ({ ['--widget-font-size' as string]: `${settings.fontSize}px` }) as const,
+    [settings.fontSize],
+  );
+  const hasControls = controls.length > 0;
 
   return (
     <div className="sw-body" style={fontStyle}>
       {hasControls ? (
-        // Real control rendering lands in the next milestone.
-        <div className="bdr-config-empty">
-          {settings.controls.length} control(s) configured. Panel rendering arrives next.
-        </div>
+        <ScriptingPanel
+          controls={controls}
+          values={values}
+          onInputChange={(id, v) => setValues((prev) => ({ ...prev, [id]: v }))}
+          buttonState={buttonState}
+          onRun={() => {
+            /* execution wired in a later milestone */
+          }}
+          displayValues={displayValues}
+          console={consoleView}
+          onCopyConsole={() => {
+            /* wired with execution */
+          }}
+        />
       ) : (
         <EmptyState onBuild={() => setBuilderOpen(true)} />
       )}
