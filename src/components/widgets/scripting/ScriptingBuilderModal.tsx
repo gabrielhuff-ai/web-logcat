@@ -40,9 +40,13 @@ const MAX_SPLIT = 80;
 export interface ScriptingBuilderModalProps {
   tileId: string;
   onClose: () => void;
+  /** `sh -n` error from the runtime (real devices only), shown inline. */
+  scriptError?: string | null;
 }
 
-export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModalProps) {
+const DOCS_HREF = `${import.meta.env.BASE_URL}docs/features/scripting`;
+
+export function ScriptingBuilderModal({ tileId, onClose, scriptError }: ScriptingBuilderModalProps) {
   const [settings, setSettings] = useTileSettings<ScriptingSettings>(
     tileId,
     'scripting',
@@ -178,6 +182,15 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
             </div>
           </div>
           <span style={{ flex: 1 }} />
+          <a
+            className="bdr-pillbtn ghost"
+            href={DOCS_HREF}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-tip="Open the Scripting docs"
+          >
+            <Icons.Book size={12} /> Help
+          </a>
           <button
             className="bdr-pillbtn ghost"
             onClick={clearAll}
@@ -237,6 +250,14 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
                 />
               </div>
             </div>
+            {scriptError && (
+              <div className="bdr-script-error" role="alert">
+                <span className="bdr-script-error-head">
+                  <Icons.Code size={11} /> Script error
+                </span>
+                <pre>{scriptError}</pre>
+              </div>
+            )}
             <div className="bdr-legend">
               <div className="bdr-legend-head">
                 <Icons.Hash size={10} /> Available variables
