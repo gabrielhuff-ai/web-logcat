@@ -178,3 +178,5 @@ export const Share = make(
   'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4',
   1.6,
 );
+// Source-code glyph (`</>`) — the Scripting widget's tile + palette icon.
+export const Code = make('M9 7l-5 5 5 5M15 7l5 5-5 5M13 5l-2 14', 1.7);

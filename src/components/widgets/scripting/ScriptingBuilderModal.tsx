@@ -148,7 +148,7 @@ export function ScriptingBuilderModal({ tileId, onClose }: ScriptingBuilderModal
       <div className="bdr-modal" role="dialog" aria-label="Scripting settings">
         <div className="bdr-head">
           <span className="bdr-head-icon">
-            <Icons.Wand size={14} />
+            <Icons.Code size={14} />
           </span>
           <div className="bdr-head-titles">
             <div className="bdr-head-title">Scripting · settings</div>

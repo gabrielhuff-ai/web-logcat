@@ -90,7 +90,7 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
           data-tip={runtime.scriptError}
           onClick={() => setBuilderOpen(true)}
         >
-          <Icons.Wand size={11} />
+          <Icons.Code size={11} />
           <span>Script error — open settings to fix</span>
         </button>
       )}

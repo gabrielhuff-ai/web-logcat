@@ -24,11 +24,13 @@ export interface DashboardShareModalProps {
   /** Active device serial — settings are captured from / applied under it. */
   serial: string;
   onClose: () => void;
+  /** Called after a successful import so the dashboard can re-render live. */
+  onImported: () => void;
 }
 
 type Copied = 'text' | 'link' | null;
 
-export function DashboardShareModal({ serial, onClose }: DashboardShareModalProps) {
+export function DashboardShareModal({ serial, onClose, onImported }: DashboardShareModalProps) {
   const [encoded, setEncoded] = useState<string | null>(null);
   const [copied, setCopied] = useState<Copied>(null);
 
@@ -36,6 +38,7 @@ export function DashboardShareModal({ serial, onClose }: DashboardShareModalProp
   const [decoded, setDecoded] = useState<DashboardSnapshot | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
+  const [shake, setShake] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -108,10 +111,19 @@ export function DashboardShareModal({ serial, onClose }: DashboardShareModalProp
   const scriptsPresent = decoded ? hasScripts(decoded) : false;
   const canImport = decoded != null && (!scriptsPresent || ack);
 
-  const doImport = () => {
-    if (!decoded || !canImport) return;
+  // The button stays clickable while "disabled-looking" so clicking it can
+  // nudge the user toward the unchecked acknowledgement (a real `disabled`
+  // attribute would swallow the click).
+  const onImportClick = () => {
+    if (!decoded) return;
+    if (scriptsPresent && !ack) {
+      setShake(true);
+      window.setTimeout(() => setShake(false), 450);
+      return;
+    }
+    // Apply in place — the device is already connected, so no reload.
     applySnapshot(decoded, serial);
-    window.location.reload();
+    onImported();
   };
 
   const linkOk = encoded != null && fitsInUrl(encoded);
@@ -176,6 +188,17 @@ export function DashboardShareModal({ serial, onClose }: DashboardShareModalProp
               placeholder="Paste exported dashboard text here…"
               spellCheck={false}
             />
+            {importError && <p className="imex-note imex-warn">{importError}</p>}
+            {scriptsPresent && (
+              <label className={'imex-ack' + (shake ? ' shake' : '')}>
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+                <span>
+                  This dashboard includes <strong>scripting panels that run shell commands</strong> on
+                  your device. Only import dashboards you trust. Auto-polling displays start paused
+                  after import.
+                </span>
+              </label>
+            )}
             <div className="imex-row">
               <button className="btn" onClick={() => fileRef.current?.click()}>
                 <Icons.Upload size={13} /> Load file
@@ -192,21 +215,14 @@ export function DashboardShareModal({ serial, onClose }: DashboardShareModalProp
                 }}
               />
               <span style={{ flex: 1 }} />
-              <button className="btn primary" onClick={doImport} disabled={!canImport}>
+              <button
+                className={'btn primary' + (canImport ? '' : ' imex-btn-disabled')}
+                aria-disabled={!canImport}
+                onClick={onImportClick}
+              >
                 Import dashboard
               </button>
             </div>
-            {importError && <p className="imex-note imex-warn">{importError}</p>}
-            {scriptsPresent && (
-              <label className="imex-ack">
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                <span>
-                  This dashboard includes <strong>scripting panels that run shell commands</strong> on
-                  your device. Only import dashboards you trust. Auto-polling displays start paused
-                  after import.
-                </span>
-              </label>
-            )}
           </section>
         </div>
       </div>
