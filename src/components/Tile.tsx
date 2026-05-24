@@ -29,6 +29,7 @@ import {
 import * as Icons from './Icons';
 import { WIDGETS } from '../lib/widgets';
 import { WidgetSettingsModal } from './WidgetSettingsModal';
+import { openBuilder } from './widgets/scripting/builderBus';
 import type { Tile as TileT } from '../types';
 
 export interface TileProps {
@@ -181,7 +182,12 @@ export function Tile({
         <button
           className="tile-btn tt"
           data-tt="Widget settings"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => {
+            // Scripting owns its own large builder modal (the shared
+            // settings modal is too small for it); signal it via the bus.
+            if (tile.kind === 'scripting') openBuilder(tile.id);
+            else setSettingsOpen(true);
+          }}
           aria-label="Widget settings"
         >
           <Icons.Settings size={11} />

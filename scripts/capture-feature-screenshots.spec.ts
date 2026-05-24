@@ -303,6 +303,67 @@ for (const theme of ['dark', 'light'] as const) {
       await expect(tile.locator('.mirror-svg')).toBeVisible();
       await tile.screenshot({ path: out(theme, 'mirror-default') });
     });
+
+    test('scripting tile', async ({ page }) => {
+      // Seed a "Package toolbox" panel directly (the builder UI is its own
+      // flow; here we want a populated panel for the hero shot). The
+      // simulator evaluates the echo-based info() so the console shows
+      // real output once pressed.
+      const SCRIPT = [
+        '#!/system/bin/sh',
+        'force_stop() { am force-stop "$PACKAGE"; }',
+        'clear_data() { pm clear "$PACKAGE"; }',
+        'info() {',
+        '  echo "Package: $PACKAGE"',
+        '  echo "  versionName=4.2.1  versionCode=4210"',
+        '  echo "  installer=com.android.vending"',
+        '}',
+      ].join('\n');
+      const PANEL = {
+        script: SCRIPT,
+        runAsRoot: false,
+        fontSize: 12,
+        controls: [
+          { id: 'pkg', kind: 'text', label: 'Package', defaultValue: 'com.example.shopapp', onChange: 'none' },
+          { id: 'fs', kind: 'button', label: 'Force stop', variant: 'default', confirm: false, bindOutputTo: 'console' },
+          { id: 'cd', kind: 'button', label: 'Clear data', variant: 'destructive', confirm: true, bindOutputTo: 'console' },
+          { id: 'nf', kind: 'button', label: 'Info', variant: 'default', confirm: false, bindOutputTo: 'console' },
+          { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+        ],
+      };
+      await page.addInitScript(
+        ([t, panel]) => {
+          localStorage.clear();
+          localStorage.setItem(
+            'weblogcat:tweaks:v1',
+            JSON.stringify({ theme: t, accent: 'indigo', performanceMode: 'on' }),
+          );
+          localStorage.setItem(
+            'weblogcat-dashboard-v2',
+            JSON.stringify({
+              tiles: { w_scripting: { id: 'w_scripting', kind: 'scripting' } },
+              tree: { type: 'leaf', id: 'w_scripting' },
+              focusId: 'w_scripting',
+            }),
+          );
+          localStorage.setItem(
+            'weblogcat:settings:fake-device-001:w_scripting:scripting',
+            JSON.stringify(panel),
+          );
+        },
+        [theme, PANEL] as const,
+      );
+      await page.goto('/');
+      await page.getByRole('button', { name: /fake data/i }).click();
+      await expect(page.locator('.dash-brand-name')).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await page.addStyleTag({ content: '.fake-badge,.toast{display:none!important}' });
+      const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+      await tile.locator('.sc-btn').filter({ hasText: 'Info' }).click();
+      await expect(tile.locator('.sc-console-body')).toContainText('versionName');
+      await waitForFonts(page);
+      await tile.screenshot({ path: out(theme, 'scripting-default') });
+    });
   });
 }
 

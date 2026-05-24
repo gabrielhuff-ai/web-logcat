@@ -13,7 +13,8 @@ you need on a single screen.
 3. Click **Connect a device** and accept the on-device authorisation prompt.
 4. The dashboard mounts with a single Logcat tile filling the viewport. Use
    **+ Add widget** in the topbar to grow the layout — Shell, Dumpsys, Files,
-   Screen Mirror, or another Logcat. Each new widget splits the focused tile.
+   Screen Mirror, Scripting, or another Logcat. Each new widget splits the
+   focused tile.
 
 No phone handy? Click **fake data** instead — the dashboard runs against a
 [simulated stream](./simulator) so you can poke around every widget without
@@ -32,6 +33,7 @@ touching real hardware.
 | [Dumpsys](./dumpsys) | Presets and parsed cards vs. raw output |
 | [Files](./files) | Browsing, pulling, and pushing files over the ADB sync protocol |
 | [Screen Mirror](./screen-mirror) | scrcpy-style mirror, hardware buttons, screenshot, MP4 recording |
+| [Scripting](./scripting) | Build a control panel from one shell script — inputs, action buttons, and live displays |
 | [Simulated stream](./simulator) | The fake-data path for trying everything without a phone |
 | [Appearance & settings](./settings) | Theme, accent, compact mode, performance mode, stream speed |
 

@@ -79,6 +79,11 @@ const FilesWidgetLazy = lazy(() =>
 const MirrorWidgetLazy = lazy(() =>
   import('../components/widgets/MirrorWidget').then((m) => ({ default: m.MirrorWidget })),
 );
+const ScriptingWidgetLazy = lazy(() =>
+  import('../components/widgets/ScriptingWidget').then((m) => ({
+    default: m.ScriptingWidget,
+  })),
+);
 
 export const WIDGETS: Record<WidgetKind, WidgetDef> = {
   logcat: {
@@ -131,6 +136,19 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     enabled: true,
     maxInstances: 1,
     shortcutKey: 'm',
+  },
+  scripting: {
+    name: 'Scripting',
+    icon: Icons.Wand,
+    desc: 'Build your own ADB control panel — one shell script, your controls.',
+    comp: ScriptingWidgetLazy,
+    defaultSize: { w: 6, h: 7 },
+    enabled: true,
+    // The body is the panel; the "bars-hidden" middle state hides the
+    // console + section chrome (handled in scripting.css), leaving a
+    // clean controls-only view — so it keeps the tristate middle step.
+    hasControlBar: true,
+    shortcutKey: 'c',
   },
 };
 

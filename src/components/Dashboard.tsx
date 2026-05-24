@@ -13,6 +13,8 @@ import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
 import { QuickAddMenu } from './QuickAddMenu';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
+import { DashboardShareModal } from './DashboardShareModal';
+import { applySnapshot, takePendingImport } from '../lib/dashboardShare';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
@@ -38,6 +40,20 @@ export function Dashboard({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Apply a dashboard shared via `#share=…` link once we have a device serial
+  // to key per-tile settings under. Runs once; reloads to re-hydrate cleanly.
+  const importedRef = useRef(false);
+  useEffect(() => {
+    if (importedRef.current) return;
+    importedRef.current = true;
+    const pending = takePendingImport();
+    if (pending) {
+      applySnapshot(pending, device.serial);
+      window.location.reload();
+    }
+  }, [device.serial]);
   // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` /
   // `removeFocusedSignal` / `focusDirSignal` are bumped to push
   // imperative actions down into `<TileGrid/>` without lifting its
@@ -152,6 +168,7 @@ export function Dashboard({
         onAddWidget={() => setPaletteOpen(true)}
         onClearLayout={() => setClearSignal((n) => n + 1)}
         onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
+        onOpenShare={() => setShareOpen(true)}
       />
 
       <TileGrid
@@ -192,6 +209,10 @@ export function Dashboard({
           onClose={() => setGlobalSettingsOpen(false)}
         />
       )}
+
+      {shareOpen && (
+        <DashboardShareModal serial={device.serial} onClose={() => setShareOpen(false)} />
+      )}
     </div>
   );
 }
@@ -209,6 +230,7 @@ interface DashTopbarProps {
   onAddWidget: () => void;
   onClearLayout: () => void;
   onOpenGlobalSettings: () => void;
+  onOpenShare: () => void;
 }
 
 function DashTopbar({
@@ -222,6 +244,7 @@ function DashTopbar({
   onAddWidget,
   onClearLayout,
   onOpenGlobalSettings,
+  onOpenShare,
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -332,6 +355,14 @@ function DashTopbar({
           aria-label="Clear layout"
         >
           <Icons.Clear size={13} />
+        </button>
+        <button
+          className="icon-btn tt"
+          data-tt="Share dashboard"
+          onClick={onOpenShare}
+          aria-label="Import or export dashboard"
+        >
+          <Icons.Share size={13} />
         </button>
         <div className="dash-divider" />
         <a

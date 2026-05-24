@@ -925,7 +925,7 @@ test.describe('keyboard shortcuts', () => {
 });
 
 test.describe('dashboard', () => {
-  test('+ Add widget opens the palette with all five cards enabled', async ({
+  test('+ Add widget opens the palette with every card enabled', async ({
     page,
   }) => {
     await page.goto('/');
@@ -936,9 +936,16 @@ test.describe('dashboard', () => {
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
     const cards = page.locator('.palette-card');
-    await expect(cards).toHaveCount(5);
-    for (const name of ['Logcat', 'Shell', 'Dumpsys', 'Files', 'Screen Mirror']) {
-      await expect(cards.filter({ hasText: name })).not.toBeDisabled();
+    await expect(cards).toHaveCount(6);
+    // Match on the card title, not the whole card — the Scripting card's
+    // description contains the word "shell", which would otherwise collide
+    // with the Shell card under a substring filter.
+    for (const name of ['Logcat', 'Shell', 'Dumpsys', 'Files', 'Screen Mirror', 'Scripting']) {
+      const card = cards.filter({
+        has: page.locator('.palette-card-title', { hasText: name }),
+      });
+      await expect(card).toHaveCount(1);
+      await expect(card).not.toBeDisabled();
     }
   });
 

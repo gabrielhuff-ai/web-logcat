@@ -1,8 +1,8 @@
 # WebLogcat
 
 Browser-based Android device inspector — Logcat, Shell, Dumpsys, Files,
-and Screen Mirror, all over WebUSB. Plug in a phone and get a draggable
-dashboard, no `adb` install required.
+Screen Mirror, and Scripting, all over WebUSB. Plug in a phone and get a
+draggable dashboard, no `adb` install required.
 
 <p align="center">
   <a href="https://gabrielhuff.github.io/web-logcat/">
