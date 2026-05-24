@@ -34,8 +34,16 @@ export interface InputControl extends BaseControl {
   unit?: string;
   /** select only. */
   options?: string[];
-  /** Whether changing the value eagerly refreshes displays that read it. */
-  onChange: 'refresh' | 'none';
+  /**
+   * What happens when the value changes:
+   *   - 'refresh' — re-run displays bound to functions that read this var.
+   *   - 'run'     — run this control's own function (derived from the label),
+   *                 routing output to `bindOutputTo`.
+   *   - 'none'    — nothing (value is read on the next explicit run).
+   */
+  onChange: 'refresh' | 'run' | 'none';
+  /** For onChange: 'run' — output sink (a console id, or 'console'). */
+  bindOutputTo?: string;
 }
 
 export interface ButtonControl extends BaseControl {

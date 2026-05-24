@@ -51,7 +51,11 @@ script and always sees the current input values.
 
 **Inputs** carry a value: text field, slider, knob, toggle, select,
 stepper. A toggle exports `1` / `0`; everything else exports its value
-verbatim.
+verbatim. An input's **On change** setting decides what a change does:
+refresh the displays that read it, do nothing, or **run a function** —
+the function derived from its label, fired the moment the value changes.
+That last option lets a toggle send a broadcast on flip without a
+separate button.
 
 **Action button** runs a function. Mark it *Confirm before running* for
 destructive operations and it opens a Cancel / Run popover first.

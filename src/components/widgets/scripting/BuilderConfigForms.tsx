@@ -56,7 +56,9 @@ export function ConfigForm({ control, onPatch, functions, bindTargets, script }:
     case 'section':
       return <ConfigSection control={control} onPatch={(p) => onPatch(control.id, p)} />;
     default:
-      return <ConfigInput control={control} onPatch={(p) => onPatch(control.id, p)} />;
+      return (
+        <ConfigInput control={control} onPatch={(p) => onPatch(control.id, p)} bindTargets={bindTargets} />
+      );
   }
 }
 
@@ -117,7 +119,15 @@ const num = (s: string, fallback: number): number => {
 };
 
 // ── Input form (text / slider / toggle / select / stepper / knob) ────────────
-function ConfigInput({ control, onPatch }: { control: InputControl; onPatch: (p: Partial<InputControl>) => void }) {
+function ConfigInput({
+  control,
+  onPatch,
+  bindTargets,
+}: {
+  control: InputControl;
+  onPatch: (p: Partial<InputControl>) => void;
+  bindTargets: BindTarget[];
+}) {
   const hasRange = control.kind === 'slider' || control.kind === 'stepper' || control.kind === 'knob';
   const inlineSupported = control.kind !== 'knob';
   return (
@@ -216,16 +226,41 @@ function ConfigInput({ control, onPatch }: { control: InputControl; onPatch: (p:
         />
       </FormRow>
 
-      <FormRow label="On change" help="Whether changing this value refreshes displays bound to it.">
+      <FormRow label="On change" help="What happens when this value changes.">
         <Segmented
           value={control.onChange}
           onChange={(v) => onPatch({ onChange: v })}
           options={[
-            { value: 'refresh', label: 'Refresh bound displays' },
+            { value: 'refresh', label: 'Refresh displays' },
+            { value: 'run', label: 'Run a function' },
             { value: 'none', label: 'Do nothing' },
           ]}
         />
       </FormRow>
+      {control.onChange === 'run' && (
+        <FormRow
+          label="Runs"
+          help={<>Calls <code>{fnFromLabel(control.label)}()</code> on every change.</>}
+        >
+          <div className="bdr-form-select">
+            <span>
+              {bindTargets.find((t) => t.value === (control.bindOutputTo ?? 'console'))?.label ??
+                'console (default)'}
+            </span>
+            <Icons.Chevron size={11} />
+            <select
+              value={control.bindOutputTo ?? 'console'}
+              onChange={(e) => onPatch({ bindOutputTo: e.target.value })}
+            >
+              {bindTargets.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </FormRow>
+      )}
     </div>
   );
 }
