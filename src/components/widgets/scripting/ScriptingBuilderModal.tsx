@@ -60,9 +60,6 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
   const [dragId, setDragId] = useState<string | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLPreElement>(null);
-  const gutterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,23 +68,6 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-
-  // Keep the highlight overlay + line-number gutter aligned with the textarea
-  // as it scrolls. Both are moved with `transform` (compositor-friendly) rather
-  // than `scrollTop`, which lagged the textarea's async scroll and made the
-  // coloured text snap to the final position.
-  const syncScroll = useCallback(() => {
-    const ta = editorRef.current;
-    if (!ta) return;
-    const x = -ta.scrollLeft;
-    const y = -ta.scrollTop;
-    if (highlightRef.current) {
-      highlightRef.current.style.transform = `translate(${x}px, ${y}px)`;
-    }
-    if (gutterRef.current) {
-      gutterRef.current.style.transform = `translateY(${y}px)`;
-    }
-  }, []);
 
   const { script, controls, runAsRoot } = settings;
 
@@ -232,25 +212,25 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
               </button>
             </div>
             <div className="bdr-editor">
-              <div className="bdr-editor-gutter">
-                <div className="bdr-editor-gutter-inner" ref={gutterRef}>
-                  {Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')}
+              <div className="bdr-editor-scroll">
+                <div className="bdr-editor-grid">
+                  <div className="bdr-editor-gutter">
+                    {Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')}
+                  </div>
+                  <div className="bdr-editor-codecol">
+                    <pre className="bdr-editor-hl" aria-hidden>
+                      <code dangerouslySetInnerHTML={{ __html: highlighted + '\n' }} />
+                    </pre>
+                    <textarea
+                      className="bdr-editor-text"
+                      value={script}
+                      onChange={(e) => setSettings({ script: e.target.value })}
+                      spellCheck={false}
+                      autoComplete="off"
+                      aria-label="Shell script"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="bdr-editor-code">
-                <pre className="bdr-editor-hl" ref={highlightRef} aria-hidden>
-                  <code dangerouslySetInnerHTML={{ __html: highlighted + '\n' }} />
-                </pre>
-                <textarea
-                  className="bdr-editor-text"
-                  ref={editorRef}
-                  value={script}
-                  onChange={(e) => setSettings({ script: e.target.value })}
-                  onScroll={syncScroll}
-                  spellCheck={false}
-                  autoComplete="off"
-                  aria-label="Shell script"
-                />
               </div>
             </div>
             {scriptError && (

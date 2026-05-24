@@ -738,13 +738,25 @@
   overflow: hidden;
   background: oklch(from var(--bg-0) calc(l - 0.02) c h);
 }
-.bdr-editor-gutter {
-  flex-shrink: 0;
-  overflow: hidden;
-  padding: var(--editor-pad) 10px var(--editor-pad) 14px;
-  border-right: 1px solid var(--glass-line);
+/* One scroll container — the textarea, highlight overlay, and gutter scroll
+   together natively (no JS scroll-sync), so trackpad scrolling tracks the
+   fingers instead of the JS-synced overlay snapping behind the compositor. */
+.bdr-editor-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
 }
-.bdr-editor-gutter-inner {
+.bdr-editor-grid {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 100%;
+}
+.bdr-editor-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  padding: var(--editor-pad) 10px var(--editor-pad) 14px;
   text-align: right;
   color: var(--fg-3);
   opacity: 0.55;
@@ -754,14 +766,14 @@
   font-variant-numeric: tabular-nums;
   user-select: none;
   white-space: pre;
-  will-change: transform;
+  background: oklch(from var(--bg-0) calc(l - 0.02) c h);
+  border-right: 1px solid var(--glass-line);
 }
-.bdr-editor-code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+/* Grows to fill the viewport for short scripts, but never shrinks below the
+   longest line (so the container scrolls horizontally). */
+.bdr-editor-codecol { position: relative; flex: 1 0 auto; }
 .bdr-editor-hl,
 .bdr-editor-text {
-  position: absolute;
-  top: 0;
-  left: 0;
   margin: 0;
   padding: var(--editor-pad) 14px;
   font-family: var(--font-mono);
@@ -771,19 +783,18 @@
   tab-size: 2;
   border: 0;
 }
-/* Content-sized highlight overlay, clipped by .bdr-editor-code and moved with
-   `transform` to track the textarea's (compositor) scroll. */
 .bdr-editor-hl {
+  display: block;
   color: var(--fg-1);
   pointer-events: none;
-  will-change: transform;
 }
 .bdr-editor-hl code { font: inherit; }
-/* The textarea fills the viewport and is the actual scroller. */
+/* Transparent overlay, exactly content-sized, so it never scrolls on its own —
+   the outer container does the scrolling. */
 .bdr-editor-text {
-  right: 0;
-  bottom: 0;
-  overflow: auto;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
   background: transparent;
   color: transparent;
   caret-color: var(--fg-0);
