@@ -93,7 +93,7 @@ export interface DeviceInfo {
 // ---- v2: dashboard / tiles / widgets ----------------------------------------
 
 /** Discriminator for the widget kinds shipped (or planned) by the dashboard. */
-export type WidgetKind = 'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror';
+export type WidgetKind = 'logcat' | 'shell' | 'dumpsys' | 'files' | 'mirror' | 'scripting';
 
 /**
  * Three "chrome" states a tile can be in (cycled by the eye button in

@@ -74,5 +74,9 @@ function renderBody(kind: WidgetKind, tileId: string) {
       return <FilesSettingsBody tileId={tileId} />;
     case 'mirror':
       return <MirrorSettingsBody tileId={tileId} />;
+    // Scripting opens its own builder modal (routed from the tile cog),
+    // so the shared settings modal is never rendered for it.
+    case 'scripting':
+      return null;
   }
 }
