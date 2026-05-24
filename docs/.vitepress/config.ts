@@ -91,6 +91,7 @@ export default defineConfig({
             { text: 'Dumpsys', link: '/features/dumpsys' },
             { text: 'Files', link: '/features/files' },
             { text: 'Screen Mirror', link: '/features/screen-mirror' },
+            { text: 'Scripting', link: '/features/scripting' },
             { text: 'Simulated stream', link: '/features/simulator' },
             { text: 'Appearance & settings', link: '/features/settings' },
           ],
