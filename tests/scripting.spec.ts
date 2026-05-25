@@ -145,7 +145,7 @@ test.describe('scripting widget', () => {
 
   test('a toggle with custom Values exports them instead of 1/0', async ({ page }) => {
     const panel = {
-      script: 'notify() {\n  echo "mode $MODE"\n}\n',
+      script: 'mode() {\n  echo "mode $MODE"\n}\n',
       runAsRoot: false,
       fontSize: 12,
       controls: [
