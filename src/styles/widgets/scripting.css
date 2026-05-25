@@ -215,20 +215,29 @@
 }
 .sc-btn svg { opacity: 0.8; }
 
-/* ───────────────────────── Toggle ───────────────────────── */
-.sc-toggle-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: oklch(from var(--bg-1) l c h / 0.5);
+/* ───────────────────────── Toggle ─────────────────────────
+   Shares the material-outlined shell with Text / Select / Stepper (grouped
+   above): the value sits left like a Select, with the switch where the
+   chevron would be. */
+.sc-toggle-input {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  background: transparent;
   border: 1px solid var(--glass-line);
+  border-radius: 6px;
+  padding: 0 12px;
+  height: 38px;
+  color: var(--fg-0);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms;
 }
-.sc-toggle-row .sc-lbl { min-width: 0; }
-.sc-toggle-lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.sc-toggle-lbl .sc-desc-inline { margin-top: 2px; }
-.sc-toggle-row.err { border-color: oklch(from var(--lvl-e-fg) l c h / 0.45); }
-.sc-toggle-row.err .sc-tg { background: var(--lvl-e-fg); }
-.sc-toggle-end { display: inline-flex; align-items: center; gap: 8px; align-self: center; }
+.sc-toggle-input:focus-visible { outline: 0; border-color: oklch(from var(--accent) l c h / 0.55); }
+.sc-toggle-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-toggle.err .sc-toggle-input { border-color: oklch(from var(--lvl-e-fg) l c h / 0.55); }
+.sc-toggle.err > .sc-lbl .sc-lbl-text { color: var(--lvl-e-fg); }
 .sc-tg {
   width: 32px; height: 18px;
   border-radius: 999px;
@@ -236,6 +245,7 @@
   position: relative;
   transition: background-color 160ms var(--ease-out);
   flex-shrink: 0;
+  display: inline-block;
 }
 .sc-tg.on { background: var(--accent); }
 .sc-tg-dot {
@@ -289,13 +299,13 @@
   font-family: var(--font-mono);
 }
 
-/* ───────────────────────── Text / Select / Stepper (material-outlined) ─────── */
-.sc-text, .sc-select, .sc-step {
+/* ───────────────── Toggle / Text / Select / Stepper (material-outlined) ─────── */
+.sc-text, .sc-select, .sc-step, .sc-toggle {
   position: relative;
   padding: 8px 0 2px;
   display: flex; flex-direction: column;
 }
-.sc-text > .sc-lbl, .sc-select > .sc-lbl, .sc-step > .sc-lbl {
+.sc-text > .sc-lbl, .sc-select > .sc-lbl, .sc-step > .sc-lbl, .sc-toggle > .sc-lbl {
   position: absolute;
   top: 1px;
   left: 10px;
@@ -308,7 +318,8 @@
 }
 .sc-text > .sc-lbl .sc-lbl-text,
 .sc-select > .sc-lbl .sc-lbl-text,
-.sc-step > .sc-lbl .sc-lbl-text { font-size: 11px; letter-spacing: 0.01em; color: var(--fg-2); }
+.sc-step > .sc-lbl .sc-lbl-text,
+.sc-toggle > .sc-lbl .sc-lbl-text { font-size: 11px; letter-spacing: 0.01em; color: var(--fg-2); }
 .sc-text-input {
   display: flex;
   background: transparent;
