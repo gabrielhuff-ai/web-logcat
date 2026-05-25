@@ -3,6 +3,7 @@
 // CSS `[data-tip]::after` approach. Content is rendered as markdown.
 
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -13,7 +14,17 @@ import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
 import { renderMarkdown } from './markdown';
 
-function Bubble({ anchor, children }: { anchor: HTMLElement | null; children: ReactNode }) {
+function Bubble({
+  anchor,
+  children,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  anchor: HTMLElement | null;
+  children: ReactNode;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
   const [style, setStyle] = useState<CSSProperties | null>(null);
   useLayoutEffect(() => {
     if (!anchor) return;
@@ -24,7 +35,7 @@ function Bubble({ anchor, children }: { anchor: HTMLElement | null; children: Re
   }, [anchor]);
   if (!style) return null;
   return createPortal(
-    <div className="sc-tip" style={style} role="tooltip">
+    <div className="sc-tip" style={style} role="tooltip" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       {children}
     </div>,
     document.body,
@@ -42,18 +53,43 @@ export interface TooltipProps {
 export function Tooltip({ content, children, className, focusable }: TooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const hideTimer = useRef<number | null>(null);
+
+  const cancelHide = () => {
+    if (hideTimer.current != null) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+  const show = () => {
+    cancelHide();
+    setOpen(true);
+  };
+  // Close on a short delay so the cursor can travel off the trigger and onto
+  // the bubble (to click a link inside it) without the tooltip vanishing in
+  // the gap between them. Entering the bubble cancels the pending close.
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimer.current = window.setTimeout(() => setOpen(false), 140);
+  };
+  useEffect(() => cancelHide, []);
+
   return (
     <span
       ref={ref}
       className={className}
       tabIndex={focusable ? 0 : undefined}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
+      onMouseEnter={show}
+      onMouseLeave={scheduleHide}
+      onFocus={show}
+      onBlur={scheduleHide}
     >
       {children}
-      {open && content && <Bubble anchor={ref.current}>{renderMarkdown(content)}</Bubble>}
+      {open && content && (
+        <Bubble anchor={ref.current} onMouseEnter={show} onMouseLeave={scheduleHide}>
+          {renderMarkdown(content)}
+        </Bubble>
+      )}
     </span>
   );
 }
