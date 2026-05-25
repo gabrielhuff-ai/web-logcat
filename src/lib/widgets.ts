@@ -144,10 +144,9 @@ export const WIDGETS: Record<WidgetKind, WidgetDef> = {
     comp: ScriptingWidgetLazy,
     defaultSize: { w: 6, h: 7 },
     enabled: true,
-    // The body is the panel; the "bars-hidden" middle state hides the
-    // console + section chrome (handled in scripting.css), leaving a
-    // clean controls-only view — so it keeps the tristate middle step.
-    hasControlBar: true,
+    // The body is the panel; there's no separate control bar, so the eye
+    // toggle skips the middle "hide bar" state (show ↔ hide chrome) like Shell.
+    hasControlBar: false,
     shortcutKey: 'c',
   },
 };

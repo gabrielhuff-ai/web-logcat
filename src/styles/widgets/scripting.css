@@ -38,10 +38,6 @@
   gap: 10px;
 }
 
-/* Bars-hidden: leave a clean controls-only view (hide console + sections). */
-.tile.bars-hidden .sc-console,
-.tile.bars-hidden .sc-section { display: none !important; }
-
 /* ───────────────────────── Empty state ───────────────────────── */
 .empty-script {
   margin: auto;
@@ -103,6 +99,10 @@
   background: oklch(from var(--fg-3) l c h / 0.2);
   color: var(--fg-3);
   cursor: help;
+  /* Re-enable hover inside material-outlined labels (which set
+     pointer-events:none so clicks fall through to the input). */
+  pointer-events: auto;
+  flex-shrink: 0;
   transition: background 120ms, color 120ms;
   font-family: var(--font-mono);
 }
@@ -113,6 +113,40 @@
   font-size: var(--t-xs);
   color: var(--fg-3);
   line-height: 1.45;
+}
+
+/* Portaled tooltip (markdown content) — positioned via inline left/top. */
+.sc-tip-wrap { display: inline-flex; }
+.sc-tip {
+  position: fixed;
+  z-index: 300;
+  transform: translate(-50%, -100%);
+  background: oklch(from var(--bg-0) calc(l - 0.04) c h);
+  color: var(--fg-0);
+  border: 1px solid var(--glass-line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: var(--t-xs);
+  font-family: var(--font-mono);
+  max-width: 240px;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px oklch(0 0 0 / 0.45);
+  pointer-events: none;
+  animation: sc-tip-in 120ms var(--ease-out);
+}
+@keyframes sc-tip-in { from { opacity: 0; } }
+
+/* Markdown inside descriptions / tooltips. */
+.sc-tip a,
+.sc-desc-inline a,
+.sc-section-desc a { color: var(--accent-fg); text-decoration: underline; }
+.sc-tip code,
+.sc-desc-inline code,
+.sc-section-desc code {
+  background: oklch(from var(--fg-3) l c h / 0.18);
+  padding: 0 3px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
 }
 
 /* Tooltip (data-tip) — pure CSS, shows on hover/focus */

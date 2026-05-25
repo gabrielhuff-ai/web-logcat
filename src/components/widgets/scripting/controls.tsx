@@ -16,6 +16,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
+import { InfoDot, Tooltip } from './Tooltip';
+import { renderMarkdown } from './markdown';
 
 /** Run lifecycle reflected by interactive controls. */
 export type CtrlState = 'idle' | 'active' | 'busy' | 'error';
@@ -48,11 +50,7 @@ function ControlLabel({
   return (
     <div className="sc-lbl">
       <span className="sc-lbl-text">{children}</span>
-      {description && !descInline && (
-        <span className="sc-lbl-info" tabIndex={0} aria-label={description} data-tip={description}>
-          <Icons.Hash size={9} />
-        </span>
-      )}
+      {description && !descInline && <InfoDot description={description} />}
     </div>
   );
 }
@@ -113,20 +111,24 @@ export function ScButton({
     return () => window.removeEventListener('keydown', onKey);
   }, [confirming]);
 
+  const button = (
+    <button type="button" className={cls} disabled={disabled || busy} onClick={handleClick}>
+      {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
+      <span>{label}</span>
+      {confirm && !busy && !err && <Icons.Lock size={10} />}
+      {err && <span className="sc-btn-exit">exit {exitCode}</span>}
+    </button>
+  );
+
   return (
     <>
-      <button
-        type="button"
-        className={cls}
-        data-tip={description || undefined}
-        disabled={disabled || busy}
-        onClick={handleClick}
-      >
-        {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
-        <span>{label}</span>
-        {confirm && !busy && !err && <Icons.Lock size={10} />}
-        {err && <span className="sc-btn-exit">exit {exitCode}</span>}
-      </button>
+      {description ? (
+        <Tooltip content={description} className="sc-tip-wrap">
+          {button}
+        </Tooltip>
+      ) : (
+        button
+      )}
       {/* Portaled to body + centred so it can't be clipped by the tile's
           overflow — a dimmed/blurred backdrop like the other dialogs. */}
       {confirming &&
@@ -176,7 +178,7 @@ export function ScToggle({ label, value, state = 'idle', description, descInline
         <ControlLabel description={description} descInline={descInline}>
           {label}
         </ControlLabel>
-        {descInline && description && <div className="sc-desc-inline">{description}</div>}
+        {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
       </div>
       <div className="sc-toggle-end">
         {busy && <SpinnerDot size={10} />}
@@ -239,7 +241,7 @@ export function ScSlider({
           )}
         </span>
       </div>
-      {descInline && description && <div className="sc-desc-inline">{description}</div>}
+      {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
       <div className="sc-track">
         <div className="sc-fill" style={{ width: pct + '%' }} />
         <div className="sc-thumb" style={{ left: `calc(${pct}% - 7px)` }} />
@@ -289,7 +291,7 @@ export function ScText({ label, value, placeholder, state = 'idle', description,
           onChange={(e) => onChange?.(e.target.value)}
         />
       </div>
-      {descInline && description && <div className="sc-desc-inline">{description}</div>}
+      {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
     </div>
   );
 }
@@ -321,7 +323,7 @@ export function ScSelect({ label, value, options, state = 'idle', description, d
           ))}
         </select>
       </div>
-      {descInline && description && <div className="sc-desc-inline">{description}</div>}
+      {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
     </div>
   );
 }
@@ -386,7 +388,7 @@ export function ScStepper({
           +
         </button>
       </div>
-      {descInline && description && <div className="sc-desc-inline">{description}</div>}
+      {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
     </div>
   );
 }
@@ -526,13 +528,9 @@ export function ScKnob({
             </span>
           )}
         </div>
-        <div className="sc-knob-label" data-tip={description || undefined}>
+        <div className="sc-knob-label">
           {label}
-          {description && (
-            <span className="sc-lbl-info" style={{ marginLeft: 4 }}>
-              <Icons.Hash size={9} />
-            </span>
-          )}
+          {description && <InfoDot description={description} />}
         </div>
       </div>
     </div>
@@ -647,13 +645,14 @@ export interface ScReadoutProps {
 
 export function ScReadout({ label, value, unit = '', state = 'ok', stale = false, description }: ScReadoutProps) {
   return (
-    <div className={'sc-readout ' + state + (stale ? ' stale' : '')} data-tip={description || undefined}>
+    <div className={'sc-readout ' + state + (stale ? ' stale' : '')}>
       <div className="sc-readout-row">
         <span className="sc-readout-val">{value}</span>
         {unit && <span className="sc-readout-unit">{unit}</span>}
       </div>
       <div className="sc-readout-label">
         {label}
+        {description && <InfoDot description={description} />}
         {stale && (
           <span className="sc-readout-stale">
             <SpinnerDot size={7} /> refreshing
@@ -767,7 +766,7 @@ export function ScSection({ title, description }: ScSectionProps) {
         <div className="sc-section-head">
           <span className="sc-section-title">{title}</span>
         </div>
-        {description && <div className="sc-section-desc">{description}</div>}
+        {description && <div className="sc-section-desc">{renderMarkdown(description)}</div>}
       </div>
     </div>
   );
