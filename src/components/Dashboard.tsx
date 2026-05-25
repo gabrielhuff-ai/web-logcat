@@ -52,9 +52,9 @@ export function Dashboard({
   const applyPending = useCallback(() => {
     const pending = takePendingImport();
     if (!pending) return;
-    applySnapshot(pending, device.serial);
+    applySnapshot(pending);
     setGridEpoch((e) => e + 1);
-  }, [device.serial]);
+  }, []);
   useEffect(() => {
     applyPending();
   }, [applyPending]);
@@ -218,7 +218,6 @@ export function Dashboard({
 
       {shareOpen && (
         <DashboardShareModal
-          serial={device.serial}
           onClose={() => setShareOpen(false)}
           onImported={() => {
             setGridEpoch((e) => e + 1);

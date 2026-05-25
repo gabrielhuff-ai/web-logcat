@@ -21,8 +21,6 @@ import {
 } from '../lib/dashboardShare';
 
 export interface DashboardShareModalProps {
-  /** Active device serial — settings are captured from / applied under it. */
-  serial: string;
   onClose: () => void;
   /** Called after a successful import so the dashboard can re-render live. */
   onImported: () => void;
@@ -30,7 +28,7 @@ export interface DashboardShareModalProps {
 
 type Copied = 'text' | 'link' | null;
 
-export function DashboardShareModal({ serial, onClose, onImported }: DashboardShareModalProps) {
+export function DashboardShareModal({ onClose, onImported }: DashboardShareModalProps) {
   const [encoded, setEncoded] = useState<string | null>(null);
   const [copied, setCopied] = useState<Copied>(null);
 
@@ -52,13 +50,13 @@ export function DashboardShareModal({ serial, onClose, onImported }: DashboardSh
   // Encode the current dashboard once on open.
   useEffect(() => {
     let cancelled = false;
-    void encodeSnapshot(captureSnapshot(serial)).then((e) => {
+    void encodeSnapshot(captureSnapshot()).then((e) => {
       if (!cancelled) setEncoded(e);
     });
     return () => {
       cancelled = true;
     };
-  }, [serial]);
+  }, []);
 
   // Decode whatever is in the import box (debounced via React batching).
   useEffect(() => {
@@ -122,7 +120,7 @@ export function DashboardShareModal({ serial, onClose, onImported }: DashboardSh
       return;
     }
     // Apply in place — the device is already connected, so no reload.
-    applySnapshot(decoded, serial);
+    applySnapshot(decoded);
     onImported();
   };
 

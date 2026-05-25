@@ -7,11 +7,10 @@
 // changes.
 //
 // Design points:
-//   - Serial-free: per-tile settings are keyed by (tileId, kind) in the
-//     snapshot, never by the exporter's device serial — a serial is
-//     meaningless on the recipient's machine. Import re-keys under the
-//     recipient's current serial. (Forward-compatible with multi-device, where
-//     a tile carries a device slot.)
+//   - Serial-free: per-tile settings are keyed by (tileId, kind) both in the
+//     snapshot and in live storage, never by a device serial — a serial is
+//     meaningless on the recipient's machine, and tile settings are global
+//     per dashboard anyway (see `tileSettings.ts`).
 //   - Compressed: gzip + base64url (async CompressionStream). Fine here — this
 //     runs on an explicit button, not on the bootstrap path. Falls back to
 //     plain base64url where CompressionStream is unavailable; a one-char codec
@@ -100,20 +99,20 @@ function isSnapshot(v: unknown): v is DashboardSnapshot {
 
 // ---- capture / apply -------------------------------------------------------
 
-/** Snapshot the live dashboard for `serial` (layout + that serial's settings). */
-export function captureSnapshot(serial: string): DashboardSnapshot {
+/** Snapshot the live dashboard (layout + every tile's global settings). */
+export function captureSnapshot(): DashboardSnapshot {
   const layout = loadLayout();
   const settings: Record<string, Record<string, unknown>> = {};
   if (typeof localStorage !== 'undefined') {
-    const prefix = `weblogcat:settings:${serial}:`;
+    const prefix = 'weblogcat:settings:';
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key || !key.startsWith(prefix)) continue;
-      const rest = key.slice(prefix.length); // tileId:kind
-      const idx = rest.lastIndexOf(':');
-      if (idx < 0) continue;
-      const tileId = rest.slice(0, idx);
-      const kind = rest.slice(idx + 1);
+      // Global keys are exactly `<tileId>:<kind>`; skip any lingering
+      // per-serial keys (`<serial>:<tileId>:<kind>`) from the old scheme.
+      const parts = key.slice(prefix.length).split(':');
+      if (parts.length !== 2) continue;
+      const [tileId, kind] = parts;
       try {
         const val: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
         if (val == null) continue;
@@ -126,16 +125,16 @@ export function captureSnapshot(serial: string): DashboardSnapshot {
   return { v: 1, layout, settings };
 }
 
-/** Write a snapshot into localStorage under `serial`, then the caller reloads.
+/** Write a snapshot into localStorage, then the caller re-renders.
  *  Scripting auto-poll is disarmed so nothing executes on load post-import. */
-export function applySnapshot(s: DashboardSnapshot, serial: string): void {
+export function applySnapshot(s: DashboardSnapshot): void {
   if (typeof localStorage === 'undefined') return;
   saveLayout(s.layout);
   for (const [tileId, byKind] of Object.entries(s.settings)) {
     for (const [kind, val] of Object.entries(byKind)) {
       const safe = kind === 'scripting' ? disarmScripting(val) : val;
       try {
-        localStorage.setItem(settingsKey(serial, tileId, kind as WidgetKind), JSON.stringify(safe));
+        localStorage.setItem(settingsKey(tileId, kind as WidgetKind), JSON.stringify(safe));
       } catch {
         /* quota / privacy mode */
       }
