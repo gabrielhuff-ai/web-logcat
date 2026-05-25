@@ -136,7 +136,10 @@ test.describe('scripting widget', () => {
     await page.getByRole('button', { name: /fake data/i }).click();
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
     // Flipping the toggle runs notify() with NOTIFY=1 (no button needed).
-    await tile.getByRole('switch', { name: 'Notify' }).click();
+    const toggle = tile.getByRole('switch', { name: 'Notify' });
+    await expect(toggle).toContainText('Off');
+    await toggle.click();
+    await expect(toggle).toContainText('On');
     await expect(tile.locator('.sc-console-body')).toContainText('flipped 1');
   });
 

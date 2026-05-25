@@ -173,26 +173,25 @@ export function ScToggle({ label, value, state = 'idle', description, descInline
   const err = state === 'error';
   const busy = state === 'busy';
   return (
-    <div className={'sc-toggle-row' + (err ? ' err' : '') + (descInline && description ? ' with-desc' : '')}>
-      <div className="sc-toggle-lbl">
-        <ControlLabel description={description} descInline={descInline}>
-          {label}
-        </ControlLabel>
-        {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
-      </div>
-      <div className="sc-toggle-end">
+    <div className={'sc-toggle' + (err ? ' err' : '')}>
+      <ControlLabel description={description} descInline={descInline}>
+        {label}
+      </ControlLabel>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        className="sc-toggle-input"
+        onClick={() => onChange?.(!value)}
+      >
+        <span className="sc-toggle-val">{value ? 'On' : 'Off'}</span>
         {busy && <SpinnerDot size={10} />}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={value}
-          aria-label={label}
-          className={'sc-tg ' + (value ? 'on' : '')}
-          onClick={() => onChange?.(!value)}
-        >
+        <span className={'sc-tg ' + (value ? 'on' : '')}>
           <span className="sc-tg-dot" />
-        </button>
-      </div>
+        </span>
+      </button>
+      {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
     </div>
   );
 }
