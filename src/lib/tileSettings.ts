@@ -2,25 +2,29 @@
 //
 // Each widget kind defines its own settings shape + defaults; this hook
 // is the generic plumbing that:
-//   - Reads / writes JSON under
-//       `weblogcat:settings:<deviceSerial>:<tileId>:<kind>`
+//   - Reads / writes JSON under `weblogcat:settings:<tileId>:<kind>`
 //   - Hydrates from `localStorage` on mount, falling back to `defaults`.
 //   - Pushes mutations back to `localStorage` AND emits an in-memory
 //     pub/sub event so other consumers of the same key (e.g. an open
 //     `<WidgetSettingsModal/>`) re-render without waiting on the
 //     cross-tab `storage` event.
-//   - Supports a one-shot migration of legacy keys (Logcat filters,
-//     Shell cwd, Dumpsys preset) into the new shape.
+//   - Recovers settings written under the older per-serial key scheme,
+//     and folds even older pre-modal legacy keys (Logcat filters, Shell
+//     cwd, Dumpsys preset) into the new shape.
 //
 // The "two surfaces, one state" contract lives here: any widget that
 // uses this hook can render its on-bar controls AND the modal's
 // matching controls, both reading / writing through the same setter.
 //
-// Decision: storage key includes the widget kind so two widgets of
-// different kinds on the same tile id (impossible today, but cheap to
-// guard against) can't collide. The serial is normalised to "sim" when
-// the device is the simulator — `useAdb().usingFake` flips on for the
-// fake-data path and we still want settings to persist across reloads.
+// Decision: the storage key is GLOBAL per dashboard — keyed by tile id +
+// widget kind, NOT by device serial. The dashboard *layout* is already
+// global, so tying each tile's settings to a serial meant the same tiles
+// came back on reconnect but their settings silently reset to defaults
+// whenever the resolved serial differed — an empty WebUSB serial, or the
+// same phone reporting a different serial over USB vs the Web Device
+// Proxy. Global keying makes a tile's settings follow its (global) panel.
+// The widget kind is part of the key so two widgets of different kinds on
+// one tile id (impossible today, but cheap to guard against) can't collide.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAdb } from './adbContext';
@@ -28,9 +32,10 @@ import type { WidgetKind } from '../types';
 
 // ---- Storage key helpers ---------------------------------------------------
 
-/** Resolve the live key for a (serial, tile, kind) triple. */
-export function settingsKey(serial: string, tileId: string, kind: WidgetKind): string {
-  return `weblogcat:settings:${serial}:${tileId}:${kind}`;
+/** Resolve the live key for a (tile, kind) pair. Global per dashboard —
+ *  deliberately NOT namespaced by device serial (see the file header). */
+export function settingsKey(tileId: string, kind: WidgetKind): string {
+  return `weblogcat:settings:${tileId}:${kind}`;
 }
 
 // ---- In-memory pub/sub -----------------------------------------------------
@@ -131,8 +136,10 @@ function applyMigrations<T>(
 // ---- Hydration -------------------------------------------------------------
 
 /**
- * Read settings for `key` from `localStorage`, applying any registered
- * migrations from legacy keys when no value exists at the new key.
+ * Read settings for the global (tile, kind) key from `localStorage`. When
+ * nothing is stored there yet, first recover any value written under the
+ * older per-serial key scheme, then fall back to folding a pre-modal legacy
+ * key (using `serial` to locate it).
  *
  * Exported for tests; widget code should reach for `useTileSettings` instead.
  */
@@ -142,7 +149,7 @@ export function hydrateTileSettings<T extends object>(
   tileId: string,
   defaults: T,
 ): T {
-  const key = settingsKey(serial, tileId, kind);
+  const key = settingsKey(tileId, kind);
   const fromNew = readSettings<T>(key, defaults);
   if (typeof localStorage === 'undefined') return fromNew;
   let rawNew: string | null = null;
@@ -152,12 +159,80 @@ export function hydrateTileSettings<T extends object>(
     rawNew = null;
   }
   if (rawNew != null) return fromNew;
+
+  // No value at the global key yet. Recover any settings written under the
+  // older per-serial key scheme (`…:<serial>:<tileId>:<kind>`) and adopt
+  // them into the global key — this is what brings a panel back after a
+  // reconnect that resolved a different serial than the one it was saved
+  // under, the bug global keying exists to prevent going forward.
+  const recovered = recoverPerSerialSettings<T>(tileId, kind, defaults);
+  if (recovered) {
+    writeSettings(key, recovered);
+    return recovered;
+  }
+
   const { merged, touched } = applyMigrations<T>(kind, serial, tileId, defaults);
   if (touched) {
     writeSettings(key, merged);
     return merged;
   }
   return fromNew;
+}
+
+/**
+ * Find settings stored under the legacy per-serial key scheme
+ * (`weblogcat:settings:<serial>:<tileId>:<kind>`) for this tile + kind and
+ * return the best candidate merged onto `defaults`, or null if none exist.
+ *
+ * Real-device buckets win over the simulator's `sim` bucket; ties break
+ * lexically for determinism. Old buckets are left in place (harmless — this
+ * runs only when the global key is unset, so it won't re-run once adopted).
+ */
+function recoverPerSerialSettings<T extends object>(
+  tileId: string,
+  kind: WidgetKind,
+  defaults: T,
+): T | null {
+  if (typeof localStorage === 'undefined') return null;
+  const prefix = 'weblogcat:settings:';
+  const suffix = `:${tileId}:${kind}`;
+  const globalKey = settingsKey(tileId, kind);
+  const matches: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k === globalKey) continue;
+      // A per-serial key carries an extra `<serial>:` segment, so it is
+      // strictly longer than the global key while sharing the suffix.
+      if (k.startsWith(prefix) && k.endsWith(suffix) && k.length > globalKey.length) {
+        matches.push(k);
+      }
+    }
+  } catch {
+    return null;
+  }
+  if (matches.length === 0) return null;
+  const serialOf = (k: string) => k.slice(prefix.length, k.length - suffix.length);
+  matches.sort((a, b) => {
+    const rank = (serialOf(a) === 'sim' ? 1 : 0) - (serialOf(b) === 'sim' ? 1 : 0);
+    return rank || (a < b ? -1 : a > b ? 1 : 0);
+  });
+  for (const k of matches) {
+    let raw: string | null;
+    try {
+      raw = localStorage.getItem(k);
+    } catch {
+      continue;
+    }
+    if (raw == null) continue;
+    try {
+      const parsed = JSON.parse(raw) as Partial<T>;
+      if (parsed && typeof parsed === 'object') return { ...defaults, ...parsed };
+    } catch {
+      /* skip a malformed bucket and try the next */
+    }
+  }
+  return null;
 }
 
 function readSettings<T>(key: string, defaults: T): T {
@@ -197,12 +272,12 @@ export function useTileSettings<T extends object>(
   kind: WidgetKind,
   defaults: T,
 ): readonly [T, (patch: Partial<T>) => void] {
-  const { device, usingFake } = useAdb();
-  // The simulator path has no serial — use the well-known "sim" bucket
-  // so settings persist across reloads in fake mode too. This matches
-  // `useTweaks`'s approach of storing under a single global key.
-  const serial = device?.serial ?? (usingFake ? 'sim' : 'sim');
-  const key = settingsKey(serial, tileId, kind);
+  const { device } = useAdb();
+  // The key itself is serial-independent; `serial` only locates a pre-modal
+  // legacy key during hydration. The simulator path has no serial, so it
+  // falls back to the "sim" bucket for that legacy lookup.
+  const serial = device?.serial ?? 'sim';
+  const key = settingsKey(tileId, kind);
 
   // Defaults are captured by ref so the setter can read them without
   // closing over a freshly-built object every render.
@@ -224,7 +299,9 @@ export function useTileSettings<T extends object>(
     stateRef.current = state;
   });
 
-  // Re-hydrate when the storage key changes (device swap).
+  // Re-hydrate if the storage key ever changes (only on a tileId/kind
+  // change now that the key is serial-independent — device swaps no longer
+  // touch it, which is the whole point: settings persist across reconnect).
   const lastKeyRef = useRef(key);
   useEffect(() => {
     if (lastKeyRef.current === key) return;

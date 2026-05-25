@@ -53,10 +53,8 @@ const DEMO_DEFAULTS: DemoSettings = {
 };
 
 describe('settingsKey', () => {
-  it('produces a stable, namespaced key', () => {
-    expect(settingsKey('Pixel-1', 'tile-A', 'logcat')).toBe(
-      'weblogcat:settings:Pixel-1:tile-A:logcat',
-    );
+  it('produces a stable, global (serial-free) key', () => {
+    expect(settingsKey('tile-A', 'logcat')).toBe('weblogcat:settings:tile-A:logcat');
   });
 });
 
@@ -72,7 +70,7 @@ describe('hydrateTileSettings', () => {
   });
 
   it('merges stored partial onto defaults', () => {
-    const k = settingsKey('sim', 'tile-1', 'logcat');
+    const k = settingsKey('tile-1', 'logcat');
     localStorage.setItem(k, JSON.stringify({ fontSize: 14 }));
     const out = hydrateTileSettings<DemoSettings>(
       'logcat',
@@ -87,7 +85,7 @@ describe('hydrateTileSettings', () => {
   });
 
   it('falls back to defaults if stored JSON is corrupt', () => {
-    const k = settingsKey('sim', 'tile-1', 'logcat');
+    const k = settingsKey('tile-1', 'logcat');
     localStorage.setItem(k, '!! not json {{');
     const out = hydrateTileSettings<DemoSettings>(
       'logcat',
@@ -95,6 +93,36 @@ describe('hydrateTileSettings', () => {
       'tile-1',
       DEMO_DEFAULTS,
     );
+    expect(out).toEqual(DEMO_DEFAULTS);
+  });
+});
+
+describe('per-serial recovery', () => {
+  it('adopts a value left under the old per-serial key into the global key', () => {
+    // Simulate settings saved while connected as "Pixel-7"…
+    localStorage.setItem(
+      'weblogcat:settings:Pixel-7:tile-2:logcat',
+      JSON.stringify({ fontSize: 18 }),
+    );
+    // …then a reconnect that resolves a different serial reads the global key.
+    const out = hydrateTileSettings<DemoSettings>('logcat', 'other-serial', 'tile-2', DEMO_DEFAULTS);
+    expect(out.fontSize).toBe(18);
+    // The recovered value is promoted to the global key for next time.
+    const stored = JSON.parse(
+      localStorage.getItem(settingsKey('tile-2', 'logcat')) ?? '{}',
+    ) as DemoSettings;
+    expect(stored.fontSize).toBe(18);
+  });
+
+  it('prefers a real-device bucket over the simulator bucket', () => {
+    localStorage.setItem('weblogcat:settings:sim:tile-3:logcat', JSON.stringify({ fontSize: 1 }));
+    localStorage.setItem('weblogcat:settings:Pixel-9:tile-3:logcat', JSON.stringify({ fontSize: 2 }));
+    const out = hydrateTileSettings<DemoSettings>('logcat', 'sim', 'tile-3', DEMO_DEFAULTS);
+    expect(out.fontSize).toBe(2);
+  });
+
+  it('leaves defaults when no prior bucket exists', () => {
+    const out = hydrateTileSettings<DemoSettings>('logcat', 'sim', 'tile-4', DEMO_DEFAULTS);
     expect(out).toEqual(DEMO_DEFAULTS);
   });
 });
@@ -125,8 +153,8 @@ describe('registerSettingsMigration', () => {
     expect(out.fontSize).toBe(15);
     // Legacy key should have been removed after a successful migration.
     expect(localStorage.getItem(legacy('Pixel-A', 'tile-9'))).toBeNull();
-    // And the new shape should be persisted under the new key.
-    const newKey = settingsKey('Pixel-A', 'tile-9', 'files');
+    // And the new shape should be persisted under the global key.
+    const newKey = settingsKey('tile-9', 'files');
     const stored = JSON.parse(localStorage.getItem(newKey) ?? '{}') as DemoSettings;
     expect(stored.fontSize).toBe(15);
   });
@@ -139,7 +167,7 @@ describe('registerSettingsMigration', () => {
       apply: (raw, partial) => ({ ...partial, fontSize: Number(raw) }),
     });
 
-    const newKey = settingsKey('s1', 't1', 'shell');
+    const newKey = settingsKey('t1', 'shell');
     localStorage.setItem(newKey, JSON.stringify({ fontSize: 13 }));
     localStorage.setItem(legacy('s1', 't1'), '99');
 

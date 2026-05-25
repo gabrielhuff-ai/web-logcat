@@ -9,7 +9,6 @@
 
 import { test, expect } from '@playwright/test';
 
-const FAKE_SERIAL = 'fake-device-001';
 const TILE_ID = 't_scr';
 
 // A ready-made "greet" panel: a Name input ($NAME), a Greet button (greet()),
@@ -81,19 +80,16 @@ test.describe('scripting widget', () => {
     page,
   }) => {
     await page.addInitScript(
-      ([serial, tileId, panel]) => {
+      ([tileId, panel]) => {
         const layout = {
           tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
           tree: { type: 'leaf', id: tileId },
           focusId: tileId,
         };
         localStorage.setItem('weblogcat-dashboard-v2', JSON.stringify(layout));
-        localStorage.setItem(
-          `weblogcat:settings:${serial}:${tileId}:scripting`,
-          JSON.stringify(panel),
-        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(panel));
       },
-      [FAKE_SERIAL, TILE_ID, PANEL],
+      [TILE_ID, PANEL],
     );
 
     await page.goto('/');
@@ -122,7 +118,7 @@ test.describe('scripting widget', () => {
       ],
     };
     await page.addInitScript(
-      ([serial, tileId, p]) => {
+      ([tileId, p]) => {
         localStorage.setItem(
           'weblogcat-dashboard-v2',
           JSON.stringify({
@@ -131,9 +127,9 @@ test.describe('scripting widget', () => {
             focusId: tileId,
           }),
         );
-        localStorage.setItem(`weblogcat:settings:${serial}:${tileId}:scripting`, JSON.stringify(p));
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
       },
-      [FAKE_SERIAL, 't_tg', panel],
+      ['t_tg', panel],
     );
 
     await page.goto('/');
