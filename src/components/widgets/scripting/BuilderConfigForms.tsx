@@ -5,7 +5,7 @@
 // names (function/var) are shown as live help so the author sees exactly what
 // the script will see.
 
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import * as Icons from '../../Icons';
 import { fnFromLabel, varFromLabel } from '../../../lib/scripting/derive';
 import { extractFunctionBody } from '../../../lib/scripting/parseScript';
@@ -57,7 +57,12 @@ export function ConfigForm({ control, onPatch, functions, bindTargets, script }:
       return <ConfigSection control={control} onPatch={(p) => onPatch(control.id, p)} />;
     default:
       return (
-        <ConfigInput control={control} onPatch={(p) => onPatch(control.id, p)} bindTargets={bindTargets} />
+        <ConfigInput
+          key={control.id}
+          control={control}
+          onPatch={(p) => onPatch(control.id, p)}
+          bindTargets={bindTargets}
+        />
       );
   }
 }
@@ -130,6 +135,11 @@ function ConfigInput({
 }) {
   const hasRange = control.kind === 'slider' || control.kind === 'stepper' || control.kind === 'knob';
   const inlineSupported = control.kind !== 'knob';
+  // Raw text for the select Options field, so commas / spaces / blank lines are
+  // typeable (parsing back to an array on every keystroke would eat them). The
+  // form is keyed by control id, so this resets when a different control is
+  // selected.
+  const [optionsText, setOptionsText] = useState(() => (control.options ?? []).join('\n'));
   return (
     <div className="bdr-form">
       <FormRow label="Label" help={<>Derives the env var. <code>{varFromLabel(control.label)}</code></>}>
@@ -168,12 +178,17 @@ function ConfigInput({
         </FormRow>
       ) : control.kind === 'select' ? (
         <>
-          <FormRow label="Options" help="Comma-separated list of choices.">
-            <input
-              value={(control.options ?? []).join(', ')}
-              onChange={(e) =>
-                onPatch({ options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })
-              }
+          <FormRow label="Options" help="One choice per line (commas and spaces are fine).">
+            <textarea
+              className="bdr-form-textarea"
+              rows={3}
+              value={optionsText}
+              onChange={(e) => {
+                setOptionsText(e.target.value);
+                onPatch({
+                  options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                });
+              }}
             />
           </FormRow>
           <FormRow label="Default value" help="Initial selection.">

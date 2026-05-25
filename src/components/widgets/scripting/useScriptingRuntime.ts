@@ -160,7 +160,11 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
 
   const onCopyConsole = useCallback(
     (id: string) => {
-      const text = (consoleViews[id]?.lines ?? []).map((l) => l.text).join('\n');
+      // Copy only the output, not the leading `$ command` line.
+      const text = (consoleViews[id]?.lines ?? [])
+        .filter((l) => l.kind !== 'cmd')
+        .map((l) => l.text)
+        .join('\n');
       if (!navigator.clipboard) {
         showToast('Copy unavailable');
         return;

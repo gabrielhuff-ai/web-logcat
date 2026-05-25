@@ -79,9 +79,11 @@ don't change the shared environment.
 ## Control reference
 
 Each control's **label** is the only name you set — it derives the env var
-(inputs) or, for action buttons, the function called. Pair each control with a
-function in the script. The examples below assume one script with these
-functions:
+(inputs) or, for action buttons, the function called. Every control's (and
+section's) **description** accepts basic markdown — `**bold**`, `*italic*`,
+`` `code` ``, and `[links](https://…)` — shown inline or in its tooltip. Pair
+each control with a function in the script. The examples below assume one
+script with these functions:
 
 ```sh
 force_stop()    { am force-stop "$PACKAGE"; }
