@@ -184,6 +184,53 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('mode live');
   });
 
+  test('a description tooltip stays open when hovered so its link is clickable', async ({ page }) => {
+    const panel = {
+      script: 'noop() { :; }\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'in',
+          kind: 'text',
+          label: 'Target',
+          description: 'See the [guide](https://example.com/guide).',
+          defaultValue: 'x',
+          onChange: 'none',
+        },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_tip', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // Hovering the info dot reveals the tooltip; moving the cursor onto the
+    // bubble keeps it open (it used to vanish in the gap), so the link inside
+    // can be reached and clicked.
+    await tile.locator('.sc-lbl-info').hover();
+    const tip = page.locator('.sc-tip');
+    await expect(tip).toBeVisible();
+    const link = tip.getByRole('link', { name: 'guide' });
+    await link.hover();
+    await expect(tip).toBeVisible();
+    await expect(link).toHaveAttribute('href', 'https://example.com/guide');
+  });
+
   test('building a panel in the builder applies live to the widget', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
