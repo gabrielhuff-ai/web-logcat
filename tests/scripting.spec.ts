@@ -143,6 +143,47 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('flipped 1');
   });
 
+  test('a toggle with custom Values exports them instead of 1/0', async ({ page }) => {
+    const panel = {
+      script: 'mode() {\n  echo "mode $MODE"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'tg',
+          kind: 'toggle',
+          label: 'Mode',
+          defaultValue: false,
+          onChange: 'run',
+          bindOutputTo: 'console',
+          values: ['paused', 'live'],
+        },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_tgv', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // Flipping on exports the configured "on" value, not "1".
+    await tile.getByRole('switch', { name: 'Mode' }).click();
+    await expect(tile.locator('.sc-console-body')).toContainText('mode live');
+  });
+
   test('building a panel in the builder applies live to the widget', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();

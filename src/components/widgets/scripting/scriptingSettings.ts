@@ -34,6 +34,8 @@ export interface InputControl extends BaseControl {
   unit?: string;
   /** select only. */
   options?: string[];
+  /** toggle only — `[offValue, onValue]` exported to the env. Absent ⇒ '0' / '1'. */
+  values?: string[];
   /**
    * What happens when the value changes:
    *   - 'refresh' — re-run displays bound to functions that read this var.

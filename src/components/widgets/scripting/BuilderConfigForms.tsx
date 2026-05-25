@@ -140,6 +140,9 @@ function ConfigInput({
   // form is keyed by control id, so this resets when a different control is
   // selected.
   const [optionsText, setOptionsText] = useState(() => (control.options ?? []).join('\n'));
+  // Off/on values exported by a toggle, one per line. Raw text so blank lines
+  // and spaces stay typeable; keyed by control id so it resets per selection.
+  const [valuesText, setValuesText] = useState(() => (control.values ?? ['0', '1']).join('\n'));
   return (
     <div className="bdr-form">
       <FormRow label="Label" help={<>Derives the env var. <code>{varFromLabel(control.label)}</code></>}>
@@ -169,13 +172,30 @@ function ConfigInput({
       )}
 
       {control.kind === 'toggle' ? (
-        <FormRow label="Default value" help="Initial on/off state.">
-          <MiniToggle
-            on={control.defaultValue === true}
-            onChange={(v) => onPatch({ defaultValue: v })}
-            label="Default value"
-          />
-        </FormRow>
+        <>
+          <FormRow label="Default value" help="Initial on/off state.">
+            <MiniToggle
+              on={control.defaultValue === true}
+              onChange={(v) => onPatch({ defaultValue: v })}
+              label="Default value"
+            />
+          </FormRow>
+          <FormRow
+            label="Values"
+            help="What the env var exports — the off value, then the on value, one per line. Defaults to 0 and 1."
+          >
+            <textarea
+              className="bdr-form-textarea"
+              rows={2}
+              value={valuesText}
+              onChange={(e) => {
+                setValuesText(e.target.value);
+                const [off = '', on = ''] = e.target.value.split('\n').map((s) => s.trim());
+                onPatch({ values: off === '' && on === '' ? undefined : [off, on] });
+              }}
+            />
+          </FormRow>
+        </>
       ) : control.kind === 'select' ? (
         <>
           <FormRow label="Options" help="One choice per line (commas and spaces are fine).">

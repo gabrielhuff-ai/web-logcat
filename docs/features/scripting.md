@@ -50,8 +50,9 @@ script and always sees the current input values.
 ## Controls
 
 **Inputs** carry a value: text field, slider, knob, toggle, select,
-stepper. A toggle exports `1` / `0`; everything else exports its value
-verbatim. An input's **On change** setting decides what a change does:
+stepper. A toggle exports `1` / `0` by default — set its optional
+**Values** to export a custom off / on pair instead; everything else
+exports its value verbatim. An input's **On change** setting decides what a change does:
 refresh the displays that read it, do nothing, or **run a function** —
 the function derived from its label, fired the moment the value changes.
 That last option lets a toggle send a broadcast on flip without a
@@ -105,7 +106,7 @@ toggle that broadcasts on flip), or *Do nothing*.
 | **Slider** | number | `min` / `max` / `step`; optional unit. |
 | **Knob** | number | Same value model as the slider, rotary UI. |
 | **Stepper** | number | `−` / `+` by `step`, clamped to `min` / `max`. |
-| **Toggle** | `1` / `0` | Test with `[ "$VERBOSE" = 1 ]`. |
+| **Toggle** | `1` / `0` | Test with `[ "$VERBOSE" = 1 ]`. Optional **Values** override the exported off / on pair (one per line). |
 | **Select** | string | One of a fixed option list. |
 
 Example — a `Package` text field ↦ `$PACKAGE`, and a `Brightness` slider
