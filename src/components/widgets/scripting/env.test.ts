@@ -55,4 +55,45 @@ describe('envFromControls', () => {
     const env = envFromControls([button('btn')], {});
     expect(env).toEqual({});
   });
+
+  it('maps a toggle to its custom off/on values when set', () => {
+    const tg: ControlConfig = {
+      id: 't',
+      kind: 'toggle',
+      label: 'Mode',
+      defaultValue: false,
+      onChange: 'none',
+      values: ['stop', 'start'],
+    };
+    expect(envFromControls([tg], { t: false })).toEqual({ MODE: 'stop' });
+    expect(envFromControls([tg], { t: true })).toEqual({ MODE: 'start' });
+  });
+
+  it('falls back to 1/0 for a missing custom value and an empty values list', () => {
+    const onlyOff: ControlConfig = {
+      id: 't',
+      kind: 'toggle',
+      label: 'Flag',
+      defaultValue: false,
+      onChange: 'none',
+      values: ['off'],
+    };
+    expect(envFromControls([onlyOff], { t: true }).FLAG).toBe('1');
+    const empty: ControlConfig = { ...onlyOff, values: [] };
+    expect(envFromControls([empty], { t: true }).FLAG).toBe('1');
+    expect(envFromControls([empty], { t: false }).FLAG).toBe('0');
+  });
+
+  it('keeps an empty-string off value rather than defaulting it', () => {
+    const tg: ControlConfig = {
+      id: 't',
+      kind: 'toggle',
+      label: 'Verbose',
+      defaultValue: false,
+      onChange: 'none',
+      values: ['', 'yes'],
+    };
+    expect(envFromControls([tg], { t: false })).toEqual({ VERBOSE: '' });
+    expect(envFromControls([tg], { t: true })).toEqual({ VERBOSE: 'yes' });
+  });
 });

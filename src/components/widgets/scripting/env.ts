@@ -25,6 +25,19 @@ export function stringifyValue(v: ControlValue | undefined): string {
 }
 
 /**
+ * The string a single input control exports. Toggles with a custom `values`
+ * pair map off/on to `values[0]` / `values[1]` (falling back to '0' / '1' for a
+ * missing entry); everything else stringifies as usual.
+ */
+export function exportedValue(c: InputControl, v: ControlValue | undefined): string {
+  if (c.kind === 'toggle' && c.values && c.values.length > 0) {
+    const on = v === true;
+    return c.values[on ? 1 : 0] ?? (on ? '1' : '0');
+  }
+  return stringifyValue(v);
+}
+
+/**
  * Build `{ NAME: value }` for every input control, keyed by the derived env
  * var name. The runner passes these as `env NAME=value` argv tokens, so values
  * are never concatenated into the command string.
@@ -37,7 +50,7 @@ export function envFromControls(
   for (const c of controls) {
     if (!isInputControl(c)) continue;
     const v = c.id in values ? values[c.id] : c.defaultValue;
-    env[varNameFromLabel(c.label)] = stringifyValue(v);
+    env[varNameFromLabel(c.label)] = exportedValue(c, v);
   }
   return env;
 }
