@@ -40,7 +40,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type UIEvent } from 'react
 import { useVirtualizer } from '@tanstack/react-virtual';
 import * as Icons from './Icons';
 import { entryMatches } from '../lib/filters';
-import { rowHeightFor } from '../lib/format';
+import { rowHeightFor, type TimestampFormat } from '../lib/format';
 import { LogRow } from './LogRow';
 import type { Filter, LogEntry, Tweaks } from '../types';
 
@@ -49,6 +49,8 @@ const VIRTUAL_THRESHOLD = 800;
 export interface LogListProps {
   entries: LogEntry[];
   filters: Filter[];
+  /** Timestamp column presentation, forwarded to each row. */
+  tsFormat: TimestampFormat;
   pinned: Set<number>;
   pinnedEntries: LogEntry[];
   onTogglePin: (id: number) => void;
@@ -88,6 +90,7 @@ interface ScrollAnchor {
 export function LogList({
   entries,
   filters,
+  tsFormat,
   pinned,
   pinnedEntries,
   onTogglePin,
@@ -343,6 +346,7 @@ export function LogList({
       key={`${keyPrefix}${l.id}`}
       entry={l}
       filters={filters}
+      tsFormat={tsFormat}
       showTimestamps={tweaks.showTimestamps}
       showPid={tweaks.showPid}
       showProcess={tweaks.showProcess}

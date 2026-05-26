@@ -1319,6 +1319,29 @@ test.describe('dashboard', () => {
     ).toHaveAttribute('aria-checked', 'false');
   });
 
+  test('Logcat modal "Timestamp format" reshapes the rendered row timestamp', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    const firstTs = logcatTile.locator('.row .cell.ts').first();
+    // Default is the full Android shape: `MM-DD HH:MM:SS.mmm`.
+    await expect(firstTs).toHaveText(/^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
+
+    // Switch to the compact "Clock" format via the modal.
+    await logcatTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Logcat · settings/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('tab', { name: /^Clock$/ }).click();
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+
+    // Rows now render just the clock (no date, no millis).
+    await expect(firstTs).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
   test('the +Add palette closes via Esc, scrim click, and the close button', async ({
     page,
   }) => {

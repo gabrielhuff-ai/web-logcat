@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useTileSettings } from '../../../lib/tileSettings';
 import { LOGCAT_DEFAULTS, type LogcatSettings } from './logcatSettings';
 import { SettingsRow, SettingsSection, Segmented, Toggle, Slider } from '../../settings/SettingsControls';
+import type { TimestampFormat } from '../../../lib/format';
 import type { LogLevel } from '../../../types';
 
 export interface LogcatSettingsBodyProps {
@@ -19,6 +20,12 @@ const LEVELS: ReadonlyArray<{ l: LogLevel; label: string }> = [
   { l: 'I', label: 'Info' },
   { l: 'W', label: 'Warn' },
   { l: 'E', label: 'Error' },
+];
+
+const DATE_FORMATS: ReadonlyArray<{ value: TimestampFormat; label: string }> = [
+  { value: 'datetime', label: 'Date' },
+  { value: 'time', label: 'Time' },
+  { value: 'clock', label: 'Clock' },
 ];
 
 export function LogcatSettingsBody({ tileId }: LogcatSettingsBodyProps) {
@@ -70,6 +77,13 @@ export function LogcatSettingsBody({ tileId }: LogcatSettingsBodyProps) {
             on={settings.wrap}
             onChange={(wrap) => setSettings({ wrap })}
             ariaLabel="Wrap"
+          />
+        </SettingsRow>
+        <SettingsRow label="Timestamp format">
+          <Segmented
+            value={settings.dateFormat}
+            onChange={(dateFormat) => setSettings({ dateFormat })}
+            options={DATE_FORMATS}
           />
         </SettingsRow>
       </SettingsSection>
