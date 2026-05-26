@@ -317,6 +317,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--t-base);
+  /* Match the other cells' `align-self: center` so a single-line
+   * message stays vertically centred when the row's min-height is
+   * taller than the text. Harmless in wrap mode: a multi-line message
+   * is the tallest cell, so centring it within a row sized to its own
+   * height is a no-op. */
+  align-self: center;
 }
 .cell.msg.wrap {
   white-space: pre-wrap;
