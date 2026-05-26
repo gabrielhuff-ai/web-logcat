@@ -102,7 +102,7 @@ toggle that broadcasts on flip), or *Do nothing*.
 
 | Control | Value | Notes |
 | --- | --- | --- |
-| **Text field** | string | Free text, e.g. a `$PACKAGE` name. |
+| **Text field** | string | Free text, e.g. a `$PACKAGE` name. Enable **Multi-line** for a resizable text area; newlines are preserved in the exported value. |
 | **Slider** | number | `min` / `max` / `step`; optional unit. |
 | **Knob** | number | Same value model as the slider, rotary UI. |
 | **Stepper** | number | `−` / `+` by `step`, clamped to `min` / `max`. |

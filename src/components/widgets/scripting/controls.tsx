@@ -266,29 +266,51 @@ export interface ScTextProps {
   label: string;
   value: string;
   placeholder?: string;
+  multiline?: boolean;
   state?: CtrlState;
   description?: string;
   descInline?: boolean;
   onChange?: (v: string) => void;
 }
 
-export function ScText({ label, value, placeholder, state = 'idle', description, descInline, onChange }: ScTextProps) {
+export function ScText({
+  label,
+  value,
+  placeholder,
+  multiline,
+  state = 'idle',
+  description,
+  descInline,
+  onChange,
+}: ScTextProps) {
   const err = state === 'error';
   const active = state === 'active';
   return (
-    <div className={'sc-text' + (err ? ' err' : '') + (active ? ' active' : '')}>
+    <div className={'sc-text' + (multiline ? ' multiline' : '') + (err ? ' err' : '') + (active ? ' active' : '')}>
       <ControlLabel description={description} descInline={descInline}>
         {label}
       </ControlLabel>
       <div className="sc-text-input">
-        <input
-          value={value}
-          placeholder={placeholder}
-          spellCheck={false}
-          autoComplete="off"
-          aria-label={label}
-          onChange={(e) => onChange?.(e.target.value)}
-        />
+        {multiline ? (
+          <textarea
+            value={value}
+            placeholder={placeholder}
+            spellCheck={false}
+            autoComplete="off"
+            rows={3}
+            aria-label={label}
+            onChange={(e) => onChange?.(e.target.value)}
+          />
+        ) : (
+          <input
+            value={value}
+            placeholder={placeholder}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label={label}
+            onChange={(e) => onChange?.(e.target.value)}
+          />
+        )}
       </div>
       {descInline && description && <div className="sc-desc-inline">{renderMarkdown(description)}</div>}
     </div>

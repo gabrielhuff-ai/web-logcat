@@ -170,6 +170,15 @@ function ConfigInput({
           </label>
         </div>
       )}
+      {control.kind === 'text' && (
+        <FormRow label="Multi-line" help="Use a resizable text area instead of a single-line field. Newlines are kept in the exported value.">
+          <MiniToggle
+            on={control.multiline ?? false}
+            onChange={(v) => onPatch({ multiline: v })}
+            label="Multi-line"
+          />
+        </FormRow>
+      )}
 
       {control.kind === 'toggle' ? (
         <>

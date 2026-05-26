@@ -184,6 +184,48 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('mode live');
   });
 
+  test('a multi-line text input renders a textarea and exports newlines verbatim', async ({ page }) => {
+    const panel = {
+      script: 'show() {\n  echo "$TARGET"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'in', kind: 'text', label: 'Target', multiline: true, defaultValue: '', onChange: 'none' },
+        { id: 'btn', kind: 'button', label: 'Show', variant: 'default', confirm: false, bindOutputTo: 'console' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_ml', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // A multi-line text input renders a <textarea>, not a single-line <input>.
+    const field = tile.locator('.sc-text.multiline textarea');
+    await expect(field).toBeVisible();
+    await field.fill('alpha\nbeta');
+
+    // Running echoes $TARGET with its newline intact → both lines reach the console.
+    await tile.locator('.sc-btn').filter({ hasText: 'Show' }).click();
+    const body = tile.locator('.sc-console-body');
+    await expect(body).toContainText('alpha');
+    await expect(body).toContainText('beta');
+  });
+
   test('a description tooltip stays open when hovered so its link is clickable', async ({ page }) => {
     const panel = {
       script: 'noop() { :; }\n',
