@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useTileSettings } from '../../../lib/tileSettings';
 import { LOGCAT_DEFAULTS, type LogcatSettings } from './logcatSettings';
 import { SettingsRow, SettingsSection, Segmented, Toggle, Slider } from '../../settings/SettingsControls';
+import { formatTs, type TimestampFormat } from '../../../lib/format';
 import type { LogLevel } from '../../../types';
 
 export interface LogcatSettingsBodyProps {
@@ -20,6 +21,17 @@ const LEVELS: ReadonlyArray<{ l: LogLevel; label: string }> = [
   { l: 'W', label: 'Warn' },
   { l: 'E', label: 'Error' },
 ];
+
+const DATE_FORMATS: ReadonlyArray<{ value: TimestampFormat; label: string }> = [
+  { value: 'datetime', label: 'Date' },
+  { value: 'time', label: 'Time' },
+  { value: 'clock', label: 'Clock' },
+];
+
+// Fixed sample so the picker's preview is deterministic regardless of
+// the wall clock. Built from local components so the rendered date /
+// time matches the user's locale the same way live rows do.
+const SAMPLE_TS = new Date(2024, 4, 25, 20, 41, 9, 261).getTime();
 
 export function LogcatSettingsBody({ tileId }: LogcatSettingsBodyProps) {
   const [settings, setSettings] = useTileSettings<LogcatSettings>(
@@ -72,6 +84,21 @@ export function LogcatSettingsBody({ tileId }: LogcatSettingsBodyProps) {
             ariaLabel="Wrap"
           />
         </SettingsRow>
+        <div className="ws-row gs-row-stacked">
+          <div className="gs-row-head">
+            <span className="ws-row-key">Timestamp format</span>
+            <span className="gs-row-desc">
+              Shorter formats drop the date, then the milliseconds, to
+              reclaim column width. Preview:{' '}
+              <code>{formatTs(SAMPLE_TS, settings.dateFormat)}</code>
+            </span>
+          </div>
+          <Segmented
+            value={settings.dateFormat}
+            onChange={(dateFormat) => setSettings({ dateFormat })}
+            options={DATE_FORMATS}
+          />
+        </div>
       </SettingsSection>
 
       <SettingsSection label="Columns">

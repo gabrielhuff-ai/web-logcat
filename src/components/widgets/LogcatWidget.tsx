@@ -626,6 +626,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
       onWheel={bumpActive}
       onScrollCapture={bumpActive}
       data-density={settings.density}
+      data-ts-format={settings.dateFormat}
       data-active={active ? 'true' : 'false'}
       style={widgetStyle}
     >
@@ -689,6 +690,7 @@ export function LogcatWidget({ tileId }: LogcatWidgetProps) {
         <LogList
           entries={filtered}
           filters={filters}
+          tsFormat={settings.dateFormat}
           pinned={pinned}
           pinnedEntries={pinnedEntries}
           onTogglePin={togglePin}

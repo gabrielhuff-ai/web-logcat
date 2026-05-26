@@ -3,7 +3,7 @@
 
 import { Fragment, memo, useMemo, type ReactNode } from 'react';
 import * as Icons from './Icons';
-import { formatTs } from '../lib/format';
+import { formatTs, type TimestampFormat } from '../lib/format';
 import type { Filter, LogEntry } from '../types';
 
 interface FieldRange {
@@ -66,6 +66,7 @@ function HighlightedText({ text, ranges }: HighlightedTextProps) {
 export interface LogRowProps {
   entry: LogEntry;
   filters: Filter[];
+  tsFormat: TimestampFormat;
   showTimestamps: boolean;
   showPid: boolean;
   showProcess: boolean;
@@ -87,6 +88,7 @@ export interface LogRowProps {
 export const LogRow = memo(function LogRow({
   entry,
   filters,
+  tsFormat,
   showTimestamps,
   showPid,
   showProcess,
@@ -160,7 +162,7 @@ export const LogRow = memo(function LogRow({
       >
         {pinned ? <Icons.PinFilled size={11} /> : <Icons.Pin size={11} />}
       </button>
-      {showTimestamps && <span className="cell ts">{formatTs(entry.ts)}</span>}
+      {showTimestamps && <span className="cell ts">{formatTs(entry.ts, tsFormat)}</span>}
       {showPid && (
         <span className="cell pid">
           {entry.pid}-{entry.tid}
