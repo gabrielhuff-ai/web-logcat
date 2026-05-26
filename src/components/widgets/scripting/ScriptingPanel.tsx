@@ -94,6 +94,7 @@ function renderInput(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
           key={c.id}
           label={c.label}
           value={toStr(v)}
+          multiline={c.multiline}
           description={c.description}
           descInline={c.descInline}
           onChange={(next) => onInputChange(c.id, next)}

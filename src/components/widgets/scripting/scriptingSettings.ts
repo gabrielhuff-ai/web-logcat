@@ -25,6 +25,8 @@ export interface InputControl extends BaseControl {
   kind: InputKind;
   /** Render the description under the control instead of only on hover. */
   descInline?: boolean;
+  /** text only — render a resizable multi-line textarea instead of a single-line field. */
+  multiline?: boolean;
   defaultValue: ControlValue;
   /** slider / stepper / knob. */
   min?: number;

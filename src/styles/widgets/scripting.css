@@ -340,7 +340,8 @@
   padding: 0 12px;
   height: 38px;
 }
-.sc-text-input input {
+.sc-text-input input,
+.sc-text-input textarea {
   flex: 1;
   background: transparent;
   border: 0; outline: 0;
@@ -349,7 +350,11 @@
   font-size: var(--t-sm);
   min-width: 0;
 }
-.sc-text-input input::placeholder { color: var(--fg-3); }
+.sc-text-input input::placeholder,
+.sc-text-input textarea::placeholder { color: var(--fg-3); }
+/* Multi-line text: let the field grow and the textarea be user-resizable. */
+.sc-text.multiline .sc-text-input { height: auto; padding: 8px 12px; }
+.sc-text-input textarea { resize: vertical; min-height: 54px; line-height: 1.5; }
 .sc-text.active > .sc-lbl .sc-lbl-text,
 .sc-text:focus-within > .sc-lbl .sc-lbl-text { color: var(--accent-fg); }
 .sc-text.active .sc-text-input,
