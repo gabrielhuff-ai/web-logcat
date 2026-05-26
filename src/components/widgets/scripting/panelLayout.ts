@@ -1,0 +1,52 @@
+// Scripting widget — pure panel-layout grouping.
+//
+// Walks the ordered controls config and chunks consecutive controls of the
+// same category into the design's responsive bands. Pure so it can be unit
+// tested; the renderer (ScriptingPanel) maps each group to its band.
+
+import type { ControlConfig } from './scriptingSettings';
+
+export type Category = 'section' | 'inputs' | 'buttons' | 'displays' | 'console';
+
+export interface Group {
+  category: Category;
+  items: ControlConfig[];
+}
+
+export function categoryOf(c: ControlConfig): Category {
+  switch (c.kind) {
+    case 'section':
+      return 'section';
+    case 'button':
+      return 'buttons';
+    case 'console':
+      return 'console';
+    case 'readout':
+    case 'status':
+    case 'gauge':
+    case 'led':
+      return 'displays';
+    default:
+      return 'inputs';
+  }
+}
+
+/**
+ * Chunk controls into consecutive same-category bands. Inputs, buttons, and
+ * displays merge into shared grids/rails; sections and consoles stay
+ * singletons so each gets its own heading / fill region.
+ */
+export function groupControls(controls: ControlConfig[]): Group[] {
+  const groups: Group[] = [];
+  for (const c of controls) {
+    const category = categoryOf(c);
+    const last = groups[groups.length - 1];
+    const mergeable = category === 'inputs' || category === 'buttons' || category === 'displays';
+    if (last && last.category === category && mergeable) {
+      last.items.push(c);
+    } else {
+      groups.push({ category, items: [c] });
+    }
+  }
+  return groups;
+}

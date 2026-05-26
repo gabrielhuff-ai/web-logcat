@@ -925,7 +925,7 @@ test.describe('keyboard shortcuts', () => {
 });
 
 test.describe('dashboard', () => {
-  test('+ Add widget opens the palette with all five cards enabled', async ({
+  test('+ Add widget opens the palette with every card enabled', async ({
     page,
   }) => {
     await page.goto('/');
@@ -936,9 +936,16 @@ test.describe('dashboard', () => {
     await expect(page.getByRole('dialog', { name: /add widget/i })).toBeVisible();
 
     const cards = page.locator('.palette-card');
-    await expect(cards).toHaveCount(5);
-    for (const name of ['Logcat', 'Shell', 'Dumpsys', 'Files', 'Screen Mirror']) {
-      await expect(cards.filter({ hasText: name })).not.toBeDisabled();
+    await expect(cards).toHaveCount(6);
+    // Match on the card title, not the whole card — the Scripting card's
+    // description contains the word "shell", which would otherwise collide
+    // with the Shell card under a substring filter.
+    for (const name of ['Logcat', 'Shell', 'Dumpsys', 'Files', 'Screen Mirror', 'Scripting']) {
+      const card = cards.filter({
+        has: page.locator('.palette-card-title', { hasText: name }),
+      });
+      await expect(card).toHaveCount(1);
+      await expect(card).not.toBeDisabled();
     }
   });
 
@@ -1310,6 +1317,29 @@ test.describe('dashboard', () => {
         .getByRole('dialog', { name: /Logcat · settings/i })
         .getByRole('switch', { name: /^Wrap$/ }),
     ).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('Logcat modal "Timestamp format" reshapes the rendered row timestamp', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+
+    const logcatTile = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    const firstTs = logcatTile.locator('.row .cell.ts').first();
+    // Default is the full Android shape: `MM-DD HH:MM:SS.mmm`.
+    await expect(firstTs).toHaveText(/^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
+
+    // Switch to the compact "Clock" format via the modal.
+    await logcatTile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /Logcat · settings/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('tab', { name: /^Clock$/ }).click();
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+
+    // Rows now render just the clock (no date, no millis).
+    await expect(firstTs).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
   });
 
   test('the +Add palette closes via Esc, scrim click, and the close button', async ({

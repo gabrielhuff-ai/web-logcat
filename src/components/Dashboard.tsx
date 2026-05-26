@@ -13,6 +13,8 @@ import { TileGrid } from './TileGrid';
 import { WidgetPalette } from './WidgetPalette';
 import { QuickAddMenu } from './QuickAddMenu';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
+import { DashboardShareModal } from './DashboardShareModal';
+import { applySnapshot, onPendingImport, takePendingImport } from '../lib/dashboardShare';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
@@ -38,6 +40,25 @@ export function Dashboard({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  // Bumped to remount <TileGrid/> so it re-reads the layout + per-tile settings
+  // after an import — applying a shared dashboard live, without a reload (which
+  // would drop the in-memory device connection and bounce to the connect screen).
+  const [gridEpoch, setGridEpoch] = useState(0);
+
+  // Apply a dashboard shared via `#share=…` link. The device is already
+  // connected by the time the dashboard is mounted, so we apply in place. Runs
+  // on mount (boot-stashed payload) and when a same-tab navigation stashes one.
+  const applyPending = useCallback(() => {
+    const pending = takePendingImport();
+    if (!pending) return;
+    applySnapshot(pending);
+    setGridEpoch((e) => e + 1);
+  }, []);
+  useEffect(() => {
+    applyPending();
+  }, [applyPending]);
+  useEffect(() => onPendingImport(applyPending), [applyPending]);
   // `clearSignal` / `addSignal` / `undoSignal` / `redoSignal` /
   // `removeFocusedSignal` / `focusDirSignal` are bumped to push
   // imperative actions down into `<TileGrid/>` without lifting its
@@ -152,9 +173,11 @@ export function Dashboard({
         onAddWidget={() => setPaletteOpen(true)}
         onClearLayout={() => setClearSignal((n) => n + 1)}
         onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
+        onOpenShare={() => setShareOpen(true)}
       />
 
       <TileGrid
+        key={gridEpoch}
         clearSignal={clearSignal}
         undoSignal={undoSignal}
         redoSignal={redoSignal}
@@ -192,6 +215,16 @@ export function Dashboard({
           onClose={() => setGlobalSettingsOpen(false)}
         />
       )}
+
+      {shareOpen && (
+        <DashboardShareModal
+          onClose={() => setShareOpen(false)}
+          onImported={() => {
+            setGridEpoch((e) => e + 1);
+            setShareOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -209,6 +242,7 @@ interface DashTopbarProps {
   onAddWidget: () => void;
   onClearLayout: () => void;
   onOpenGlobalSettings: () => void;
+  onOpenShare: () => void;
 }
 
 function DashTopbar({
@@ -222,6 +256,7 @@ function DashTopbar({
   onAddWidget,
   onClearLayout,
   onOpenGlobalSettings,
+  onOpenShare,
 }: DashTopbarProps) {
   const [devOpen, setDevOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -332,6 +367,14 @@ function DashTopbar({
           aria-label="Clear layout"
         >
           <Icons.Clear size={13} />
+        </button>
+        <button
+          className="icon-btn tt"
+          data-tt="Share dashboard"
+          onClick={onOpenShare}
+          aria-label="Import or export dashboard"
+        >
+          <Icons.Share size={13} />
         </button>
         <div className="dash-divider" />
         <a

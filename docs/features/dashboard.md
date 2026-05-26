@@ -89,16 +89,17 @@ capped at 1) are greyed out and their accelerator is ignored.
 
 ## Persistence
 
-Layouts and per-widget settings persist in `localStorage` per device
-serial:
+Layouts and per-widget settings persist in `localStorage`, globally per
+dashboard — not tied to a device serial:
 
 - The tree itself: `weblogcat-dashboard-v2`.
-- Per-widget state: keyed by `weblogcat:<kind>:<serial>:<tileId>` so two
-  Logcat tiles on the same device keep independent filter setups across
-  reloads.
+- Per-widget state: keyed by `weblogcat:settings:<tileId>:<kind>`, so two
+  Logcat tiles keep independent filter setups across reloads.
 
-Switching to a different device wakes that device's saved layout. The
-demo device has its own separate slot.
+Because the keys are serial-free, your tiles and their settings stay put
+when you reconnect — including when the same phone reports a different
+serial over USB versus the Web Device Proxy, or when you plug in a
+different device entirely.
 
 ## Sharing a layout via URL
 

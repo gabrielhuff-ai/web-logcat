@@ -1200,3 +1200,98 @@
   line-height: 1.4;
 }
 
+/* ---- Dashboard import / export modal -------------------------------------- */
+.imex-back {
+  position: fixed; inset: 0;
+  background: oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+}
+.imex-modal {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  z-index: 61;
+  display: flex; flex-direction: column;
+  background: oklch(from var(--bg-1) l c h / 0.97);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.imex-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--glass-line);
+  background: oklch(from var(--bg-0) l c h / 0.5);
+}
+.imex-head-icon {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: oklch(from var(--accent) l c h / 0.14);
+  border: 1px solid oklch(from var(--accent) l c h / 0.3);
+  border-radius: 7px;
+  color: var(--accent);
+}
+.imex-head-title { font-size: var(--t-md); font-weight: 600; color: var(--fg-0); }
+.imex-head-sub { font-size: var(--t-xs); color: var(--fg-3); margin-top: 1px; }
+.imex-close {
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px; color: var(--fg-3);
+}
+.imex-close:hover { background: var(--bg-2); color: var(--fg-0); }
+.imex-body { padding: 16px; overflow: auto; }
+.imex-section h4 {
+  margin: 0 0 6px; font-size: var(--t-sm); font-weight: 600; color: var(--fg-0);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.imex-note { margin: 0 0 10px; font-size: var(--t-xs); color: var(--fg-3); line-height: 1.5; }
+.imex-warn { color: var(--lvl-w-fg); }
+.imex-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.imex-row .btn { height: 32px; font-size: var(--t-sm); }
+.imex-divider { height: 1px; background: var(--glass-line); margin: 16px 0; }
+.imex-textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  background: oklch(from var(--bg-0) calc(l - 0.02) c h);
+  border: 1px solid var(--glass-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  color: var(--fg-0);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+}
+.imex-textarea:focus { outline: 0; border-color: oklch(from var(--accent) l c h / 0.55); }
+.imex-ack {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 4px 0 16px;
+  padding: 10px;
+  border-radius: 8px;
+  background: oklch(from var(--lvl-w-bg) l c h / 0.4);
+  border: 1px solid oklch(from var(--lvl-w-fg) l c h / 0.35);
+  font-size: var(--t-xs);
+  color: var(--fg-1);
+  line-height: 1.5;
+}
+.imex-ack input { margin-top: 2px; accent-color: var(--accent); }
+.imex-ack.shake { animation: imex-shake 420ms var(--ease-out); }
+@keyframes imex-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+/* Visually disabled but still clickable, so clicking nudges the user toward
+   the acknowledgement (a real `disabled` attribute would swallow the click). */
+.imex-btn-disabled { opacity: 0.5; cursor: not-allowed; }
+.imex-btn-disabled:hover { background: var(--accent); }
+

@@ -143,3 +143,40 @@ export const Book = make(
 export const Github = make(
   'M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.18-.01-2.14-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.35.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.92 10.92 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.67.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z',
 );
+
+// ---- Scripting widget — control-kind glyphs + builder chrome ---------------
+// Ported from design/scripting/source/icons.jsx (24px viewBox, currentColor,
+// strokes matched to the v2 set). Used by the control catalog, the builder's
+// kind icons, and the runtime panel.
+export const PlayCircle = make('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.5v7l6-3.5z', 1.4);
+export const Copy = make(
+  'M9 3h10a2 2 0 0 1 2 2v10M5 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z',
+  1.6,
+);
+export const Trash = make('M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6', 1.6);
+export const Edit = make('M4 20h4l11-11-4-4L4 16zM14 6l4 4', 1.6);
+export const Battery = make('M3 8h15v8H3zM18 11v2h2v-2z', 1.6);
+export const Cpu = make(
+  'M6 6h12v12H6zM4 9v2M4 13v2M20 9v2M20 13v2M9 4h2M13 4h2M9 20h2M13 20h2M9 9h6v6H9z',
+  1.5,
+);
+export const Network = make(
+  'M2 12a15 15 0 0 1 20 0M5 16a10 10 0 0 1 14 0M8.5 19.5a5 5 0 0 1 7 0M12 22h.01',
+  1.6,
+);
+export const SplitV = make('M3 4h18v16H3zM3 12h18', 1.6);
+export const Power = make('M12 3v9M6.3 7.7a8 8 0 1 0 11.4 0', 1.7);
+export const Rotate = make(
+  'M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5',
+  1.6,
+);
+
+// ---- Dashboard import / export ---------------------------------------------
+export const Upload = make('M12 16V4M6 10l6-6 6 6M4 18v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 1.7);
+export const Download = make('M12 4v12M6 10l6 6 6-6M4 18v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 1.7);
+export const Share = make(
+  'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4',
+  1.6,
+);
+// Source-code glyph (`</>`) — the Scripting widget's tile + palette icon.
+export const Code = make('M9 7l-5 5 5 5M15 7l5 5-5 5M13 5l-2 14', 1.7);

@@ -4,19 +4,32 @@ import type { WidgetKind } from '../types';
 
 describe('widgets registry', () => {
   it('covers every WidgetKind in the union', () => {
-    const expected: WidgetKind[] = ['logcat', 'shell', 'dumpsys', 'files', 'mirror'];
+    const expected: WidgetKind[] = [
+      'logcat',
+      'shell',
+      'dumpsys',
+      'files',
+      'mirror',
+      'scripting',
+    ];
     for (const k of expected) {
       expect(WIDGETS[k]).toBeDefined();
     }
     expect(WIDGET_KINDS).toEqual(expected);
   });
 
-  it('has all five widget kinds enabled after Phases 7+8+9', () => {
+  it('has all widget kinds enabled', () => {
     expect(WIDGETS.logcat.enabled).toBe(true);
     expect(WIDGETS.shell.enabled).toBe(true);
     expect(WIDGETS.dumpsys.enabled).toBe(true);
     expect(WIDGETS.files.enabled).toBe(true);
     expect(WIDGETS.mirror.enabled).toBe(true);
+    expect(WIDGETS.scripting.enabled).toBe(true);
+  });
+
+  it('uses unique single-letter accelerators across kinds', () => {
+    const keys = WIDGET_KINDS.map((k) => WIDGETS[k].shortcutKey);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   it('hard-caps Mirror at 1 instance', () => {

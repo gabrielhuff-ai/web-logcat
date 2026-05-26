@@ -15,6 +15,13 @@ import { AdbProvider } from '../lib/AdbProvider';
 import { LogStreamHub } from '../lib/logStream';
 import { LogStreamContext } from '../lib/logStreamContext';
 import { DashboardChromeContext } from '../lib/dashboardChrome';
+import {
+  clearShareFromUrl,
+  decodeSnapshot,
+  notifyPendingImport,
+  readShareFromUrl,
+  stashPendingImport,
+} from '../lib/dashboardShare';
 import type { Adb } from '@yume-chan/adb';
 import type { LogStream } from '../lib/adb';
 import type { DeviceInfo, LogEntry } from '../types';
@@ -297,6 +304,26 @@ export function App() {
 
   // Memoise the chrome context value so widgets don't re-render on
   // unrelated App state changes.
+  // Same-tab navigation to a `#share=…` link doesn't reload the page, so the
+  // boot-time decode in main.tsx never runs. Watch for it at runtime: decode,
+  // stash, and wake the dashboard (which applies it live if connected, or on
+  // the next connect otherwise).
+  useEffect(() => {
+    const onHash = () => {
+      const share = readShareFromUrl();
+      if (!share) return;
+      void decodeSnapshot(share).then((snapshot) => {
+        clearShareFromUrl();
+        if (snapshot) {
+          stashPendingImport(snapshot);
+          notifyPendingImport();
+        }
+      });
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   const chrome = useMemo(
     () => ({ tweaks, setTweaks, showToast, performanceModeOn }),
     [tweaks, setTweaks, showToast, performanceModeOn],

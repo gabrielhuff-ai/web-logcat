@@ -87,11 +87,29 @@ modal) to wrap long messages within the row.
 - `⌘K` / `Ctrl+K` clears the visible buffer (the upstream stream keeps
   going).
 
+## Timestamp format
+
+The timestamp column defaults to the full Android logcat shape,
+`MM-DD HH:MM:SS.mmm`. On narrow tiles you can trade precision for
+horizontal space from the per-widget settings modal:
+
+| Format | Example | Notes |
+| --- | --- | --- |
+| `Date` | `05-25 20:41:09.261` | Full date + time + milliseconds (default) |
+| `Time` | `20:41:09.261` | Drops the date — handy when every line is same-day |
+| `Clock` | `20:41:09` | Drops the date and milliseconds — the most compact |
+
+The column width tracks the chosen format, so shorter formats hand the
+reclaimed space back to the message. The timestamp, PID/TID, and process
+columns also render a step smaller than the message so the eye lands on
+the message first.
+
 ## Per-widget settings
 
 The cog in the tile header opens a settings modal for **this** Logcat
-instance. From there you can flip wrap, change row density, edit the
-default level mask, or rename the tile. Changes persist per-tile.
+instance. From there you can flip wrap, change row density, pick the
+timestamp format, edit the default level mask, or rename the tile.
+Changes persist per-tile.
 
 ## Keyboard shortcuts
 

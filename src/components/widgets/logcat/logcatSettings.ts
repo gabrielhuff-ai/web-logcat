@@ -6,6 +6,7 @@
 // into `settings.filters`.
 
 import { registerSettingsMigration } from '../../../lib/tileSettings';
+import type { TimestampFormat } from '../../../lib/format';
 import type { Filter, LevelEnabled } from '../../../types';
 
 export interface LogcatSettings {
@@ -14,6 +15,9 @@ export interface LogcatSettings {
   density: 'compact' | 'comfortable';
   heatmap: boolean;
   wrap: boolean;
+  /** Timestamp column presentation — controls both the rendered string
+   *  and the column width (shorter formats reclaim horizontal space). */
+  dateFormat: TimestampFormat;
   showTimestamp: boolean;
   showPid: boolean;
   showProcess: boolean;
@@ -31,6 +35,7 @@ export const LOGCAT_DEFAULTS: LogcatSettings = {
   density: 'compact',
   heatmap: false,
   wrap: false,
+  dateFormat: 'datetime',
   showTimestamp: true,
   showPid: false,
   showProcess: true,

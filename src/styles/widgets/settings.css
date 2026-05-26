@@ -225,18 +225,39 @@
  * no-op for everything except `.cell.tag`).
  * ========================================================================= */
 
-/* Logcat — every cell in a log row reads body text. */
+/* Logcat — the message + tag read at the full body text size. */
 .lc-widget .row,
 .lc-widget .row .cell,
-.lc-widget .row .cell.ts,
-.lc-widget .row .cell.pid,
-.lc-widget .row .cell.pkg,
 .lc-widget .row .cell.tag,
 .lc-widget .row .cell.msg,
 .lc-widget .pinned-block .row,
 .lc-widget .pinned-block .row .cell {
   font-size: var(--widget-font-size, var(--t-sm));
 }
+
+/* Meta columns (timestamp, pid/tid, process) sit one step below the
+ * body size so the eye lands on the message first and the fixed columns
+ * pack tighter. The `.cell.X` selectors out-specify the generic
+ * `.cell` rule above. Stays relative to the per-tile font so it tracks
+ * the font-size slider. */
+.lc-widget .row .cell.ts,
+.lc-widget .row .cell.pid,
+.lc-widget .row .cell.pkg,
+.lc-widget .pinned-block .row .cell.ts,
+.lc-widget .pinned-block .row .cell.pid,
+.lc-widget .pinned-block .row .cell.pkg {
+  font-size: calc(var(--widget-font-size, var(--t-sm)) - 1px);
+}
+
+/* Timestamp + pid column widths, tightened from the design defaults
+ * (14em / 8em) now the meta font is a step smaller. The timestamp
+ * column tracks the chosen format via `data-ts-format` on the widget
+ * root — shorter formats reclaim the slack. em units keep every width
+ * proportional to the meta font size across the slider range. */
+.lc-widget .cell.ts { width: 11.5em; }
+.lc-widget[data-ts-format='time'] .cell.ts { width: 7.75em; }
+.lc-widget[data-ts-format='clock'] .cell.ts { width: 5.25em; }
+.lc-widget .cell.pid { width: 7.5em; }
 
 /* Shell — scrollback + the live prompt input. */
 .sh-widget .sh-scroll,
