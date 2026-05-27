@@ -171,34 +171,34 @@ export interface ScDaemonProps {
   onToggle?: () => void;
 }
 
-/** A daemon's on-panel control: a status LED + a Start/Stop toggle. Only
- *  rendered when the daemon's "Show controls" is on; otherwise it runs
- *  headless and only its bound console shows anything. */
+/** A daemon's on-panel control: a single clickable surface showing a status
+ *  LED, the label/state, and a play/stop glyph. Clicking it toggles the
+ *  daemon. Only rendered when "Show controls" is on; otherwise the daemon
+ *  runs headless and only its bound console shows anything. */
 export function ScDaemon({ label, status = 'inactive', description, onToggle }: ScDaemonProps) {
   const running = status === 'running';
   const color = running ? 'green' : status === 'error' ? 'red' : 'off';
   const stateText = running ? 'running' : status === 'error' ? 'error' : 'stopped';
   return (
-    <div className={'sc-daemon ' + status}>
+    <button
+      type="button"
+      className={'sc-daemon ' + status}
+      onClick={onToggle}
+      aria-pressed={running}
+      aria-label={(running ? 'Stop ' : 'Start ') + label}
+    >
       <span className={'sc-led-bulb led-' + color + (running ? ' pulsing' : '')} />
-      <div className="sc-daemon-meta">
-        <div className="sc-daemon-label">
+      <span className="sc-daemon-meta">
+        <span className="sc-daemon-label">
           {label}
           {description && <InfoDot description={description} />}
-        </div>
-        <div className="sc-daemon-state">{stateText}</div>
-      </div>
-      <button
-        type="button"
-        className={'sc-daemon-btn' + (running ? ' on' : '')}
-        onClick={onToggle}
-        aria-pressed={running}
-        aria-label={(running ? 'Stop ' : 'Start ') + label}
-      >
-        {running ? <Icons.Stop size={11} /> : <Icons.Play size={11} />}
-        <span>{running ? 'Stop' : 'Start'}</span>
-      </button>
-    </div>
+        </span>
+        <span className="sc-daemon-state">{stateText}</span>
+      </span>
+      <span className="sc-daemon-icon">
+        {running ? <Icons.Stop size={13} /> : <Icons.Play size={13} />}
+      </span>
+    </button>
   );
 }
 

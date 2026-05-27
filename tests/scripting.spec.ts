@@ -474,24 +474,23 @@ test.describe('scripting widget', () => {
     await page.getByRole('button', { name: /fake data/i }).click();
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
 
-    // autoStart is off, so it begins stopped (LED off, button says Start).
+    // autoStart is off, so it begins stopped — the whole surface is the toggle.
     const daemon = tile.locator('.sc-daemon');
     await expect(daemon).toContainText('stopped');
-    const toggle = daemon.locator('.sc-daemon-btn');
-    await expect(toggle).toContainText('Start');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
 
-    // Start it: LED goes green, the console shows the live pill + streamed lines.
-    await toggle.click();
+    // Click the control: LED goes green, the console shows the live pill + lines.
+    await daemon.click();
     await expect(daemon).toContainText('running');
-    await expect(toggle).toContainText('Stop');
+    await expect(daemon).toHaveAttribute('aria-label', /^Stop /);
     await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
     await expect(tile.locator('.sc-console-body')).toContainText('line up');
     await expect(tile.locator('.sc-console-body')).toContainText('🐢');
 
-    // Stop it: back to stopped, the live pill gives way to a neutral marker.
-    await toggle.click();
+    // Click again: back to stopped, the live pill gives way to a neutral marker.
+    await daemon.click();
     await expect(daemon).toContainText('stopped');
-    await expect(toggle).toContainText('Start');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
     await expect(tile.locator('.sc-exit.live')).toHaveCount(0);
   });
 

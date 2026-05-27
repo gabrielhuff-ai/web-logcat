@@ -230,30 +230,31 @@
 /* ───────────────────────── Daemon ───────────────────────── */
 .sc-daemon {
   display: inline-flex; align-items: center; gap: 10px;
-  padding: 6px 10px 6px 12px;
+  padding: 6px 12px;
   border-radius: 8px;
   background: var(--bg-2);
   border: 1px solid var(--glass-line);
+  color: var(--fg-0);
+  text-align: left;
+  transition: background-color 120ms, border-color 120ms, transform 120ms;
 }
-.sc-daemon.running { border-color: oklch(from var(--lvl-i-fg) l c h / 0.4); }
-.sc-daemon.error { border-color: oklch(from var(--lvl-e-fg) l c h / 0.4); }
+.sc-daemon:hover { background: var(--bg-3); }
+.sc-daemon:active { transform: scale(0.98); }
+.sc-daemon.running {
+  background: oklch(from var(--lvl-i-fg) l c h / 0.08);
+  border-color: oklch(from var(--lvl-i-fg) l c h / 0.45);
+}
+.sc-daemon.error {
+  background: oklch(from var(--lvl-e-fg) l c h / 0.06);
+  border-color: oklch(from var(--lvl-e-fg) l c h / 0.45);
+}
 .sc-daemon .sc-led-bulb.pulsing { animation: pulse 1.6s var(--ease-in-out) infinite; }
-.sc-daemon-meta { display: flex; flex-direction: column; line-height: 1.2; }
+.sc-daemon-meta { display: inline-flex; flex-direction: column; line-height: 1.2; }
 .sc-daemon-label { font-size: var(--t-sm); color: var(--fg-0); font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
 .sc-daemon-state { font-size: 10px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.1em; }
-.sc-daemon-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 0 10px; height: 26px;
-  border-radius: 6px;
-  background: var(--bg-1);
-  border: 1px solid var(--glass-line);
-  color: var(--fg-1);
-  font-size: var(--t-sm);
-  transition: background-color 120ms, color 120ms, border-color 120ms;
-}
-.sc-daemon-btn:hover { background: var(--bg-3); color: var(--fg-0); }
-.sc-daemon-btn.on { background: oklch(from var(--accent) l c h / 0.16); border-color: oklch(from var(--accent) l c h / 0.45); color: var(--accent-fg); }
-.sc-daemon-btn svg { opacity: 0.85; }
+.sc-daemon-icon { display: inline-flex; align-items: center; margin-left: 4px; color: var(--fg-2); }
+.sc-daemon.running .sc-daemon-icon { color: var(--lvl-i-fg); }
+.sc-daemon.error .sc-daemon-icon { color: var(--lvl-e-fg); }
 
 /* ───────────────────────── Toggle ─────────────────────────
    Shares the material-outlined shell with Text / Select / Stepper (grouped
