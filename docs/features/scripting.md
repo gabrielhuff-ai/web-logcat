@@ -148,11 +148,15 @@ bound console.
 - **Auto-start** (default on) — start the daemon when the dashboard loads.
   Always disarmed on import, so an imported panel never starts a process on
   its own; re-arm it from the builder.
+- **Restart** (default *Never*) — what to do when the process exits, mirroring
+  systemd's `Restart=`: *Never* leaves it in a terminal state; *On failure*
+  relaunches after a non-zero exit; *On success* after a clean exit; *Always*
+  after either. Restarts happen after a short delay so a fast-exiting command
+  can't spin.
 
-A daemon is meant to keep running, but if the process exits on its own it
-enters a **terminal** state and is **not** restarted: a clean exit (0) shows
-**finished** (blue LED), a non-zero exit shows **error** (red LED). Click the
-control to run it again.
+When **Restart** is *Never* and the process exits on its own, the daemon enters
+a **terminal** state: a clean exit (0) shows **finished** (blue LED), a
+non-zero exit shows **error** (red LED). Click the control to run it again.
 
 A daemon can **clear its console** by emitting a standard terminal clear —
 `clear`, `reset`, or `printf '\033[2J\033[H'`. This also lets a repainting

@@ -566,6 +566,43 @@ test.describe('scripting widget', () => {
     await expect(daemon).toHaveAttribute('aria-label', /^Start /);
   });
 
+  test('a daemon with restart "on success" re-runs instead of finishing', async ({ page }) => {
+    const panel = {
+      script: 'report() {\n  echo "tick"\n  exit 0\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'd', kind: 'daemon', label: 'Report', bindOutputTo: 'console', showControls: true, autoStart: true, restart: 'on-success' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_restart', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const daemon = tile.locator('.sc-daemon');
+    // It exits 0 each run, but the policy relaunches it — so it stays running
+    // and never settles into the terminal "finished" state (which the same
+    // function reaches under the default "Never" policy).
+    await expect(tile.locator('.sc-console-body')).toContainText('tick');
+    await expect(daemon).toContainText('running');
+    await expect(daemon).not.toContainText('finished');
+  });
+
   test('a daemon clears the console with a standard clear sequence', async ({ page }) => {
     // Each emission clears the screen then prints one line, so the console
     // never accumulates — it shows only the latest "frame".
