@@ -57,15 +57,23 @@ export interface ButtonControl extends BaseControl {
   confirm: boolean;
   /** Display id whose output this button feeds, or 'console'. */
   bindOutputTo: string;
+}
+
+/**
+ * A long-running background process, managed declaratively. Unlike a button
+ * (imperative — click to run once), a daemon is a desired-state toggle: the
+ * runtime starts/stops the process to match. Its function (derived from the
+ * label) is expected to keep running — e.g. `logcat | grep "$PACKAGE"`.
+ */
+export interface DaemonControl extends BaseControl {
+  kind: 'daemon';
+  /** Console id this daemon's output feeds, or 'console'. */
+  bindOutputTo: string;
+  /** Show the start/stop + status LED on the panel. Default false (headless). */
+  showControls?: boolean;
   /**
-   * Run model. 'once' (default) runs the function and waits for its result;
-   * 'stream' spawns a long-lived process and appends its output to the bound
-   * console until stopped (e.g. `logcat | grep …`).
-   */
-  mode?: 'once' | 'stream';
-  /**
-   * stream only — start the stream automatically once the dashboard loads.
-   * Disarmed on panel import so a shared panel never runs shell on load.
+   * Start the daemon when the dashboard loads. Default true. Disarmed on panel
+   * import so a shared panel never runs shell on its own.
    */
   autoStart?: boolean;
 }
@@ -77,6 +85,8 @@ export interface ConsoleControl extends BaseControl {
   autoScroll: boolean;
   /** Hide the leading `$ command` line printed before each run's output. */
   hideCommand?: boolean;
+  /** Hide the console header (title + status pill + copy), leaving only output. */
+  hideChrome?: boolean;
 }
 
 export interface BoundDisplayControl extends BaseControl {
@@ -102,6 +112,7 @@ export interface SectionControl {
 export type ControlConfig =
   | InputControl
   | ButtonControl
+  | DaemonControl
   | ConsoleControl
   | BoundDisplayControl
   | SectionControl;
@@ -166,15 +177,6 @@ export const EXAMPLE_PANEL: ScriptingSettings = {
     'cpu()          { echo 38; }',
     'network()      { echo online; }',
     'charging()     { echo green; }',
-    '',
-    '# Streaming action — on a device this would be `logcat | grep "$PACKAGE"`.',
-    '# echo -e keeps the ANSI colours; the console renders them.',
-    'watch_logs() {',
-    '  echo -e "\\e[32mI\\e[0m ActivityManager: Start proc $PACKAGE"',
-    '  echo -e "\\e[33mW\\e[0m WindowManager: slow frame 🐢"',
-    '  echo -e "\\e[31mE\\e[0m ActivityManager: ANR in $PACKAGE 🔥"',
-    '  echo "heartbeat ✅"',
-    '}',
   ].join('\n'),
   runAsRoot: false,
   fontSize: 12,
@@ -275,18 +277,6 @@ export const EXAMPLE_PANEL: ScriptingSettings = {
       refreshOnChange: false,
     },
 
-    { id: 'ex_s5', kind: 'section', title: 'Live logs', description: 'A streaming action — press to follow, press again to stop.' },
-    {
-      id: 'ex_watch',
-      kind: 'button',
-      label: 'Watch logs',
-      variant: 'default',
-      confirm: false,
-      bindOutputTo: 'console',
-      mode: 'stream',
-      autoStart: false,
-    },
-
-    { id: 'ex_con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+    { id: 'ex_con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
   ],
 };

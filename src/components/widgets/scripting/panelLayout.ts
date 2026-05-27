@@ -18,6 +18,7 @@ export function categoryOf(c: ControlConfig): Category {
     case 'section':
       return 'section';
     case 'button':
+    case 'daemon':
       return 'buttons';
     case 'console':
       return 'console';

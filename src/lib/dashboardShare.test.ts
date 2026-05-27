@@ -55,12 +55,12 @@ describe('hasScripts', () => {
 });
 
 describe('disarmScripting', () => {
-  it('turns off auto-poll and stream auto-start so nothing runs on import', () => {
+  it('turns off auto-poll and daemon auto-start so nothing runs on import', () => {
     const val = {
       script: 'x',
       controls: [
         { id: 'd', kind: 'readout', boundTo: 'temp', autoPoll: { enabled: true, intervalSec: 3 }, refreshOnChange: false },
-        { id: 'b', kind: 'button', label: 'Watch', mode: 'stream', autoStart: true, bindOutputTo: 'console' },
+        { id: 'b', kind: 'daemon', label: 'Watch', autoStart: true, bindOutputTo: 'console' },
         { id: 'i', kind: 'text', label: 'Pkg' },
       ],
     };

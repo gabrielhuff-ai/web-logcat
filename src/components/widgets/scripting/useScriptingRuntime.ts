@@ -22,7 +22,7 @@ import { runFunctionSim, streamFunctionSim } from '../../../lib/scripting/sim';
 import { envFromControls, isInputControl } from './env';
 import { isBoundDisplay, parseDisplayValue } from './displayParse';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
-import type { ConsoleLine, CtrlState } from './controls';
+import type { ConsoleLine, CtrlState, DaemonStatus } from './controls';
 import type { BoundDisplayControl, ControlConfig, ControlValue } from './scriptingSettings';
 
 const BLANK_DISPLAY: DisplayValue = {
@@ -34,10 +34,10 @@ const BLANK_DISPLAY: DisplayValue = {
   stale: false,
 };
 
-/** Cap a streaming console's scrollback so a fast feed can't grow unbounded. */
+/** Cap a daemon console's scrollback so a fast feed can't grow unbounded. */
 const MAX_STREAM_LINES = 1000;
 
-/** A running stream — `stop()` kills the underlying process / timer. */
+/** A running daemon process — `stop()` kills the underlying process / timer. */
 interface ActiveStream {
   stop: () => void | Promise<void>;
 }
@@ -66,9 +66,12 @@ export interface ScriptingRuntime {
   buttonState: Record<string, CtrlState>;
   consoleViews: Record<string, ConsoleView>;
   displayValues: Record<string, DisplayValue>;
+  /** Per-daemon run state, keyed by control id. */
+  daemonStatus: Record<string, DaemonStatus>;
   /** Non-null when `sh -n` rejected the script (real devices only). */
   scriptError: string | null;
   onRun: (buttonId: string) => void;
+  onToggleDaemon: (daemonId: string) => void;
   onCopyConsole: (consoleId: string) => void;
 }
 
@@ -78,6 +81,7 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   const [buttonState, setButtonState] = useState<Record<string, CtrlState>>({});
   const [consoleViews, setConsoleViews] = useState<Record<string, ConsoleView>>({});
   const [displayValues, setDisplayValues] = useState<Record<string, DisplayValue>>({});
+  const [daemonStatus, setDaemonStatus] = useState<Record<string, DaemonStatus>>({});
   const [scriptError, setScriptError] = useState<string | null>(null);
 
   // Latest values for run handlers without re-creating callbacks per keystroke.
@@ -85,8 +89,8 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   valuesRef.current = values;
   const runIdRef = useRef<Record<string, number>>({});
   const copyTimers = useRef<Record<string, number>>({});
-  // Live streams keyed by button id, and the set of auto-start buttons we've
-  // already kicked off (so a re-render doesn't relaunch one the user stopped).
+  // Live daemon processes keyed by control id, and the set of daemons we've
+  // already auto-started (so a re-render doesn't relaunch one the user stopped).
   const streamsRef = useRef<Record<string, ActiveStream>>({});
   const autoStartedRef = useRef<Set<string>>(new Set());
 
@@ -164,7 +168,22 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     [exec, setConsole, showToast],
   );
 
-  // ── Streaming actions ────────────────────────────────────────────────────
+  const onRun = useCallback(
+    (buttonId: string) => {
+      const ctl = controls.find((c) => c.id === buttonId);
+      if (!ctl || ctl.kind !== 'button') return;
+      setButtonState((s) => (s[buttonId] === 'busy' ? s : { ...s, [buttonId]: 'busy' }));
+      execToConsole(fnFromLabel(ctl.label), resolveConsoleId(ctl.bindOutputTo))
+        .then((r) => setButtonState((s) => ({ ...s, [buttonId]: r.exitCode === 0 ? 'idle' : 'error' })))
+        .catch(() => setButtonState((s) => ({ ...s, [buttonId]: 'error' })));
+    },
+    [controls, execToConsole, resolveConsoleId],
+  );
+
+  // ── Daemons ──────────────────────────────────────────────────────────────
+  // A daemon is a desired-state toggle: the runtime keeps a background process
+  // running while it's "on" and feeds its output to the bound console.
+  //
   // Append one streamed line to a console, capping scrollback (a leading
   // `$ command` line is always kept so the header survives the cap).
   const appendConsole = useCallback((consoleId: string | null, text: string, kind: StreamLineKind) => {
@@ -181,10 +200,11 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     });
   }, []);
 
-  // The process ended on its own — show its exit code and clear the button.
-  const finishStream = useCallback((buttonId: string, consoleId: string | null, code: number) => {
-    delete streamsRef.current[buttonId];
-    setButtonState((s) => ({ ...s, [buttonId]: code === 0 ? 'idle' : 'error' }));
+  // The process ended on its own — a daemon isn't meant to, so a clean exit
+  // marks it inactive and a non-zero exit marks it errored.
+  const finishDaemon = useCallback((daemonId: string, consoleId: string | null, code: number) => {
+    delete streamsRef.current[daemonId];
+    setDaemonStatus((s) => ({ ...s, [daemonId]: code === 0 ? 'inactive' : 'error' }));
     if (!consoleId) return;
     setConsoleViews((prev) => {
       const v = prev[consoleId];
@@ -193,14 +213,14 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     });
   }, []);
 
-  const startStream = useCallback(
-    (buttonId: string) => {
-      const ctl = controls.find((c) => c.id === buttonId);
-      if (!ctl || ctl.kind !== 'button' || streamsRef.current[buttonId]) return;
+  const startDaemon = useCallback(
+    (daemonId: string) => {
+      const ctl = controls.find((c) => c.id === daemonId);
+      if (!ctl || ctl.kind !== 'daemon' || streamsRef.current[daemonId]) return;
       const consoleId = resolveConsoleId(ctl.bindOutputTo);
       const fn = fnFromLabel(ctl.label);
       const env = envFromControls(controls, valuesRef.current);
-      setButtonState((s) => ({ ...s, [buttonId]: 'active' }));
+      setDaemonStatus((s) => ({ ...s, [daemonId]: 'running' }));
       setConsole(consoleId, {
         lines: [{ kind: 'cmd', text: `$ ${fn}` }],
         state: 'idle',
@@ -213,9 +233,9 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
       const onLine = (text: string, kind: StreamLineKind) => appendConsole(consoleId, text, kind);
 
       if (usingFake || !adb) {
-        streamsRef.current[buttonId] = streamFunctionSim(script, fn, env, {
+        streamsRef.current[daemonId] = streamFunctionSim(script, fn, env, {
           onLine,
-          onExit: (code) => finishStream(buttonId, consoleId, code),
+          onExit: (code) => finishDaemon(daemonId, consoleId, code),
         });
         return;
       }
@@ -223,7 +243,7 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
       // Real device: the spawn is async, so park a cancel-only handle until it
       // resolves — if the user stops in the gap, kill the process on arrival.
       let cancelled = false;
-      streamsRef.current[buttonId] = {
+      streamsRef.current[daemonId] = {
         stop: () => {
           cancelled = true;
         },
@@ -233,10 +253,10 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
         { script, fn, env, runAsRoot },
         {
           onLine,
-          onExit: (code) => finishStream(buttonId, consoleId, code),
+          onExit: (code) => finishDaemon(daemonId, consoleId, code),
           onError: (err) => {
             onLine(err.message, 'err');
-            finishStream(buttonId, consoleId, 1);
+            finishDaemon(daemonId, consoleId, 1);
           },
         },
       )
@@ -245,10 +265,10 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
             void handle.stop();
             return;
           }
-          streamsRef.current[buttonId] = handle;
+          streamsRef.current[daemonId] = handle;
         })
         .catch((err: unknown) => {
-          delete streamsRef.current[buttonId];
+          delete streamsRef.current[daemonId];
           const msg =
             err instanceof ShellUnsupportedError
               ? 'This device does not support shell-protocol v2.'
@@ -256,7 +276,7 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
                 ? err.message
                 : String(err);
           onLine(msg, 'err');
-          setButtonState((s) => ({ ...s, [buttonId]: 'error' }));
+          setDaemonStatus((s) => ({ ...s, [daemonId]: 'error' }));
           if (consoleId)
             setConsoleViews((prev) => {
               const v = prev[consoleId];
@@ -265,18 +285,19 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
           showToast(`scripting: ${msg}`);
         });
     },
-    [controls, script, runAsRoot, adb, usingFake, resolveConsoleId, setConsole, appendConsole, finishStream, showToast],
+    [controls, script, runAsRoot, adb, usingFake, resolveConsoleId, setConsole, appendConsole, finishDaemon, showToast],
   );
 
-  const stopStream = useCallback(
-    (buttonId: string) => {
-      const h = streamsRef.current[buttonId];
-      if (!h) return;
-      delete streamsRef.current[buttonId];
-      void h.stop();
-      const ctl = controls.find((c) => c.id === buttonId);
-      const consoleId = ctl && ctl.kind === 'button' ? resolveConsoleId(ctl.bindOutputTo) : null;
-      setButtonState((s) => ({ ...s, [buttonId]: 'idle' }));
+  const stopDaemon = useCallback(
+    (daemonId: string) => {
+      const h = streamsRef.current[daemonId];
+      if (h) {
+        delete streamsRef.current[daemonId];
+        void h.stop();
+      }
+      setDaemonStatus((s) => ({ ...s, [daemonId]: 'inactive' }));
+      const ctl = controls.find((c) => c.id === daemonId);
+      const consoleId = ctl && ctl.kind === 'daemon' ? resolveConsoleId(ctl.bindOutputTo) : null;
       if (consoleId)
         setConsoleViews((prev) => {
           const v = prev[consoleId];
@@ -286,21 +307,12 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     [controls, resolveConsoleId],
   );
 
-  const onRun = useCallback(
-    (buttonId: string) => {
-      const ctl = controls.find((c) => c.id === buttonId);
-      if (!ctl || ctl.kind !== 'button') return;
-      if (ctl.mode === 'stream') {
-        if (streamsRef.current[buttonId]) stopStream(buttonId);
-        else startStream(buttonId);
-        return;
-      }
-      setButtonState((s) => (s[buttonId] === 'busy' ? s : { ...s, [buttonId]: 'busy' }));
-      execToConsole(fnFromLabel(ctl.label), resolveConsoleId(ctl.bindOutputTo))
-        .then((r) => setButtonState((s) => ({ ...s, [buttonId]: r.exitCode === 0 ? 'idle' : 'error' })))
-        .catch(() => setButtonState((s) => ({ ...s, [buttonId]: 'error' })));
+  const onToggleDaemon = useCallback(
+    (daemonId: string) => {
+      if (streamsRef.current[daemonId]) stopDaemon(daemonId);
+      else startDaemon(daemonId);
     },
-    [controls, execToConsole, resolveConsoleId, startStream, stopStream],
+    [startDaemon, stopDaemon],
   );
 
   const onCopyConsole = useCallback(
@@ -423,24 +435,23 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     };
   }, [script, adb, usingFake]);
 
-  // Auto-start streaming buttons once after the dashboard loads. Guarded so a
-  // re-render (or a stream the user stopped) never relaunches on its own.
+  // Auto-start daemons once after the dashboard loads (default on). Guarded so
+  // a re-render — or a daemon the user stopped — never relaunches on its own.
   useEffect(() => {
     for (const c of controls) {
       if (
-        c.kind === 'button' &&
-        c.mode === 'stream' &&
-        c.autoStart &&
+        c.kind === 'daemon' &&
+        (c.autoStart ?? true) &&
         !autoStartedRef.current.has(c.id) &&
         !streamsRef.current[c.id]
       ) {
         autoStartedRef.current.add(c.id);
-        startStream(c.id);
+        startDaemon(c.id);
       }
     }
-  }, [controls, startStream]);
+  }, [controls, startDaemon]);
 
-  // Tear down every live stream on unmount (device disconnect re-renders the
+  // Tear down every live daemon on unmount (device disconnect re-renders the
   // widget tree, and the host tile unmounts the widget).
   useEffect(() => {
     const streams = streamsRef.current;
@@ -449,5 +460,5 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     };
   }, []);
 
-  return { buttonState, consoleViews, displayValues, scriptError, onRun, onCopyConsole };
+  return { buttonState, consoleViews, displayValues, daemonStatus, scriptError, onRun, onToggleDaemon, onCopyConsole };
 }

@@ -36,7 +36,9 @@ export function makeControl(kind: ControlKind): ControlConfig {
     case 'knob':
       return { id, kind, label: 'Knob', defaultValue: 50, min: 0, max: 100, step: 1, unit: '%', onChange: 'refresh' };
     case 'button':
-      return { id, kind, label: 'Action', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once', autoStart: false };
+      return { id, kind, label: 'Action', variant: 'default', confirm: false, bindOutputTo: 'console' };
+    case 'daemon':
+      return { id, kind, label: 'Daemon', bindOutputTo: 'console', showControls: false, autoStart: true };
     case 'console':
       return { id, kind, label: 'Console', scope: 'recent', copyButton: true, autoScroll: true };
     case 'readout':
@@ -60,6 +62,7 @@ export interface PickerEntry {
 
 export const PICKER: readonly PickerEntry[] = [
   { kind: 'button', label: 'Action button', group: 'Inputs' },
+  { kind: 'daemon', label: 'Daemon', group: 'Inputs' },
   { kind: 'console', label: 'Console', group: 'Displays' },
   { kind: 'gauge', label: 'Gauge', group: 'Displays' },
   { kind: 'knob', label: 'Knob', group: 'Inputs' },
@@ -82,7 +85,9 @@ export function derivedName(c: ControlConfig): string {
     case 'console':
       return 'bound: last run';
     case 'button':
-      return `${fnFromLabel(c.label)}()${c.mode === 'stream' ? ' · stream' : ''}`;
+      return `${fnFromLabel(c.label)}()`;
+    case 'daemon':
+      return `${fnFromLabel(c.label)}() · daemon`;
     case 'readout':
     case 'status':
     case 'gauge':

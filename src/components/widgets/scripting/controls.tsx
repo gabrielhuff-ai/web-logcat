@@ -64,8 +64,6 @@ export interface ScButtonProps {
   description?: string;
   confirm?: boolean;
   variant?: 'default' | 'subtle' | 'destructive';
-  /** 'stream' makes the button a Start/Stop toggle for a long-lived run. */
-  mode?: 'once' | 'stream';
   exitCode?: number;
   disabled?: boolean;
   onRun?: () => void;
@@ -77,7 +75,6 @@ export function ScButton({
   description,
   confirm,
   variant = 'default',
-  mode = 'once',
   exitCode = 1,
   disabled,
   onRun,
@@ -85,16 +82,12 @@ export function ScButton({
   const busy = state === 'busy';
   const err = state === 'error';
   const active = state === 'active';
-  // A streaming button in its active state is "running" — it shows Stop and
-  // never gates behind the confirm popover (you're stopping, not launching).
-  const streaming = mode === 'stream' && active;
   const [confirming, setConfirming] = useState(false);
   const cls = [
     'sc-btn',
     variant === 'subtle' && 'subtle',
     variant === 'destructive' && 'destructive',
     active && 'active',
-    streaming && 'streaming',
     busy && 'busy',
     err && 'err',
   ]
@@ -102,7 +95,7 @@ export function ScButton({
     .join(' ');
 
   const handleClick = () => {
-    if (confirm && !confirming && !streaming) {
+    if (confirm && !confirming) {
       setConfirming(true);
       return;
     }
@@ -121,16 +114,9 @@ export function ScButton({
 
   const button = (
     <button type="button" className={cls} disabled={disabled || busy} onClick={handleClick}>
-      {busy ? (
-        <SpinnerDot />
-      ) : streaming ? (
-        <Icons.Stop size={11} />
-      ) : (
-        <Icons.PlayCircle size={12} />
-      )}
-      <span>{streaming ? `Stop ${label}` : label}</span>
-      {confirm && !busy && !err && !streaming && <Icons.Lock size={10} />}
-      {streaming && <span className="sc-btn-live" aria-label="streaming" />}
+      {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
+      <span>{label}</span>
+      {confirm && !busy && !err && <Icons.Lock size={10} />}
       {err && <span className="sc-btn-exit">exit {exitCode}</span>}
     </button>
   );
@@ -172,6 +158,47 @@ export function ScButton({
           document.body,
         )}
     </>
+  );
+}
+
+/** Desired/observed state of a background daemon process. */
+export type DaemonStatus = 'inactive' | 'running' | 'error';
+
+export interface ScDaemonProps {
+  label: string;
+  status?: DaemonStatus;
+  description?: string;
+  onToggle?: () => void;
+}
+
+/** A daemon's on-panel control: a status LED + a Start/Stop toggle. Only
+ *  rendered when the daemon's "Show controls" is on; otherwise it runs
+ *  headless and only its bound console shows anything. */
+export function ScDaemon({ label, status = 'inactive', description, onToggle }: ScDaemonProps) {
+  const running = status === 'running';
+  const color = running ? 'green' : status === 'error' ? 'red' : 'off';
+  const stateText = running ? 'running' : status === 'error' ? 'error' : 'stopped';
+  return (
+    <div className={'sc-daemon ' + status}>
+      <span className={'sc-led-bulb led-' + color + (running ? ' pulsing' : '')} />
+      <div className="sc-daemon-meta">
+        <div className="sc-daemon-label">
+          {label}
+          {description && <InfoDot description={description} />}
+        </div>
+        <div className="sc-daemon-state">{stateText}</div>
+      </div>
+      <button
+        type="button"
+        className={'sc-daemon-btn' + (running ? ' on' : '')}
+        onClick={onToggle}
+        aria-pressed={running}
+        aria-label={(running ? 'Stop ' : 'Start ') + label}
+      >
+        {running ? <Icons.Stop size={11} /> : <Icons.Play size={11} />}
+        <span>{running ? 'Stop' : 'Start'}</span>
+      </button>
+    </div>
   );
 }
 
@@ -615,6 +642,8 @@ export interface ScConsoleProps {
   stopped?: boolean;
   /** Hide the leading `$ command` line(s). */
   hideCommand?: boolean;
+  /** Hide the header bar entirely, leaving only the output body. */
+  hideChrome?: boolean;
   /** Keep the body pinned to the bottom as new lines arrive. */
   autoScroll?: boolean;
   onCopy?: () => void;
@@ -631,6 +660,7 @@ export function ScConsole({
   streaming = false,
   stopped = false,
   hideCommand = false,
+  hideChrome = false,
   autoScroll = true,
   onCopy,
 }: ScConsoleProps) {
@@ -646,7 +676,8 @@ export function ScConsole({
   }, [autoScroll, shown.length, streaming]);
 
   return (
-    <div className="sc-console">
+    <div className={'sc-console' + (hideChrome ? ' bare' : '')}>
+      {!hideChrome && (
       <div className="sc-console-head">
         <span className="sc-console-glyph">
           <Icons.Terminal size={11} />
@@ -684,6 +715,7 @@ export function ScConsole({
           </button>
         )}
       </div>
+      )}
       <div className="sc-console-body" ref={bodyRef}>
         {empty || shown.length === 0 ? (
           <div className="sc-console-empty">Output from the most recent run appears here.</div>

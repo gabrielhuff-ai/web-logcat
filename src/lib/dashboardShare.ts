@@ -16,7 +16,7 @@
 //     plain base64url where CompressionStream is unavailable; a one-char codec
 //     marker says which.
 //   - Safe import: scripting panels run shell, so import disarms auto-poll
-//     and stream auto-start (nothing executes on load) and the UI gates
+//     and daemon auto-start (nothing executes on load) and the UI gates
 //     script-bearing imports behind an explicit acknowledgement.
 
 import { loadLayout, saveLayout } from './layout';
@@ -143,8 +143,8 @@ export function applySnapshot(s: DashboardSnapshot): void {
 }
 
 /** Disable anything that would run shell on load — auto-poll on bound displays
- *  and auto-start on streaming buttons — so an imported panel never executes
- *  on its own. The user re-arms these intentionally via the builder. */
+ *  and auto-start on daemons — so an imported panel never executes on its own.
+ *  The user re-arms these intentionally via the builder. */
 export function disarmScripting(val: unknown): unknown {
   if (!val || typeof val !== 'object') return val;
   const o = val as { controls?: unknown };

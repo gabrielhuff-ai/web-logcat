@@ -450,6 +450,8 @@ function CtrlIcon({ kind }: { kind: ControlKind }): ReactNode {
       return <Icons.SplitV size={11} />;
     case 'button':
       return <Icons.PlayCircle size={11} />;
+    case 'daemon':
+      return <Icons.Refresh size={11} />;
     case 'toggle':
       return <Icons.Power size={11} />;
     case 'knob':

@@ -438,20 +438,18 @@ test.describe('scripting widget', () => {
     await expect(body).not.toContainText('$ greet');
   });
 
-  test('a streaming button follows output and stops on a second press', async ({ page }) => {
+  test('a daemon with controls toggles a background stream on and off', async ({ page }) => {
     const panel = {
       script: 'watch() {\n  echo -e "\\e[32mline up\\e[0m"\n  echo "beat 🐢"\n}\n',
       runAsRoot: false,
       fontSize: 12,
       controls: [
         {
-          id: 'b',
-          kind: 'button',
+          id: 'd',
+          kind: 'daemon',
           label: 'Watch',
-          variant: 'default',
-          confirm: false,
           bindOutputTo: 'console',
-          mode: 'stream',
+          showControls: true,
           autoStart: false,
         },
         { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
@@ -469,47 +467,43 @@ test.describe('scripting widget', () => {
         );
         localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
       },
-      ['t_stream', panel],
+      ['t_daemon', panel],
     );
 
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
-    const btn = tile.locator('.sc-btn').filter({ hasText: 'Watch' });
 
-    // Start: header shows the live pill, the button flips to "Stop Watch",
-    // and the simulated lines stream in.
-    await btn.click();
+    // autoStart is off, so it begins stopped (LED off, button says Start).
+    const daemon = tile.locator('.sc-daemon');
+    await expect(daemon).toContainText('stopped');
+    const toggle = daemon.locator('.sc-daemon-btn');
+    await expect(toggle).toContainText('Start');
+
+    // Start it: LED goes green, the console shows the live pill + streamed lines.
+    await toggle.click();
+    await expect(daemon).toContainText('running');
+    await expect(toggle).toContainText('Stop');
     await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
-    await expect(btn).toContainText('Stop Watch');
     await expect(tile.locator('.sc-console-body')).toContainText('line up');
     await expect(tile.locator('.sc-console-body')).toContainText('🐢');
 
-    // Stop: the live pill is replaced by a neutral "stopped" marker and the
-    // button returns to its label.
-    await btn.click();
+    // Stop it: back to stopped, the live pill gives way to a neutral marker.
+    await toggle.click();
+    await expect(daemon).toContainText('stopped');
+    await expect(toggle).toContainText('Start');
     await expect(tile.locator('.sc-exit.live')).toHaveCount(0);
-    await expect(tile.locator('.sc-exit')).toContainText('stopped');
-    await expect(btn).not.toContainText('Stop');
   });
 
-  test('a streaming button with "start on load" follows output without a press', async ({ page }) => {
+  test('a headless daemon auto-starts on load and feeds a chrome-less console', async ({ page }) => {
     const panel = {
       script: 'watch() {\n  echo "auto tick"\n}\n',
       runAsRoot: false,
       fontSize: 12,
       controls: [
-        {
-          id: 'b',
-          kind: 'button',
-          label: 'Watch',
-          variant: 'default',
-          confirm: false,
-          bindOutputTo: 'console',
-          mode: 'stream',
-          autoStart: true,
-        },
-        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+        // showControls off → no on-panel UI; autoStart defaults on.
+        { id: 'd', kind: 'daemon', label: 'Watch', bindOutputTo: 'console' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true, hideChrome: true },
       ],
     };
     await page.addInitScript(
@@ -524,14 +518,16 @@ test.describe('scripting widget', () => {
         );
         localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
       },
-      ['t_auto', panel],
+      ['t_headless', panel],
     );
 
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
-    // No click — it should already be streaming on load.
-    await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
+    // No daemon UI is rendered (headless), and the console header is hidden.
+    await expect(tile.locator('.sc-daemon')).toHaveCount(0);
+    await expect(tile.locator('.sc-console-head')).toHaveCount(0);
+    // It auto-started, so output appears with no interaction.
     await expect(tile.locator('.sc-console-body')).toContainText('auto tick');
   });
 
