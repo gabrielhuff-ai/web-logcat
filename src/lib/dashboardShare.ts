@@ -16,8 +16,8 @@
 //     plain base64url where CompressionStream is unavailable; a one-char codec
 //     marker says which.
 //   - Safe import: scripting panels run shell, so import disarms auto-poll
-//     (nothing executes on load) and the UI gates script-bearing imports
-//     behind an explicit acknowledgement.
+//     and daemon auto-start (nothing executes on load) and the UI gates
+//     script-bearing imports behind an explicit acknowledgement.
 
 import { loadLayout, saveLayout } from './layout';
 import { settingsKey } from './tileSettings';
@@ -142,20 +142,23 @@ export function applySnapshot(s: DashboardSnapshot): void {
   }
 }
 
-/** Disable auto-poll on every bound display so an imported panel never runs
- *  shell on load. The user re-enables polling intentionally via the builder. */
-function disarmScripting(val: unknown): unknown {
+/** Disable anything that would run shell on load — auto-poll on bound displays
+ *  and auto-start on daemons — so an imported panel never executes on its own.
+ *  The user re-arms these intentionally via the builder. */
+export function disarmScripting(val: unknown): unknown {
   if (!val || typeof val !== 'object') return val;
   const o = val as { controls?: unknown };
   if (!Array.isArray(o.controls)) return val;
   const controls = o.controls.map((c) => {
-    if (c && typeof c === 'object' && 'autoPoll' in c) {
-      const ctl = c as { autoPoll?: { enabled?: boolean; intervalSec?: number } };
-      if (ctl.autoPoll && typeof ctl.autoPoll === 'object') {
-        return { ...ctl, autoPoll: { ...ctl.autoPoll, enabled: false } };
-      }
+    if (!c || typeof c !== 'object') return c;
+    let ctl = c as Record<string, unknown>;
+    if ('autoPoll' in ctl && ctl.autoPoll && typeof ctl.autoPoll === 'object') {
+      ctl = { ...ctl, autoPoll: { ...(ctl.autoPoll as object), enabled: false } };
     }
-    return c;
+    if ('autoStart' in ctl && ctl.autoStart) {
+      ctl = { ...ctl, autoStart: false };
+    }
+    return ctl;
   });
   return { ...o, controls };
 }

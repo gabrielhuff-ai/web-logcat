@@ -101,6 +101,8 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
           onInputChange={(id, v) => setValues((prev) => ({ ...prev, [id]: v }))}
           buttonState={runtime.buttonState}
           onRun={runtime.onRun}
+          daemonStatus={runtime.daemonStatus}
+          onToggleDaemon={runtime.onToggleDaemon}
           displayValues={runtime.displayValues}
           consoleViews={runtime.consoleViews}
           onCopyConsole={runtime.onCopyConsole}

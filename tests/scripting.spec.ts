@@ -364,6 +364,172 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('clear_data');
   });
 
+  test('a console renders ANSI colours and emoji from echo -e output', async ({ page }) => {
+    const panel = {
+      script: 'colors() {\n  echo -e "\\e[31mERR\\e[0m \\e[32mOK\\e[0m 🎉"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Colors', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_col', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Colors' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body.locator('.sc-ansi-fg-red')).toContainText('ERR');
+    await expect(body.locator('.sc-ansi-fg-green')).toContainText('OK');
+    // Emoji survives the ANSI parser and reaches the DOM.
+    await expect(body).toContainText('🎉');
+  });
+
+  test('a console can hide the leading "$ command" line', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hello world"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, hideCommand: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_hide', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Greet' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body).toContainText('hello world');
+    // The `$ greet` command line is suppressed.
+    await expect(body.locator('.k-cmd')).toHaveCount(0);
+    await expect(body).not.toContainText('$ greet');
+  });
+
+  test('a daemon with controls toggles a background stream on and off', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo -e "\\e[32mline up\\e[0m"\n  echo "beat 🐢"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'd',
+          kind: 'daemon',
+          label: 'Watch',
+          bindOutputTo: 'console',
+          showControls: true,
+          autoStart: false,
+        },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_daemon', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // autoStart is off, so it begins stopped — the whole surface is the toggle.
+    const daemon = tile.locator('.sc-daemon');
+    await expect(daemon).toContainText('stopped');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
+
+    // Click the control: LED goes green, the console shows the live pill + lines.
+    await daemon.click();
+    await expect(daemon).toContainText('running');
+    await expect(daemon).toHaveAttribute('aria-label', /^Stop /);
+    await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
+    await expect(tile.locator('.sc-console-body')).toContainText('line up');
+    await expect(tile.locator('.sc-console-body')).toContainText('🐢');
+
+    // Click again: back to stopped, the live pill gives way to a neutral marker.
+    await daemon.click();
+    await expect(daemon).toContainText('stopped');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
+    await expect(tile.locator('.sc-exit.live')).toHaveCount(0);
+  });
+
+  test('a headless daemon auto-starts on load and feeds a chrome-less console', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo "auto tick"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // showControls off → no on-panel UI; autoStart defaults on.
+        { id: 'd', kind: 'daemon', label: 'Watch', bindOutputTo: 'console' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true, hideChrome: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_headless', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // No daemon UI is rendered (headless), and the console header is hidden.
+    await expect(tile.locator('.sc-daemon')).toHaveCount(0);
+    await expect(tile.locator('.sc-console-head')).toHaveCount(0);
+    // It auto-started, so output appears with no interaction.
+    await expect(tile.locator('.sc-console-body')).toContainText('auto tick');
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();

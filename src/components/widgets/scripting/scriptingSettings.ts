@@ -59,11 +59,34 @@ export interface ButtonControl extends BaseControl {
   bindOutputTo: string;
 }
 
+/**
+ * A long-running background process, managed declaratively. Unlike a button
+ * (imperative — click to run once), a daemon is a desired-state toggle: the
+ * runtime starts/stops the process to match. Its function (derived from the
+ * label) is expected to keep running — e.g. `logcat | grep "$PACKAGE"`.
+ */
+export interface DaemonControl extends BaseControl {
+  kind: 'daemon';
+  /** Console id this daemon's output feeds, or 'console'. */
+  bindOutputTo: string;
+  /** Show the start/stop + status LED on the panel. Default false (headless). */
+  showControls?: boolean;
+  /**
+   * Start the daemon when the dashboard loads. Default true. Disarmed on panel
+   * import so a shared panel never runs shell on its own.
+   */
+  autoStart?: boolean;
+}
+
 export interface ConsoleControl extends BaseControl {
   kind: 'console';
   scope: 'recent' | 'scrollback';
   copyButton: boolean;
   autoScroll: boolean;
+  /** Hide the leading `$ command` line printed before each run's output. */
+  hideCommand?: boolean;
+  /** Hide the console header (title + status pill + copy), leaving only output. */
+  hideChrome?: boolean;
 }
 
 export interface BoundDisplayControl extends BaseControl {
@@ -89,6 +112,7 @@ export interface SectionControl {
 export type ControlConfig =
   | InputControl
   | ButtonControl
+  | DaemonControl
   | ConsoleControl
   | BoundDisplayControl
   | SectionControl;

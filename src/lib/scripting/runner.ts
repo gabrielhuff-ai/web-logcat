@@ -17,11 +17,28 @@
 // both AOSP and Magisk `su` accept (`su -c` is treated as a uid by AOSP `su`).
 
 import type { Adb } from '@yume-chan/adb';
+import { SplitStringStream, TextDecoderStream } from '@yume-chan/stream-extra';
 
 export interface RunResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+}
+
+export type StreamLineKind = 'out' | 'err';
+
+export interface StreamHandlers {
+  /** A line of output arrived (newline stripped). */
+  onLine: (text: string, kind: StreamLineKind) => void;
+  /** The process exited on its own (not via stop()). */
+  onExit?: (code: number) => void;
+  /** The transport errored mid-stream. */
+  onError?: (err: Error) => void;
+}
+
+export interface StreamHandle {
+  /** Kill the process and release the streams. Idempotent. */
+  stop: () => Promise<void>;
 }
 
 export interface RunOpts {
@@ -63,6 +80,61 @@ export async function runFunction(adb: Adb, opts: RunOpts): Promise<RunResult> {
   if (!sp) throw new ShellUnsupportedError();
   const { stdout, stderr, exitCode } = await sp.spawnWaitText(buildCommand(opts));
   return { stdout, stderr, exitCode };
+}
+
+/**
+ * Run one function as a long-lived stream. Unlike runFunction, this does not
+ * wait for the process to finish — it spawns the command and pumps each line
+ * of stdout/stderr to the handlers as it arrives, returning a handle whose
+ * stop() kills the process. Used by streaming action buttons (e.g. a function
+ * that pipes `logcat`). Throws ShellUnsupportedError on devices without
+ * shell-protocol v2.
+ */
+export async function streamFunction(
+  adb: Adb,
+  opts: RunOpts,
+  handlers: StreamHandlers,
+): Promise<StreamHandle> {
+  const sp = adb.subprocess.shellProtocol;
+  if (!sp) throw new ShellUnsupportedError();
+  const proc = await sp.spawn(buildCommand(opts));
+
+  let stopped = false;
+  const pump = (stream: typeof proc.stdout, kind: StreamLineKind) => {
+    const reader = stream
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(new SplitStringStream('\n'))
+      .getReader();
+    void (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done || stopped) break;
+          handlers.onLine(value, kind);
+        }
+      } catch (err) {
+        if (!stopped) handlers.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    })();
+  };
+  pump(proc.stdout, 'out');
+  pump(proc.stderr, 'err');
+
+  void proc.exited.then((code) => {
+    if (!stopped) handlers.onExit?.(code);
+  });
+
+  return {
+    async stop() {
+      if (stopped) return;
+      stopped = true;
+      try {
+        await proc.kill();
+      } catch {
+        /* already gone */
+      }
+    },
+  };
 }
 
 /**
