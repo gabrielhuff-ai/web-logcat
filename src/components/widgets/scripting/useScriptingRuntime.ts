@@ -19,6 +19,8 @@ import {
   type StreamLineKind,
 } from '../../../lib/scripting/runner';
 import { runFunctionSim, streamFunctionSim } from '../../../lib/scripting/sim';
+import { takeAfterClear } from '../../../lib/scripting/ansi';
+import { RESTART_DELAY_MS, shouldRestart } from './daemonRestart';
 import { envFromControls, isInputControl } from './env';
 import { isBoundDisplay, parseDisplayValue } from './displayParse';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
@@ -93,6 +95,11 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   // already auto-started (so a re-render doesn't relaunch one the user stopped).
   const streamsRef = useRef<Record<string, ActiveStream>>({});
   const autoStartedRef = useRef<Set<string>>(new Set());
+  // Pending restart timers keyed by control id (a daemon between exit and its
+  // policy-driven restart), and a live ref to startDaemon so the restart timer
+  // can call it without a callback dependency cycle.
+  const restartTimersRef = useRef<Record<string, number>>({});
+  const startDaemonRef = useRef<(id: string) => void>(() => {});
 
   useEffect(() => {
     const timers = copyTimers.current;
@@ -185,12 +192,16 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   // running while it's "on" and feeds its output to the bound console.
   //
   // Append one streamed line to a console, capping scrollback (a leading
-  // `$ command` line is always kept so the header survives the cap).
+  // `$ command` line is kept so the header survives the cap). A line carrying a
+  // screen-clear sequence (`clear`, `printf '\033[2J'`, …) wipes the buffer
+  // first, so a repainting command shows only its latest frame.
   const appendConsole = useCallback((consoleId: string | null, text: string, kind: StreamLineKind) => {
     if (!consoleId) return;
+    const { cleared, rest } = takeAfterClear(text);
     setConsoleViews((prev) => {
       const v = prev[consoleId] ?? EMPTY_CONSOLE;
-      const lines = v.lines.concat({ kind, text });
+      const base = cleared ? [] : v.lines;
+      const lines = rest === '' ? base : base.concat({ kind, text: rest });
       let capped = lines;
       if (lines.length > MAX_STREAM_LINES) {
         const head = lines[0]?.kind === 'cmd' ? [lines[0]] : [];
@@ -200,18 +211,35 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     });
   }, []);
 
-  // The process ended on its own — a daemon isn't meant to, so a clean exit
-  // marks it inactive and a non-zero exit marks it errored.
-  const finishDaemon = useCallback((daemonId: string, consoleId: string | null, code: number) => {
-    delete streamsRef.current[daemonId];
-    setDaemonStatus((s) => ({ ...s, [daemonId]: code === 0 ? 'inactive' : 'error' }));
-    if (!consoleId) return;
-    setConsoleViews((prev) => {
-      const v = prev[consoleId];
-      if (!v) return prev;
-      return { ...prev, [consoleId]: { ...v, streaming: false, stopped: false, state: code === 0 ? 'idle' : 'error', exit: code } };
-    });
-  }, []);
+  // The process ended. The restart policy decides what happens: by default a
+  // daemon is terminal (clean exit ⇒ finished, non-zero ⇒ error) and does not
+  // restart; otherwise it's relaunched after a short delay (so a fast-exiting
+  // command can't spin). The user can always toggle it to run/stop.
+  const finishDaemon = useCallback(
+    (daemonId: string, consoleId: string | null, code: number) => {
+      delete streamsRef.current[daemonId];
+      const ctl = controls.find((c) => c.id === daemonId);
+      const policy = ctl && ctl.kind === 'daemon' ? ctl.restart : undefined;
+      if (shouldRestart(policy, code)) {
+        // Stays "running" across the gap, then relaunches (which resets the
+        // console). startDaemon is read from a ref to avoid a dependency cycle.
+        setDaemonStatus((s) => ({ ...s, [daemonId]: 'running' }));
+        restartTimersRef.current[daemonId] = window.setTimeout(() => {
+          delete restartTimersRef.current[daemonId];
+          startDaemonRef.current(daemonId);
+        }, RESTART_DELAY_MS);
+        return;
+      }
+      setDaemonStatus((s) => ({ ...s, [daemonId]: code === 0 ? 'finished' : 'error' }));
+      if (!consoleId) return;
+      setConsoleViews((prev) => {
+        const v = prev[consoleId];
+        if (!v) return prev;
+        return { ...prev, [consoleId]: { ...v, streaming: false, stopped: false, state: code === 0 ? 'idle' : 'error', exit: code } };
+      });
+    },
+    [controls],
+  );
 
   const startDaemon = useCallback(
     (daemonId: string) => {
@@ -287,9 +315,17 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     },
     [controls, script, runAsRoot, adb, usingFake, resolveConsoleId, setConsole, appendConsole, finishDaemon, showToast],
   );
+  // Latest startDaemon, so a pending restart timer can relaunch without a
+  // callback dependency cycle (finishDaemon → restart timer → startDaemon).
+  startDaemonRef.current = startDaemon;
 
   const stopDaemon = useCallback(
     (daemonId: string) => {
+      const pending = restartTimersRef.current[daemonId];
+      if (pending != null) {
+        window.clearTimeout(pending);
+        delete restartTimersRef.current[daemonId];
+      }
       const h = streamsRef.current[daemonId];
       if (h) {
         delete streamsRef.current[daemonId];
@@ -309,7 +345,8 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
 
   const onToggleDaemon = useCallback(
     (daemonId: string) => {
-      if (streamsRef.current[daemonId]) stopDaemon(daemonId);
+      // Running, or waiting to restart, counts as "on" — toggle stops it.
+      if (streamsRef.current[daemonId] || restartTimersRef.current[daemonId] != null) stopDaemon(daemonId);
       else startDaemon(daemonId);
     },
     [startDaemon, stopDaemon],
@@ -451,12 +488,14 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     }
   }, [controls, startDaemon]);
 
-  // Tear down every live daemon on unmount (device disconnect re-renders the
-  // widget tree, and the host tile unmounts the widget).
+  // Tear down every live daemon (and any pending restart) on unmount (device
+  // disconnect re-renders the widget tree, and the host tile unmounts it).
   useEffect(() => {
     const streams = streamsRef.current;
+    const timers = restartTimersRef.current;
     return () => {
       for (const h of Object.values(streams)) void h.stop();
+      for (const t of Object.values(timers)) window.clearTimeout(t);
     };
   }, []);
 

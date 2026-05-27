@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasAnsi, parseAnsi } from './ansi';
+import { hasAnsi, parseAnsi, takeAfterClear } from './ansi';
 
 const ESC = '\x1b';
 
@@ -67,5 +67,29 @@ describe('hasAnsi', () => {
   it('detects escape sequences', () => {
     expect(hasAnsi(`${ESC}[31mx`)).toBe(true);
     expect(hasAnsi('plain')).toBe(false);
+  });
+});
+
+describe('takeAfterClear', () => {
+  it('passes plain text through untouched', () => {
+    expect(takeAfterClear('hello')).toEqual({ cleared: false, rest: 'hello' });
+  });
+
+  it('detects CSI 2J / 3J and returns what follows', () => {
+    expect(takeAfterClear(`old${ESC}[2Jnew`)).toEqual({ cleared: true, rest: 'new' });
+    expect(takeAfterClear(`${ESC}[3J`)).toEqual({ cleared: true, rest: '' });
+  });
+
+  it('detects the RIS full reset (ESC c)', () => {
+    expect(takeAfterClear(`${ESC}cfresh`)).toEqual({ cleared: true, rest: 'fresh' });
+  });
+
+  it('keeps only the text after the last clear', () => {
+    expect(takeAfterClear(`a${ESC}[2Jb${ESC}[2Jc`)).toEqual({ cleared: true, rest: 'c' });
+  });
+
+  it('leaves a trailing cursor-home for the SGR parser to strip', () => {
+    // `printf '\033[2J\033[H'` → clear, then the rest still carries ESC[H.
+    expect(takeAfterClear(`${ESC}[2J${ESC}[H`)).toEqual({ cleared: true, rest: `${ESC}[H` });
   });
 });

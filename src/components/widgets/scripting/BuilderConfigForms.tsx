@@ -16,8 +16,16 @@ import type {
   ControlConfig,
   DaemonControl,
   InputControl,
+  RestartPolicy,
   SectionControl,
 } from './scriptingSettings';
+
+const RESTART_LABELS: Record<RestartPolicy, string> = {
+  no: 'Never',
+  'on-failure': 'On failure',
+  'on-success': 'On success',
+  always: 'Always',
+};
 
 export interface BindTarget {
   value: string;
@@ -430,6 +438,24 @@ function ConfigDaemon({
       </FormRow>
       <FormRow label="Auto-start" help="Start the daemon when the dashboard loads. On by default; disarmed on import so a shared panel never runs on its own.">
         <MiniToggle on={control.autoStart ?? true} onChange={(v) => onPatch({ autoStart: v })} label="Auto-start" />
+      </FormRow>
+      <FormRow
+        label="Restart"
+        help="When the process exits, restart it (like systemd's Restart=). Never (default) leaves it finished/errored; on failure restarts after a non-zero exit, on success after a clean exit, always after either. Restarts after a short delay."
+      >
+        <div className="bdr-form-select">
+          <span>{RESTART_LABELS[control.restart ?? 'no']}</span>
+          <Icons.Chevron size={11} />
+          <select
+            value={control.restart ?? 'no'}
+            onChange={(e) => onPatch({ restart: e.target.value as RestartPolicy })}
+          >
+            <option value="no">Never</option>
+            <option value="on-failure">On failure</option>
+            <option value="on-success">On success</option>
+            <option value="always">Always</option>
+          </select>
+        </div>
       </FormRow>
       <FormRow label="Function preview" help={body ? 'Runs in the background until stopped — it should keep running (e.g. pipe from logcat), not exit.' : undefined}>
         <pre className={'bdr-fnpreview' + (body ? '' : ' missing')}>

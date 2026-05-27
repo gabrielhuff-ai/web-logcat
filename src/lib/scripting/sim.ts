@@ -122,9 +122,12 @@ export interface SimStreamHandle {
 }
 
 /**
- * Stream a function's simulated output on a timer, looping so the console
- * keeps scrolling like a real `logcat` follow. Returns a handle whose stop()
- * cancels the timer. An unknown function emits one error line and exits 127.
+ * Stream a function's simulated output on a timer. A function that would run
+ * forever (no `exit`) loops, so the console keeps scrolling like a real
+ * `logcat` follow; a function that calls `exit [code]` emits its output once
+ * and then finishes with that code (so the daemon's finished/error state is
+ * reachable without a device). Returns a handle whose stop() cancels the
+ * timer. An unknown function emits one error line and exits 127.
  */
 export function streamFunctionSim(
   script: string,
@@ -139,16 +142,29 @@ export function streamFunctionSim(
     handlers.onExit?.(127);
     return { stop: () => {} };
   }
+  // A trailing `exit [code]` means the function terminates rather than loops.
+  const exitMatch = /\bexit\b[ \t]*(\d*)/.exec(extractFunctionBody(script, fn) ?? '');
+  const finishCode = exitMatch ? (exitMatch[1] === '' ? 0 : Number(exitMatch[1])) : null;
+
   let i = 0;
-  // Emit the first line promptly so the console isn't blank, then keep going.
+  let done = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stop = () => {
+    done = true;
+    if (timer) clearInterval(timer);
+  };
   const tick = () => {
+    if (done) return;
     const line = lines[i % lines.length];
     handlers.onLine(line.text, line.kind);
     i += 1;
+    if (finishCode !== null && i >= lines.length) {
+      stop();
+      handlers.onExit?.(finishCode);
+    }
   };
+  // Emit the first line promptly so the console isn't blank, then keep going.
   tick();
-  const timer = setInterval(tick, intervalMs);
-  return {
-    stop: () => clearInterval(timer),
-  };
+  if (!done) timer = setInterval(tick, intervalMs);
+  return { stop };
 }

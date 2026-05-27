@@ -87,6 +87,29 @@ describe('streamFunctionSim', () => {
     expect(lines).toEqual(['a', 'b', 'a']); // stop() halts emission
   });
 
+  it('finishes (no looping) with the code when the function calls exit', () => {
+    const lines: string[] = [];
+    let exit = -1;
+    const h = streamFunctionSim('f() { echo done; exit 0; }', 'f', {}, {
+      onLine: (t) => lines.push(t),
+      onExit: (c) => (exit = c),
+    });
+    expect(lines).toEqual(['done']);
+    expect(exit).toBe(0);
+    vi.advanceTimersByTime(2100);
+    expect(lines).toEqual(['done']); // did not loop after exiting
+    h.stop();
+  });
+
+  it('reports the explicit non-zero exit code', () => {
+    let exit = -1;
+    streamFunctionSim('f() { echo oops; exit 3; }', 'f', {}, {
+      onLine: () => {},
+      onExit: (c) => (exit = c),
+    });
+    expect(exit).toBe(3);
+  });
+
   it('reports an unknown function as an error line and exits 127', () => {
     const lines: { t: string; k: string }[] = [];
     let exit = -1;

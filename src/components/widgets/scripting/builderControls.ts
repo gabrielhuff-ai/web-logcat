@@ -38,7 +38,7 @@ export function makeControl(kind: ControlKind): ControlConfig {
     case 'button':
       return { id, kind, label: 'Action', variant: 'default', confirm: false, bindOutputTo: 'console' };
     case 'daemon':
-      return { id, kind, label: 'Daemon', bindOutputTo: 'console', showControls: false, autoStart: true };
+      return { id, kind, label: 'Daemon', bindOutputTo: 'console', showControls: false, autoStart: true, restart: 'no' };
     case 'console':
       return { id, kind, label: 'Console', scope: 'recent', copyButton: true, autoScroll: true };
     case 'readout':

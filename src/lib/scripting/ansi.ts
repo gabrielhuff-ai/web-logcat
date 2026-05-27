@@ -140,3 +140,23 @@ export function hasAnsi(s: string): boolean {
   // eslint-disable-next-line no-control-regex
   return /\x1B[[\]]/.test(s);
 }
+
+// Screen-clear sequences a program emits to wipe the terminal: CSI 2J (erase
+// display), CSI 3J (erase scrollback), and RIS (ESC c, full reset). `clear`,
+// `reset`, and `printf '\033[2J\033[H'` all produce one of these.
+// eslint-disable-next-line no-control-regex
+const CLEAR_RE = /\x1B\[[23]J|\x1Bc/g;
+
+/**
+ * If a line contains a screen-clear sequence, report it and return only the
+ * text that follows the *last* clear — i.e. what survives the wipe. Lets the
+ * console honour `clear` / a repainting command (top-style) instead of
+ * accumulating forever.
+ */
+export function takeAfterClear(text: string): { cleared: boolean; rest: string } {
+  CLEAR_RE.lastIndex = 0;
+  let idx = -1;
+  let m: RegExpExecArray | null;
+  while ((m = CLEAR_RE.exec(text)) !== null) idx = m.index + m[0].length;
+  return idx === -1 ? { cleared: false, rest: text } : { cleared: true, rest: text.slice(idx) };
+}

@@ -59,6 +59,9 @@ export interface ButtonControl extends BaseControl {
   bindOutputTo: string;
 }
 
+/** Daemon restart policy, mirroring systemd's `Restart=`. */
+export type RestartPolicy = 'no' | 'on-success' | 'on-failure' | 'always';
+
 /**
  * A long-running background process, managed declaratively. Unlike a button
  * (imperative — click to run once), a daemon is a desired-state toggle: the
@@ -76,6 +79,13 @@ export interface DaemonControl extends BaseControl {
    * import so a shared panel never runs shell on its own.
    */
   autoStart?: boolean;
+  /**
+   * What to do when the process exits, like systemd's `Restart=`. Default 'no'
+   * (terminal finished/error state). 'on-failure' restarts on a non-zero exit,
+   * 'on-success' on a clean exit, 'always' on either. Restarts after a short
+   * delay so a fast-exiting command can't spin.
+   */
+  restart?: RestartPolicy;
 }
 
 export interface ConsoleControl extends BaseControl {

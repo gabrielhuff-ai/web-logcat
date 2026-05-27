@@ -161,8 +161,9 @@ export function ScButton({
   );
 }
 
-/** Desired/observed state of a background daemon process. */
-export type DaemonStatus = 'inactive' | 'running' | 'error';
+/** Desired/observed state of a background daemon process. `finished` is a
+ *  terminal clean-exit state (like `error`, but exit 0) — it does not restart. */
+export type DaemonStatus = 'inactive' | 'running' | 'error' | 'finished';
 
 export interface ScDaemonProps {
   label: string;
@@ -177,8 +178,10 @@ export interface ScDaemonProps {
  *  runs headless and only its bound console shows anything. */
 export function ScDaemon({ label, status = 'inactive', description, onToggle }: ScDaemonProps) {
   const running = status === 'running';
-  const color = running ? 'green' : status === 'error' ? 'red' : 'off';
-  const stateText = running ? 'running' : status === 'error' ? 'error' : 'stopped';
+  const color =
+    status === 'running' ? 'green' : status === 'error' ? 'red' : status === 'finished' ? 'blue' : 'off';
+  const stateText =
+    status === 'running' ? 'running' : status === 'error' ? 'error' : status === 'finished' ? 'finished' : 'stopped';
   return (
     <button
       type="button"
