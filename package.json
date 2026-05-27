@@ -1,6 +1,6 @@
 {
   "name": "web-logcat",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "private": true,
   "description": "Browser-based Android logcat viewer (WebUSB + ADB).",
   "license": "MIT",
