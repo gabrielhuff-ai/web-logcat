@@ -140,16 +140,24 @@ stops the process to match (akin to a service manager). The function derives
 from the label, exactly like an action button, and its output streams to the
 bound console.
 
-- **Show controls** (default off) — show a Start / Stop toggle and a status
-  LED (running / stopped / error) on the panel. With it off, the daemon runs
-  headless and only its bound console shows anything — pair it with a console
-  set to *Hide chrome* for a clean log pane.
+- **Show controls** (default off) — the whole control is a single clickable
+  surface: a status LED (running / finished / error / stopped), the label, and
+  a play/stop glyph. Clicking it starts or stops the daemon. With it off, the
+  daemon runs headless and only its bound console shows anything — pair it with
+  a console set to *Hide chrome* for a clean log pane.
 - **Auto-start** (default on) — start the daemon when the dashboard loads.
   Always disarmed on import, so an imported panel never starts a process on
   its own; re-arm it from the builder.
 
-If the process exits on its own (a daemon shouldn't), the LED turns red for a
-non-zero exit; toggle it to retry.
+A daemon is meant to keep running, but if the process exits on its own it
+enters a **terminal** state and is **not** restarted: a clean exit (0) shows
+**finished** (blue LED), a non-zero exit shows **error** (red LED). Click the
+control to run it again.
+
+A daemon can **clear its console** by emitting a standard terminal clear —
+`clear`, `reset`, or `printf '\033[2J\033[H'`. This also lets a repainting
+command (a `top`-style refresh that clears and redraws) show only its latest
+frame instead of accumulating.
 
 ### Displays
 
@@ -158,7 +166,7 @@ optionally when an input they read changes) and render its output:
 
 | Display | Renders the function's output as |
 | --- | --- |
-| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji. Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output. |
+| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output. |
 | **Readout** | The first number on the last non-empty line, plus a unit — e.g. `battery_temp` ↦ `31.2 °C`. |
 | **Status pill** | The last line as text, coloured green / red by exit status. |
 | **Gauge** | That number on a `min`/`max` arc (warns past ~85%). |

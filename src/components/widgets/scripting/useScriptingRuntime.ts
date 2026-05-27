@@ -19,6 +19,7 @@ import {
   type StreamLineKind,
 } from '../../../lib/scripting/runner';
 import { runFunctionSim, streamFunctionSim } from '../../../lib/scripting/sim';
+import { takeAfterClear } from '../../../lib/scripting/ansi';
 import { envFromControls, isInputControl } from './env';
 import { isBoundDisplay, parseDisplayValue } from './displayParse';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
@@ -185,12 +186,16 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   // running while it's "on" and feeds its output to the bound console.
   //
   // Append one streamed line to a console, capping scrollback (a leading
-  // `$ command` line is always kept so the header survives the cap).
+  // `$ command` line is kept so the header survives the cap). A line carrying a
+  // screen-clear sequence (`clear`, `printf '\033[2J'`, …) wipes the buffer
+  // first, so a repainting command shows only its latest frame.
   const appendConsole = useCallback((consoleId: string | null, text: string, kind: StreamLineKind) => {
     if (!consoleId) return;
+    const { cleared, rest } = takeAfterClear(text);
     setConsoleViews((prev) => {
       const v = prev[consoleId] ?? EMPTY_CONSOLE;
-      const lines = v.lines.concat({ kind, text });
+      const base = cleared ? [] : v.lines;
+      const lines = rest === '' ? base : base.concat({ kind, text: rest });
       let capped = lines;
       if (lines.length > MAX_STREAM_LINES) {
         const head = lines[0]?.kind === 'cmd' ? [lines[0]] : [];
@@ -200,11 +205,12 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     });
   }, []);
 
-  // The process ended on its own — a daemon isn't meant to, so a clean exit
-  // marks it inactive and a non-zero exit marks it errored.
+  // The process ended on its own. A daemon isn't meant to, so this is terminal
+  // either way — a clean exit marks it finished, a non-zero exit errored —
+  // and it does not restart (the user can toggle it to run again).
   const finishDaemon = useCallback((daemonId: string, consoleId: string | null, code: number) => {
     delete streamsRef.current[daemonId];
-    setDaemonStatus((s) => ({ ...s, [daemonId]: code === 0 ? 'inactive' : 'error' }));
+    setDaemonStatus((s) => ({ ...s, [daemonId]: code === 0 ? 'finished' : 'error' }));
     if (!consoleId) return;
     setConsoleViews((prev) => {
       const v = prev[consoleId];

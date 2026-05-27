@@ -248,6 +248,10 @@
   background: oklch(from var(--lvl-e-fg) l c h / 0.06);
   border-color: oklch(from var(--lvl-e-fg) l c h / 0.45);
 }
+.sc-daemon.finished {
+  background: oklch(0.74 0.13 220 / 0.07);
+  border-color: oklch(0.74 0.13 220 / 0.4);
+}
 .sc-daemon .sc-led-bulb.pulsing { animation: pulse 1.6s var(--ease-in-out) infinite; }
 .sc-daemon-meta { display: inline-flex; flex-direction: column; line-height: 1.2; }
 .sc-daemon-label { font-size: var(--t-sm); color: var(--fg-0); font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
@@ -255,6 +259,7 @@
 .sc-daemon-icon { display: inline-flex; align-items: center; margin-left: 4px; color: var(--fg-2); }
 .sc-daemon.running .sc-daemon-icon { color: var(--lvl-i-fg); }
 .sc-daemon.error .sc-daemon-icon { color: var(--lvl-e-fg); }
+.sc-daemon.finished .sc-daemon-icon { color: oklch(0.74 0.13 220); }
 
 /* ───────────────────────── Toggle ─────────────────────────
    Shares the material-outlined shell with Text / Select / Stepper (grouped
