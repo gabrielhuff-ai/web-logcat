@@ -364,6 +364,177 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('clear_data');
   });
 
+  test('a console renders ANSI colours and emoji from echo -e output', async ({ page }) => {
+    const panel = {
+      script: 'colors() {\n  echo -e "\\e[31mERR\\e[0m \\e[32mOK\\e[0m 🎉"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Colors', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_col', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Colors' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body.locator('.sc-ansi-fg-red')).toContainText('ERR');
+    await expect(body.locator('.sc-ansi-fg-green')).toContainText('OK');
+    // Emoji survives the ANSI parser and reaches the DOM.
+    await expect(body).toContainText('🎉');
+  });
+
+  test('a console can hide the leading "$ command" line', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hello world"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, hideCommand: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_hide', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Greet' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body).toContainText('hello world');
+    // The `$ greet` command line is suppressed.
+    await expect(body.locator('.k-cmd')).toHaveCount(0);
+    await expect(body).not.toContainText('$ greet');
+  });
+
+  test('a streaming button follows output and stops on a second press', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo -e "\\e[32mline up\\e[0m"\n  echo "beat 🐢"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'b',
+          kind: 'button',
+          label: 'Watch',
+          variant: 'default',
+          confirm: false,
+          bindOutputTo: 'console',
+          mode: 'stream',
+          autoStart: false,
+        },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_stream', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const btn = tile.locator('.sc-btn').filter({ hasText: 'Watch' });
+
+    // Start: header shows the live pill, the button flips to "Stop Watch",
+    // and the simulated lines stream in.
+    await btn.click();
+    await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
+    await expect(btn).toContainText('Stop Watch');
+    await expect(tile.locator('.sc-console-body')).toContainText('line up');
+    await expect(tile.locator('.sc-console-body')).toContainText('🐢');
+
+    // Stop: the live pill is replaced by a neutral "stopped" marker and the
+    // button returns to its label.
+    await btn.click();
+    await expect(tile.locator('.sc-exit.live')).toHaveCount(0);
+    await expect(tile.locator('.sc-exit')).toContainText('stopped');
+    await expect(btn).not.toContainText('Stop');
+  });
+
+  test('a streaming button with "start on load" follows output without a press', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo "auto tick"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'b',
+          kind: 'button',
+          label: 'Watch',
+          variant: 'default',
+          confirm: false,
+          bindOutputTo: 'console',
+          mode: 'stream',
+          autoStart: true,
+        },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_auto', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // No click — it should already be streaming on load.
+    await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
+    await expect(tile.locator('.sc-console-body')).toContainText('auto tick');
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();

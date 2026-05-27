@@ -350,6 +350,27 @@ function ConfigButton({
           ]}
         />
       </FormRow>
+      <FormRow
+        label="Mode"
+        help="Run once and wait for the result, or stream a long-lived command (e.g. logcat) into the console until stopped."
+      >
+        <Segmented
+          value={control.mode ?? 'once'}
+          onChange={(v) => onPatch({ mode: v })}
+          options={[
+            { value: 'once', label: 'Run once' },
+            { value: 'stream', label: 'Stream' },
+          ]}
+        />
+      </FormRow>
+      {(control.mode ?? 'once') === 'stream' && (
+        <FormRow
+          label="Start on load"
+          help="Begin streaming automatically when the dashboard loads. Off by default; disarmed on import so a shared panel never runs on its own."
+        >
+          <MiniToggle on={control.autoStart ?? false} onChange={(v) => onPatch({ autoStart: v })} label="Start on load" />
+        </FormRow>
+      )}
       <FormRow label="Confirm before running" help="Opens a confirmation popover first. Off by default.">
         <MiniToggle on={control.confirm} onChange={(v) => onPatch({ confirm: v })} label="Confirm before running" />
       </FormRow>
@@ -366,7 +387,16 @@ function ConfigButton({
           </select>
         </div>
       </FormRow>
-      <FormRow label="Function preview" help={body ? 'Defined in the script above.' : undefined}>
+      <FormRow
+        label="Function preview"
+        help={
+          body
+            ? (control.mode ?? 'once') === 'stream'
+              ? 'Streamed until stopped — it should keep running (e.g. pipe from logcat), not exit.'
+              : 'Defined in the script above.'
+            : undefined
+        }
+      >
         <pre className={'bdr-fnpreview' + (body ? '' : ' missing')}>
           {body ?? `${fn}() is not defined yet — add it to the script.`}
         </pre>
@@ -397,6 +427,13 @@ function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch:
       </FormRow>
       <FormRow label="Auto-scroll" help="Scroll to the bottom when new output arrives.">
         <MiniToggle on={control.autoScroll} onChange={(v) => onPatch({ autoScroll: v })} label="Auto-scroll" />
+      </FormRow>
+      <FormRow label="Hide command line" help="Hide the leading “$ command” line shown before each run's output.">
+        <MiniToggle
+          on={control.hideCommand ?? false}
+          onChange={(v) => onPatch({ hideCommand: v })}
+          label="Hide command line"
+        />
       </FormRow>
     </div>
   );

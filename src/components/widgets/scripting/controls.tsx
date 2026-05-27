@@ -18,6 +18,7 @@ import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
 import { InfoDot, Tooltip } from './Tooltip';
 import { renderMarkdown } from './markdown';
+import { parseAnsi } from '../../../lib/scripting/ansi';
 
 /** Run lifecycle reflected by interactive controls. */
 export type CtrlState = 'idle' | 'active' | 'busy' | 'error';
@@ -63,6 +64,8 @@ export interface ScButtonProps {
   description?: string;
   confirm?: boolean;
   variant?: 'default' | 'subtle' | 'destructive';
+  /** 'stream' makes the button a Start/Stop toggle for a long-lived run. */
+  mode?: 'once' | 'stream';
   exitCode?: number;
   disabled?: boolean;
   onRun?: () => void;
@@ -74,6 +77,7 @@ export function ScButton({
   description,
   confirm,
   variant = 'default',
+  mode = 'once',
   exitCode = 1,
   disabled,
   onRun,
@@ -81,12 +85,16 @@ export function ScButton({
   const busy = state === 'busy';
   const err = state === 'error';
   const active = state === 'active';
+  // A streaming button in its active state is "running" — it shows Stop and
+  // never gates behind the confirm popover (you're stopping, not launching).
+  const streaming = mode === 'stream' && active;
   const [confirming, setConfirming] = useState(false);
   const cls = [
     'sc-btn',
     variant === 'subtle' && 'subtle',
     variant === 'destructive' && 'destructive',
     active && 'active',
+    streaming && 'streaming',
     busy && 'busy',
     err && 'err',
   ]
@@ -94,7 +102,7 @@ export function ScButton({
     .join(' ');
 
   const handleClick = () => {
-    if (confirm && !confirming) {
+    if (confirm && !confirming && !streaming) {
       setConfirming(true);
       return;
     }
@@ -113,9 +121,16 @@ export function ScButton({
 
   const button = (
     <button type="button" className={cls} disabled={disabled || busy} onClick={handleClick}>
-      {busy ? <SpinnerDot /> : <Icons.PlayCircle size={12} />}
-      <span>{label}</span>
-      {confirm && !busy && !err && <Icons.Lock size={10} />}
+      {busy ? (
+        <SpinnerDot />
+      ) : streaming ? (
+        <Icons.Stop size={11} />
+      ) : (
+        <Icons.PlayCircle size={12} />
+      )}
+      <span>{streaming ? `Stop ${label}` : label}</span>
+      {confirm && !busy && !err && !streaming && <Icons.Lock size={10} />}
+      {streaming && <span className="sc-btn-live" aria-label="streaming" />}
       {err && <span className="sc-btn-exit">exit {exitCode}</span>}
     </button>
   );
@@ -566,6 +581,26 @@ export interface ConsoleLine {
   text: string;
 }
 
+/** Render one console line, colourising any ANSI escape sequences in it. */
+function ConsoleLineView({ line }: { line: ConsoleLine }) {
+  const segments = parseAnsi(line.text);
+  return (
+    <div className={'sc-console-line k-' + line.kind}>
+      {segments.length === 1 && segments[0].classes.length === 0
+        ? segments[0].text
+        : segments.map((s, i) =>
+            s.classes.length === 0 ? (
+              <span key={i}>{s.text}</span>
+            ) : (
+              <span key={i} className={s.classes.join(' ')}>
+                {s.text}
+              </span>
+            ),
+          )}
+    </div>
+  );
+}
+
 export interface ScConsoleProps {
   title?: string;
   state?: CtrlState;
@@ -574,6 +609,14 @@ export interface ScConsoleProps {
   empty?: boolean;
   copied?: boolean;
   showCopy?: boolean;
+  /** A stream is attached and appending output. */
+  streaming?: boolean;
+  /** A stream was stopped — show a neutral marker instead of an exit code. */
+  stopped?: boolean;
+  /** Hide the leading `$ command` line(s). */
+  hideCommand?: boolean;
+  /** Keep the body pinned to the bottom as new lines arrive. */
+  autoScroll?: boolean;
   onCopy?: () => void;
 }
 
@@ -585,10 +628,23 @@ export function ScConsole({
   empty = false,
   copied = false,
   showCopy = true,
+  streaming = false,
+  stopped = false,
+  hideCommand = false,
+  autoScroll = true,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
   const err = state === 'error' || exit !== 0;
+  const shown = hideCommand ? lines.filter((l) => l.kind !== 'cmd') : lines;
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!autoScroll) return;
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [autoScroll, shown.length, streaming]);
+
   return (
     <div className="sc-console">
       <div className="sc-console-head">
@@ -597,18 +653,26 @@ export function ScConsole({
         </span>
         <span className="sc-console-title">{title}</span>
         <span style={{ flex: 1 }} />
-        {busy ? (
+        {streaming ? (
+          <span className="sc-exit live">
+            <span className="sc-exit-dot" /> streaming
+          </span>
+        ) : busy ? (
           <span className="sc-exit busy">
             <SpinnerDot size={8} /> running…
           </span>
         ) : empty ? (
           <span className="sc-exit idle">— no runs yet</span>
+        ) : stopped ? (
+          <span className="sc-exit idle">
+            <span className="sc-exit-dot" /> stopped
+          </span>
         ) : (
           <span className={'sc-exit ' + (err ? 'err' : 'ok')}>
             <span className="sc-exit-dot" /> exit {exit}
           </span>
         )}
-        {!empty && !busy && showCopy && (
+        {!empty && !busy && !streaming && showCopy && (
           <button
             type="button"
             className={'sc-console-copy' + (copied ? ' done' : '')}
@@ -620,15 +684,11 @@ export function ScConsole({
           </button>
         )}
       </div>
-      <div className="sc-console-body">
-        {empty || lines.length === 0 ? (
+      <div className="sc-console-body" ref={bodyRef}>
+        {empty || shown.length === 0 ? (
           <div className="sc-console-empty">Output from the most recent run appears here.</div>
         ) : (
-          lines.map((l, i) => (
-            <div key={i} className={'sc-console-line k-' + l.kind}>
-              {l.text}
-            </div>
-          ))
+          shown.map((l, i) => <ConsoleLineView key={i} line={l} />)
         )}
       </div>
     </div>

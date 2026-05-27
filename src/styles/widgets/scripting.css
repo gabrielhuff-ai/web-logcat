@@ -226,6 +226,18 @@
   margin-left: 2px;
 }
 .sc-btn svg { opacity: 0.8; }
+.sc-btn.streaming {
+  background: oklch(from var(--accent) l c h / 0.16);
+  border-color: oklch(from var(--accent) l c h / 0.45);
+  color: var(--accent-fg);
+}
+.sc-btn-live {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-left: 2px;
+  animation: pulse 1.4s var(--ease-in-out) infinite;
+}
 
 /* ───────────────────────── Toggle ─────────────────────────
    Shares the material-outlined shell with Text / Select / Stepper (grouped
@@ -493,6 +505,48 @@
 }
 .sc-console-copy:hover { background: var(--bg-2); color: var(--fg-0); }
 .sc-console-copy.done { color: var(--lvl-i-fg); background: oklch(from var(--lvl-i-fg) l c h / 0.15); }
+
+/* Streaming state — a pulsing "live" pill in the console header. */
+.sc-exit.live { background: oklch(from var(--accent) l c h / 0.16); color: var(--accent-fg); }
+.sc-exit.live .sc-exit-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-fg);
+  animation: pulse 1.4s var(--ease-in-out) infinite;
+}
+
+/* ANSI colours rendered inside console lines (echo -e "\e[31m…"). The hues
+   reuse the theme's log-level + filter-chip tokens, so they adapt to light
+   and dark. A span's own colour overrides the line's inherited base colour. */
+.sc-ansi-bold { font-weight: 700; }
+.sc-ansi-dim { opacity: 0.65; }
+.sc-ansi-italic { font-style: italic; }
+.sc-ansi-underline { text-decoration: underline; }
+
+.sc-ansi-fg-black   { color: var(--fg-3); }
+.sc-ansi-fg-red     { color: var(--lvl-e-fg); }
+.sc-ansi-fg-green   { color: var(--lvl-i-fg); }
+.sc-ansi-fg-yellow  { color: var(--lvl-w-fg); }
+.sc-ansi-fg-blue    { color: var(--lvl-d-fg); }
+.sc-ansi-fg-magenta { color: oklch(var(--fc-l) var(--fc-c) 320); }
+.sc-ansi-fg-cyan    { color: oklch(var(--fc-l) var(--fc-c) 195); }
+.sc-ansi-fg-white   { color: var(--fg-0); }
+.sc-ansi-fg-bright-black   { color: var(--fg-2); }
+.sc-ansi-fg-bright-red     { color: oklch(from var(--lvl-e-fg) calc(l + 0.07) c h); }
+.sc-ansi-fg-bright-green   { color: oklch(from var(--lvl-i-fg) calc(l + 0.07) c h); }
+.sc-ansi-fg-bright-yellow  { color: oklch(from var(--lvl-w-fg) calc(l + 0.07) c h); }
+.sc-ansi-fg-bright-blue    { color: oklch(from var(--lvl-d-fg) calc(l + 0.07) c h); }
+.sc-ansi-fg-bright-magenta { color: oklch(calc(var(--fc-l) + 0.08) var(--fc-c) 320); }
+.sc-ansi-fg-bright-cyan    { color: oklch(calc(var(--fc-l) + 0.08) var(--fc-c) 195); }
+.sc-ansi-fg-bright-white   { color: var(--fg-0); }
+
+.sc-ansi-bg-black,   .sc-ansi-bg-bright-black   { background: oklch(from var(--fg-3) l c h / 0.25); }
+.sc-ansi-bg-red,     .sc-ansi-bg-bright-red     { background: oklch(from var(--lvl-e-fg) l c h / 0.22); }
+.sc-ansi-bg-green,   .sc-ansi-bg-bright-green   { background: oklch(from var(--lvl-i-fg) l c h / 0.22); }
+.sc-ansi-bg-yellow,  .sc-ansi-bg-bright-yellow  { background: oklch(from var(--lvl-w-fg) l c h / 0.22); }
+.sc-ansi-bg-blue,    .sc-ansi-bg-bright-blue    { background: oklch(from var(--lvl-d-fg) l c h / 0.22); }
+.sc-ansi-bg-magenta, .sc-ansi-bg-bright-magenta { background: oklch(var(--fc-l) var(--fc-c) 320 / 0.22); }
+.sc-ansi-bg-cyan,    .sc-ansi-bg-bright-cyan    { background: oklch(var(--fc-l) var(--fc-c) 195 / 0.22); }
+.sc-ansi-bg-white,   .sc-ansi-bg-bright-white   { background: oklch(from var(--fg-0) l c h / 0.18); }
 
 /* ───────────────────────── Status pill ───────────────────────── */
 .sc-status {

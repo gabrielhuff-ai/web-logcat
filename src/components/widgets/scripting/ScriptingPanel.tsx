@@ -181,6 +181,7 @@ function renderButton(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
       description={c.description}
       confirm={c.confirm}
       variant={c.variant}
+      mode={c.mode}
       state={props.buttonState[c.id] ?? 'idle'}
       disabled={props.actionsDisabled}
       onRun={() => props.onRun(c.id)}
@@ -250,7 +251,11 @@ function renderConsole(c: ControlConfig, props: ScriptingPanelProps): ReactNode 
       lines={view.lines}
       empty={view.empty}
       copied={view.copied}
+      streaming={view.streaming}
+      stopped={view.stopped}
       showCopy={c.copyButton}
+      hideCommand={c.hideCommand}
+      autoScroll={c.autoScroll}
       onCopy={() => props.onCopyConsole(c.id)}
     />
   );

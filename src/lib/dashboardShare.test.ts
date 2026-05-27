@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   decodeSnapshot,
+  disarmScripting,
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
@@ -50,6 +51,32 @@ describe('hasScripts', () => {
   });
   it('is false for comment-only / empty scripts', () => {
     expect(hasScripts(snap('# just a comment\n\n'))).toBe(false);
+  });
+});
+
+describe('disarmScripting', () => {
+  it('turns off auto-poll and stream auto-start so nothing runs on import', () => {
+    const val = {
+      script: 'x',
+      controls: [
+        { id: 'd', kind: 'readout', boundTo: 'temp', autoPoll: { enabled: true, intervalSec: 3 }, refreshOnChange: false },
+        { id: 'b', kind: 'button', label: 'Watch', mode: 'stream', autoStart: true, bindOutputTo: 'console' },
+        { id: 'i', kind: 'text', label: 'Pkg' },
+      ],
+    };
+    const out = disarmScripting(val) as typeof val;
+    expect((out.controls[0] as { autoPoll: { enabled: boolean; intervalSec: number } }).autoPoll).toEqual({
+      enabled: false,
+      intervalSec: 3,
+    });
+    expect((out.controls[1] as { autoStart: boolean }).autoStart).toBe(false);
+    // Untouched controls pass through unchanged.
+    expect(out.controls[2]).toEqual(val.controls[2]);
+  });
+
+  it('is a no-op for non-scripting values', () => {
+    expect(disarmScripting({ wrap: true })).toEqual({ wrap: true });
+    expect(disarmScripting(null)).toBeNull();
   });
 });
 

@@ -13,10 +13,12 @@ import { extractFunctionBody } from '../../../lib/scripting/parseScript';
 import {
   checkScript,
   runFunction,
+  streamFunction,
   ShellUnsupportedError,
   type RunResult,
+  type StreamLineKind,
 } from '../../../lib/scripting/runner';
-import { runFunctionSim } from '../../../lib/scripting/sim';
+import { runFunctionSim, streamFunctionSim } from '../../../lib/scripting/sim';
 import { envFromControls, isInputControl } from './env';
 import { isBoundDisplay, parseDisplayValue } from './displayParse';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
@@ -31,6 +33,14 @@ const BLANK_DISPLAY: DisplayValue = {
   ledState: 'off',
   stale: false,
 };
+
+/** Cap a streaming console's scrollback so a fast feed can't grow unbounded. */
+const MAX_STREAM_LINES = 1000;
+
+/** A running stream — `stop()` kills the underlying process / timer. */
+interface ActiveStream {
+  stop: () => void | Promise<void>;
+}
 
 function toConsoleLines(fn: string, r: RunResult): ConsoleLine[] {
   const lines: ConsoleLine[] = [{ kind: 'cmd', text: `$ ${fn}` }];
@@ -75,6 +85,10 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
   valuesRef.current = values;
   const runIdRef = useRef<Record<string, number>>({});
   const copyTimers = useRef<Record<string, number>>({});
+  // Live streams keyed by button id, and the set of auto-start buttons we've
+  // already kicked off (so a re-render doesn't relaunch one the user stopped).
+  const streamsRef = useRef<Record<string, ActiveStream>>({});
+  const autoStartedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timers = copyTimers.current;
@@ -121,6 +135,8 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
           exit: r.exitCode,
           empty: false,
           copied: false,
+          streaming: false,
+          stopped: false,
         });
       }).catch((err: unknown) => {
         const msg =
@@ -138,6 +154,8 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
           exit: 1,
           empty: false,
           copied: false,
+          streaming: false,
+          stopped: false,
         });
         showToast(`scripting: ${msg}`);
       });
@@ -146,16 +164,143 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
     [exec, setConsole, showToast],
   );
 
+  // ── Streaming actions ────────────────────────────────────────────────────
+  // Append one streamed line to a console, capping scrollback (a leading
+  // `$ command` line is always kept so the header survives the cap).
+  const appendConsole = useCallback((consoleId: string | null, text: string, kind: StreamLineKind) => {
+    if (!consoleId) return;
+    setConsoleViews((prev) => {
+      const v = prev[consoleId] ?? EMPTY_CONSOLE;
+      const lines = v.lines.concat({ kind, text });
+      let capped = lines;
+      if (lines.length > MAX_STREAM_LINES) {
+        const head = lines[0]?.kind === 'cmd' ? [lines[0]] : [];
+        capped = head.concat(lines.slice(lines.length - (MAX_STREAM_LINES - head.length)));
+      }
+      return { ...prev, [consoleId]: { ...v, lines: capped, empty: false } };
+    });
+  }, []);
+
+  // The process ended on its own — show its exit code and clear the button.
+  const finishStream = useCallback((buttonId: string, consoleId: string | null, code: number) => {
+    delete streamsRef.current[buttonId];
+    setButtonState((s) => ({ ...s, [buttonId]: code === 0 ? 'idle' : 'error' }));
+    if (!consoleId) return;
+    setConsoleViews((prev) => {
+      const v = prev[consoleId];
+      if (!v) return prev;
+      return { ...prev, [consoleId]: { ...v, streaming: false, stopped: false, state: code === 0 ? 'idle' : 'error', exit: code } };
+    });
+  }, []);
+
+  const startStream = useCallback(
+    (buttonId: string) => {
+      const ctl = controls.find((c) => c.id === buttonId);
+      if (!ctl || ctl.kind !== 'button' || streamsRef.current[buttonId]) return;
+      const consoleId = resolveConsoleId(ctl.bindOutputTo);
+      const fn = fnFromLabel(ctl.label);
+      const env = envFromControls(controls, valuesRef.current);
+      setButtonState((s) => ({ ...s, [buttonId]: 'active' }));
+      setConsole(consoleId, {
+        lines: [{ kind: 'cmd', text: `$ ${fn}` }],
+        state: 'idle',
+        exit: 0,
+        empty: false,
+        copied: false,
+        streaming: true,
+        stopped: false,
+      });
+      const onLine = (text: string, kind: StreamLineKind) => appendConsole(consoleId, text, kind);
+
+      if (usingFake || !adb) {
+        streamsRef.current[buttonId] = streamFunctionSim(script, fn, env, {
+          onLine,
+          onExit: (code) => finishStream(buttonId, consoleId, code),
+        });
+        return;
+      }
+
+      // Real device: the spawn is async, so park a cancel-only handle until it
+      // resolves — if the user stops in the gap, kill the process on arrival.
+      let cancelled = false;
+      streamsRef.current[buttonId] = {
+        stop: () => {
+          cancelled = true;
+        },
+      };
+      streamFunction(
+        adb,
+        { script, fn, env, runAsRoot },
+        {
+          onLine,
+          onExit: (code) => finishStream(buttonId, consoleId, code),
+          onError: (err) => {
+            onLine(err.message, 'err');
+            finishStream(buttonId, consoleId, 1);
+          },
+        },
+      )
+        .then((handle) => {
+          if (cancelled) {
+            void handle.stop();
+            return;
+          }
+          streamsRef.current[buttonId] = handle;
+        })
+        .catch((err: unknown) => {
+          delete streamsRef.current[buttonId];
+          const msg =
+            err instanceof ShellUnsupportedError
+              ? 'This device does not support shell-protocol v2.'
+              : err instanceof Error
+                ? err.message
+                : String(err);
+          onLine(msg, 'err');
+          setButtonState((s) => ({ ...s, [buttonId]: 'error' }));
+          if (consoleId)
+            setConsoleViews((prev) => {
+              const v = prev[consoleId];
+              return v ? { ...prev, [consoleId]: { ...v, streaming: false, stopped: true } } : prev;
+            });
+          showToast(`scripting: ${msg}`);
+        });
+    },
+    [controls, script, runAsRoot, adb, usingFake, resolveConsoleId, setConsole, appendConsole, finishStream, showToast],
+  );
+
+  const stopStream = useCallback(
+    (buttonId: string) => {
+      const h = streamsRef.current[buttonId];
+      if (!h) return;
+      delete streamsRef.current[buttonId];
+      void h.stop();
+      const ctl = controls.find((c) => c.id === buttonId);
+      const consoleId = ctl && ctl.kind === 'button' ? resolveConsoleId(ctl.bindOutputTo) : null;
+      setButtonState((s) => ({ ...s, [buttonId]: 'idle' }));
+      if (consoleId)
+        setConsoleViews((prev) => {
+          const v = prev[consoleId];
+          return v ? { ...prev, [consoleId]: { ...v, streaming: false, stopped: true } } : prev;
+        });
+    },
+    [controls, resolveConsoleId],
+  );
+
   const onRun = useCallback(
     (buttonId: string) => {
       const ctl = controls.find((c) => c.id === buttonId);
       if (!ctl || ctl.kind !== 'button') return;
+      if (ctl.mode === 'stream') {
+        if (streamsRef.current[buttonId]) stopStream(buttonId);
+        else startStream(buttonId);
+        return;
+      }
       setButtonState((s) => (s[buttonId] === 'busy' ? s : { ...s, [buttonId]: 'busy' }));
       execToConsole(fnFromLabel(ctl.label), resolveConsoleId(ctl.bindOutputTo))
         .then((r) => setButtonState((s) => ({ ...s, [buttonId]: r.exitCode === 0 ? 'idle' : 'error' })))
         .catch(() => setButtonState((s) => ({ ...s, [buttonId]: 'error' })));
     },
-    [controls, execToConsole, resolveConsoleId],
+    [controls, execToConsole, resolveConsoleId, startStream, stopStream],
   );
 
   const onCopyConsole = useCallback(
@@ -277,6 +422,32 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
       window.clearTimeout(t);
     };
   }, [script, adb, usingFake]);
+
+  // Auto-start streaming buttons once after the dashboard loads. Guarded so a
+  // re-render (or a stream the user stopped) never relaunches on its own.
+  useEffect(() => {
+    for (const c of controls) {
+      if (
+        c.kind === 'button' &&
+        c.mode === 'stream' &&
+        c.autoStart &&
+        !autoStartedRef.current.has(c.id) &&
+        !streamsRef.current[c.id]
+      ) {
+        autoStartedRef.current.add(c.id);
+        startStream(c.id);
+      }
+    }
+  }, [controls, startStream]);
+
+  // Tear down every live stream on unmount (device disconnect re-renders the
+  // widget tree, and the host tile unmounts the widget).
+  useEffect(() => {
+    const streams = streamsRef.current;
+    return () => {
+      for (const h of Object.values(streams)) void h.stop();
+    };
+  }, []);
 
   return { buttonState, consoleViews, displayValues, scriptError, onRun, onCopyConsole };
 }
