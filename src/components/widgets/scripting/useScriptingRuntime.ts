@@ -401,8 +401,9 @@ export function useScriptingRuntime(params: ScriptingRuntimeParams): ScriptingRu
 
   // Fetch auto-poll displays once on mount and whenever the config/script
   // changes (values are read via ref, so input edits don't trigger this).
-  // Non-polling displays are NOT auto-run — this also means an imported panel
-  // (auto-poll disarmed on import) never executes shell on load.
+  // Non-polling displays are NOT auto-run. Auto-poll roundtrips through
+  // imports verbatim — the trust acknowledgement before applying a shared
+  // dashboard is the safety boundary, not silent stripping of flags.
   useEffect(() => {
     for (const c of controls) {
       if (isBoundDisplay(c) && c.boundTo && c.autoPoll.enabled) runDisplay(c);
