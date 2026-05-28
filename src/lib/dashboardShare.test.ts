@@ -6,6 +6,7 @@ import {
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
+  linkMayBeTruncated,
   snapshotsEqual,
   type DashboardSnapshot,
 } from './dashboardShare';
@@ -219,8 +220,23 @@ describe('snapshotsEqual', () => {
 });
 
 describe('fitsInUrl', () => {
-  it('accepts small payloads and rejects huge ones', () => {
+  it('accepts payloads up to the hard limit and rejects above it', () => {
     expect(fitsInUrl('x'.repeat(100))).toBe(true);
-    expect(fitsInUrl('x'.repeat(7000))).toBe(false);
+    // Used to reject at 6 KB — we now allow up to ~30 KB.
+    expect(fitsInUrl('x'.repeat(7_000))).toBe(true);
+    expect(fitsInUrl('x'.repeat(29_999))).toBe(true);
+    expect(fitsInUrl('x'.repeat(30_001))).toBe(false);
+  });
+});
+
+describe('linkMayBeTruncated', () => {
+  it('flags payloads between the soft and hard limits', () => {
+    expect(linkMayBeTruncated('x'.repeat(100))).toBe(false);
+    expect(linkMayBeTruncated('x'.repeat(6_000))).toBe(false);
+    expect(linkMayBeTruncated('x'.repeat(6_001))).toBe(true);
+    expect(linkMayBeTruncated('x'.repeat(29_999))).toBe(true);
+    // Above the hard limit the link isn't offered at all, so the
+    // truncation note is irrelevant — return false to match UI semantics.
+    expect(linkMayBeTruncated('x'.repeat(30_001))).toBe(false);
   });
 });

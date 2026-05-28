@@ -17,6 +17,7 @@ import {
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
+  linkMayBeTruncated,
   type DashboardSnapshot,
 } from '../lib/dashboardShare';
 
@@ -37,6 +38,9 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
   const [importError, setImportError] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
   const [shake, setShake] = useState(false);
+  // Surfaces only after the user clicks Copy link with a payload above the
+  // soft limit — the link works, but some downstream systems may chop it.
+  const [linkTruncationNote, setLinkTruncationNote] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -89,7 +93,10 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
   };
   const copyLink = () => {
     if (!encoded || !fitsInUrl(encoded)) return;
-    void navigator.clipboard?.writeText(buildShareUrl(encoded)).then(() => flashCopied('link'));
+    void navigator.clipboard?.writeText(buildShareUrl(encoded)).then(() => {
+      flashCopied('link');
+      if (linkMayBeTruncated(encoded)) setLinkTruncationNote(true);
+    });
   };
   const saveFile = () => {
     if (!encoded) return;
@@ -170,6 +177,11 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
             {encoded && !linkOk && (
               <p className="imex-note imex-warn">
                 Too large for a shareable link — use “Copy text” or “Save file” instead.
+              </p>
+            )}
+            {linkTruncationNote && (
+              <p className="imex-note imex-warn">
+                Note: this URL is large and may be truncated by some apps (chat, email, etc.).
               </p>
             )}
           </section>
