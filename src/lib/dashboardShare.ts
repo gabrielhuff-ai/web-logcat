@@ -34,9 +34,19 @@ export interface DashboardSnapshot {
 
 const SHARE_PARAM = 'share';
 const PENDING_KEY = 'weblogcat:pendingImport';
-/** Encoded-length ceiling for offering a shareable link (fragment, not query,
- *  so server/CDN caps don't apply — this guards the browser + readability). */
-export const URL_SIZE_LIMIT = 6000;
+/** Encoded-length thresholds for the share-link path. The URL goes into the
+ *  fragment, so server / CDN caps don't apply — only the browser address bar
+ *  and the user's downstream surface (chat clients, email, GitHub comments)
+ *  do.
+ *    - `URL_HARD_LIMIT` (30 KB): above this we don't offer Copy link at all.
+ *      Sits well below every modern browser's address-bar threshold but the
+ *      payload would be too unwieldy to share by hand.
+ *    - `URL_SOFT_LIMIT` (6 KB): below this the link is comfortably small for
+ *      any surface. Between soft and hard the link still works, but we
+ *      surface a truncation note after the user clicks Copy link — some
+ *      downstream apps (Slack, mail clients) cap line length and may chop. */
+export const URL_HARD_LIMIT = 30_000;
+export const URL_SOFT_LIMIT = 6_000;
 
 // ---- base64url helpers -----------------------------------------------------
 
@@ -182,6 +192,59 @@ export function snapshotsEqual(a: DashboardSnapshot, b: DashboardSnapshot): bool
   return canonicalJson(a) === canonicalJson(b);
 }
 
+/** Content hash for a snapshot. SHA-256 over the same canonical JSON the
+ *  equality check uses — same content (in any key order) hashes the same.
+ *  Used as a stable identifier for the trust list. */
+export async function snapshotHash(s: DashboardSnapshot): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalJson(s));
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  const arr = new Uint8Array(buf);
+  let hex = '';
+  for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, '0');
+  return hex;
+}
+
+// ---- Trust list ------------------------------------------------------------
+//
+// Hashes of snapshots the user has explicitly acknowledged as trusted
+// (the trust ack on a script-bearing import). The list is a FIFO ring
+// capped at TRUSTED_MAX so it can't grow unbounded over time. SHA-256
+// hex strings are 64 bytes apiece — 50 entries ≈ 3 KB of localStorage.
+
+const TRUSTED_KEY = 'weblogcat:trustedSnapshots';
+const TRUSTED_MAX = 50;
+
+function readTrustedList(): string[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(TRUSTED_KEY);
+    if (!raw) return [];
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** True when this snapshot has already been acknowledged by the user. */
+export function isSnapshotTrusted(hash: string): boolean {
+  return readTrustedList().includes(hash);
+}
+
+/** Remember a snapshot as trusted. Moves an existing entry to the most-recent
+ *  position so trust survives the FIFO eviction for as long as it's used. */
+export function markSnapshotTrusted(hash: string): void {
+  if (typeof localStorage === 'undefined') return;
+  const list = readTrustedList().filter((h) => h !== hash);
+  list.push(hash);
+  while (list.length > TRUSTED_MAX) list.shift();
+  try {
+    localStorage.setItem(TRUSTED_KEY, JSON.stringify(list));
+  } catch {
+    /* quota / privacy mode */
+  }
+}
+
 function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalise(value));
 }
@@ -200,7 +263,13 @@ function canonicalise(value: unknown): unknown {
 // ---- URL + pending-import plumbing -----------------------------------------
 
 export function fitsInUrl(encoded: string): boolean {
-  return encoded.length <= URL_SIZE_LIMIT;
+  return encoded.length <= URL_HARD_LIMIT;
+}
+
+/** Link is offered but the payload is large enough that some downstream
+ *  systems may truncate it — the modal warns the user after they click. */
+export function linkMayBeTruncated(encoded: string): boolean {
+  return encoded.length > URL_SOFT_LIMIT && encoded.length <= URL_HARD_LIMIT;
 }
 
 export function buildShareUrl(encoded: string): string {

@@ -19,7 +19,10 @@ import {
   applySnapshot,
   captureSnapshot,
   hasScripts,
+  isSnapshotTrusted,
+  markSnapshotTrusted,
   onPendingImport,
+  snapshotHash,
   snapshotsEqual,
   takePendingImport,
 } from '../lib/dashboardShare';
@@ -67,16 +70,25 @@ export function Dashboard({
   // Apply a dashboard shared via `#share=…` link. The device is already
   // connected by the time the dashboard is mounted, so we apply in place.
   // Script-bearing snapshots are gated behind the trust modal; the rest
-  // apply silently. Runs on mount (boot-stashed payload) and whenever a
-  // same-tab hash change stashes a new one.
+  // apply silently. Already-trusted snapshots (consented to in a previous
+  // session) bypass the modal too. Runs on mount (boot-stashed payload)
+  // and whenever a same-tab hash change stashes a new one.
   const applyPending = useCallback(() => {
     const pending = takePendingImport();
     if (!pending) return;
     // Opening your own share link is a no-op — skip the prompt + the
     // re-apply entirely when the incoming snapshot matches the live one.
     if (snapshotsEqual(pending, captureSnapshot())) return;
-    if (hasScripts(pending)) setPendingShared(pending);
-    else finishImport(pending);
+    if (!hasScripts(pending)) {
+      finishImport(pending);
+      return;
+    }
+    // Script-bearing: check the trust list. The hash is async (SubtleCrypto)
+    // but the import path is already async-tolerant.
+    void snapshotHash(pending).then((hash) => {
+      if (isSnapshotTrusted(hash)) finishImport(pending);
+      else setPendingShared(pending);
+    });
   }, [finishImport]);
   useEffect(() => {
     applyPending();
@@ -253,6 +265,9 @@ export function Dashboard({
         <PendingImportModal
           snapshot={pendingShared}
           onConfirm={() => {
+            // Remember the user's consent so reopening the same link
+            // (now or in a future session) skips the prompt.
+            void snapshotHash(pendingShared).then(markSnapshotTrusted);
             finishImport(pendingShared);
             setPendingShared(null);
           }}

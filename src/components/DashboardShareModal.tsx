@@ -17,6 +17,10 @@ import {
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
+  isSnapshotTrusted,
+  linkMayBeTruncated,
+  markSnapshotTrusted,
+  snapshotHash,
   type DashboardSnapshot,
 } from '../lib/dashboardShare';
 
@@ -34,9 +38,13 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
 
   const [importText, setImportText] = useState('');
   const [decoded, setDecoded] = useState<DashboardSnapshot | null>(null);
+  const [decodedHash, setDecodedHash] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
   const [shake, setShake] = useState(false);
+  // Surfaces only after the user clicks Copy link with a payload above the
+  // soft limit — the link works, but some downstream systems may chop it.
+  const [linkTruncationNote, setLinkTruncationNote] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +71,7 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
     const text = importText.trim();
     if (!text) {
       setDecoded(null);
+      setDecodedHash(null);
       setImportError(null);
       return;
     }
@@ -78,6 +87,22 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
     };
   }, [importText]);
 
+  // Hash the decoded snapshot so we can consult the trust list — a paste of
+  // a previously-acknowledged dashboard skips the ack and applies cleanly.
+  useEffect(() => {
+    if (!decoded) {
+      setDecodedHash(null);
+      return;
+    }
+    let cancelled = false;
+    void snapshotHash(decoded).then((h) => {
+      if (!cancelled) setDecodedHash(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [decoded]);
+
   const flashCopied = (which: Copied) => {
     setCopied(which);
     window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1200);
@@ -89,7 +114,10 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
   };
   const copyLink = () => {
     if (!encoded || !fitsInUrl(encoded)) return;
-    void navigator.clipboard?.writeText(buildShareUrl(encoded)).then(() => flashCopied('link'));
+    void navigator.clipboard?.writeText(buildShareUrl(encoded)).then(() => {
+      flashCopied('link');
+      if (linkMayBeTruncated(encoded)) setLinkTruncationNote(true);
+    });
   };
   const saveFile = () => {
     if (!encoded) return;
@@ -107,18 +135,22 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
   };
 
   const scriptsPresent = decoded ? hasScripts(decoded) : false;
-  const canImport = decoded != null && (!scriptsPresent || ack);
+  const previouslyTrusted = decodedHash != null && isSnapshotTrusted(decodedHash);
+  const requireAck = scriptsPresent && !previouslyTrusted;
+  const canImport = decoded != null && (!requireAck || ack);
 
   // The button stays clickable while "disabled-looking" so clicking it can
   // nudge the user toward the unchecked acknowledgement (a real `disabled`
   // attribute would swallow the click).
   const onImportClick = () => {
     if (!decoded) return;
-    if (scriptsPresent && !ack) {
+    if (requireAck && !ack) {
       setShake(true);
       window.setTimeout(() => setShake(false), 450);
       return;
     }
+    // Remember the consent for future imports of the same dashboard.
+    if (scriptsPresent && decodedHash) markSnapshotTrusted(decodedHash);
     // Apply in place — the device is already connected, so no reload.
     applySnapshot(decoded);
     onImported();
@@ -172,6 +204,11 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
                 Too large for a shareable link — use “Copy text” or “Save file” instead.
               </p>
             )}
+            {linkTruncationNote && (
+              <p className="imex-note imex-warn">
+                Note: this URL is large and may be truncated by some apps (chat, email, etc.).
+              </p>
+            )}
           </section>
 
           <div className="imex-divider" />
@@ -187,7 +224,7 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
               spellCheck={false}
             />
             {importError && <p className="imex-note imex-warn">{importError}</p>}
-            {scriptsPresent && (
+            {requireAck && (
               <label className={'imex-ack' + (shake ? ' shake' : '')}>
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
                 <span>
