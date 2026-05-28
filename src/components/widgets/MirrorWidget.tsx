@@ -82,6 +82,7 @@ const KEYCODE_DPAD_LEFT = 21 as AndroidKeyCode;
 const KEYCODE_DPAD_RIGHT = 22 as AndroidKeyCode;
 const KEYCODE_ESCAPE = 111 as AndroidKeyCode;
 const KEYCODE_FORWARD_DEL = 112 as AndroidKeyCode;
+const KEYCODE_A = 29 as AndroidKeyCode;
 const KEYCODE_C = 31 as AndroidKeyCode;
 
 /** Aspect ratio of the simulated home-screen frame (matches its SVG viewBox). */
@@ -594,8 +595,11 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   const onScreenKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       const isMod = e.metaKey || e.ctrlKey;
-      // Clipboard shortcuts — handled even in sim mode (the helpers
-      // show an appropriate toast and bail) so the user gets feedback.
+      // Clipboard + select-all shortcuts — handled even in sim mode
+      // (the helpers show an appropriate toast and bail) so the user
+      // gets feedback. ⌘+A is intercepted so the browser's "select
+      // everything on the page" doesn't fire while the user expects
+      // it to operate on the device's focused text field.
       if (isMod && !e.shiftKey && !e.altKey) {
         if (e.key === 'v' || e.key === 'V') {
           e.preventDefault();
@@ -609,6 +613,36 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
           e.stopPropagation();
           e.nativeEvent.stopPropagation();
           void copyToHost();
+          return;
+        }
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          e.stopPropagation();
+          e.nativeEvent.stopPropagation();
+          if (usingFake) {
+            showToast('Simulated mode — select all disabled');
+            return;
+          }
+          const ctrl = sessionRef.current?.control;
+          if (!ctrl) return;
+          void (async () => {
+            try {
+              await ctrl.injectKeyCode({
+                action: ACTION_DOWN,
+                keyCode: KEYCODE_A,
+                repeat: 0,
+                metaState: META_CTRL as AndroidKeyEventMeta,
+              });
+              await ctrl.injectKeyCode({
+                action: ACTION_UP,
+                keyCode: KEYCODE_A,
+                repeat: 0,
+                metaState: META_CTRL as AndroidKeyEventMeta,
+              });
+            } catch {
+              /* control channel closed — ignored */
+            }
+          })();
           return;
         }
       }
@@ -700,7 +734,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         /* control channel closed — ignored */
       });
     },
-    [usingFake, pasteFromHost, copyToHost],
+    [usingFake, pasteFromHost, copyToHost, showToast],
   );
 
   // ---- Wheel / two-finger scroll → scrcpy injectScroll ------------------

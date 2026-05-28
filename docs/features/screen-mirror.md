@@ -40,6 +40,8 @@ native `scrcpy`, but indistinguishable for non-game use.
   surfaces a denial if the browser blocks it.
 - **Text-editing shortcuts.** Mac-standard cursor and selection keys
   are forwarded to the device's foreground text field:
+  - **⌘+A** — select all (forwarded as Ctrl+A; the browser's own
+    *select all* is suppressed while the mirror has focus).
   - **⇧+arrow** — extend selection by character / line.
   - **⌘+←/→** — move to start / end of line.
   - **⌘+↑/↓** — move to start / end of document.
