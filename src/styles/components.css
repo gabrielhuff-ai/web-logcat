@@ -1250,6 +1250,10 @@
   text-transform: uppercase; letter-spacing: 0.1em;
 }
 .imex-note { margin: 0 0 10px; font-size: var(--t-xs); color: var(--fg-3); line-height: 1.5; }
+/* Notes that follow a button row are feedback for the row above, not part of
+   the next block — give them breathing room so the warning doesn't crowd the
+   buttons. */
+.imex-row + .imex-note { margin-top: 12px; }
 .imex-warn { color: var(--lvl-w-fg); }
 .imex-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .imex-row .btn { height: 32px; font-size: var(--t-sm); }
