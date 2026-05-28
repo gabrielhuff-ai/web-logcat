@@ -440,7 +440,9 @@ test.describe('scripting widget', () => {
 
   test('a daemon with controls toggles a background stream on and off', async ({ page }) => {
     const panel = {
-      script: 'watch() {\n  echo -e "\\e[32mline up\\e[0m"\n  echo "beat 🐢"\n}\n',
+      // A never-returning function (loop) so the simulator keeps it running
+      // until the user stops it.
+      script: 'watch() {\n  while :; do\n    echo -e "\\e[32mline up\\e[0m"\n    echo "beat 🐢"\n  done\n}\n',
       runAsRoot: false,
       fontSize: 12,
       controls: [
@@ -601,6 +603,48 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('tick');
     await expect(daemon).toContainText('running');
     await expect(daemon).not.toContainText('finished');
+  });
+
+  test('a finite daemon that prints then clears finishes once (no looping, no flicker)', async ({ page }) => {
+    // Regression: in the simulator a finite function used to loop forever and
+    // `clear` did nothing. It should run once, clear, and finish — like a real
+    // device — and the empty-state hint must not flash after the clear.
+    const panel = {
+      script: 'show() {\n  echo -e "Foo"\n  clear\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // restart defaults to "no".
+        { id: 'd', kind: 'daemon', label: 'Show', bindOutputTo: 'console', showControls: true, autoStart: true },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_printclear', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const daemon = tile.locator('.sc-daemon');
+    const body = tile.locator('.sc-console-body');
+    // Runs once → finished (did not loop), and "Foo" was cleared away.
+    await expect(daemon).toContainText('finished');
+    await expect(body).not.toContainText('Foo');
+    await expect(body.locator('.sc-console-line')).toHaveCount(0);
+    // The cleared console stays blank — the "no runs yet" hint must not appear.
+    await expect(body.locator('.sc-console-empty')).toHaveCount(0);
   });
 
   test('a daemon clears the console with a standard clear sequence', async ({ page }) => {

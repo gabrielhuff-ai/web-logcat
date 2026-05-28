@@ -211,7 +211,9 @@ nothing runs until you choose to enable it.
 ## Trying it without a device
 
 On the [simulated stream](./simulator), the widget evaluates a small
-subset of shell — `echo` / `printf` with `$VAR` substitution, including
-`echo -e` escapes for ANSI colours — so a demo panel produces real-looking
-output with no phone attached. Daemons loop their simulated output so you
-can watch a feed scroll without a device.
+subset of shell — `echo` / `printf` with `$VAR` substitution, `echo -e`
+escapes for ANSI colours, and `clear` / `reset` — so a demo panel produces
+real-looking output with no phone attached. A simulated daemon finishes
+after emitting its output once, just like a function that returns; only one
+that would run forever (a shell loop, or `logcat` / `tail -f` / `top`) keeps
+scrolling.

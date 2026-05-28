@@ -720,7 +720,10 @@ export function ScConsole({
       </div>
       )}
       <div className="sc-console-body" ref={bodyRef}>
-        {empty || shown.length === 0 ? (
+        {/* Show the empty-state hint only before the first run. Once something
+            has run, a momentarily empty body (just cleared, or a daemon
+            between restarts) stays blank rather than flashing the hint. */}
+        {empty ? (
           <div className="sc-console-empty">Output from the most recent run appears here.</div>
         ) : (
           shown.map((l, i) => <ConsoleLineView key={i} line={l} />)

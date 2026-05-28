@@ -61,7 +61,9 @@ export interface SimLine {
 
 /**
  * The lines a function would print, or null when the function isn't defined.
- * Shared by the one-shot and streaming simulators.
+ * Shared by the one-shot and streaming simulators. `clear` / `reset` emit a
+ * screen-clear sequence (the console honours it); `echo` / `printf` emit their
+ * (env-substituted, optionally escape-interpreted) argument.
  */
 export function simLines(
   script: string,
@@ -70,13 +72,17 @@ export function simLines(
 ): SimLine[] | null {
   const body = extractFunctionBody(script, fn);
   if (body == null) return null;
-  // Find `echo`/`printf` statements anywhere — at line start, after `{`, or
-  // after `;` — so inline one-liners like `f() { echo hi; }` simulate too. The
-  // argument runs up to the next `;`, newline, or closing `}`.
+  // Find `echo`/`printf`/`clear`/`reset` statements anywhere — at line start,
+  // after `{`, or after `;` — so inline one-liners like `f() { echo hi; }`
+  // simulate too. The argument runs up to the next `;`, newline, or `}`.
   const out: SimLine[] = [];
-  const re = /(?:^|[\s;{])(echo|printf)\s+([^;\n}]*)/g;
+  const re = /(?:^|[\s;{])(echo|printf|clear|reset)\b([^;\n}]*)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
+    if (m[1] === 'clear' || m[1] === 'reset') {
+      out.push({ text: '\x1b[2J', kind: 'out' });
+      continue;
+    }
     let arg = m[2].trim();
     if (!arg) continue;
     // Peel leading `-e` / `-n` flags; `-e` enables escape interpretation.
@@ -98,6 +104,22 @@ export function simLines(
     out.push({ text: `[sim] ${fn} ran (no echo output to simulate)`, kind: 'out' });
   }
   return out;
+}
+
+/**
+ * Whether a function would run forever rather than return — the only case a
+ * simulated daemon should keep emitting. A real shell function returns once it
+ * reaches its end, so the sim finishes it; we only loop when the body has a
+ * shell loop (`… do … done`) or a never-returning command (`logcat` live,
+ * `tail -f`, `top`).
+ */
+export function loopsForever(body: string): boolean {
+  if (/(?:^|[;\n])[ \t]*done\b/m.test(body)) return true; // while / until / for loop
+  if (/\btail\b[^\n;]*-f\b/.test(body)) return true; // tail -f
+  if (/\btop\b/.test(body)) return true;
+  // logcat that isn't a one-shot dump (`-d`) or bounded tail (`-t`).
+  if (/\blogcat\b/.test(body) && !/\blogcat\b[^\n;|&]*-[a-zA-Z]*[dt]/.test(body)) return true;
+  return false;
 }
 
 export function runFunctionSim(
@@ -122,12 +144,12 @@ export interface SimStreamHandle {
 }
 
 /**
- * Stream a function's simulated output on a timer. A function that would run
- * forever (no `exit`) loops, so the console keeps scrolling like a real
- * `logcat` follow; a function that calls `exit [code]` emits its output once
- * and then finishes with that code (so the daemon's finished/error state is
- * reachable without a device). Returns a handle whose stop() cancels the
- * timer. An unknown function emits one error line and exits 127.
+ * Stream a function's simulated output on a timer. A finite function emits its
+ * output once and then finishes (exit 0, or an explicit `exit [code]`), like a
+ * real shell function returning; only a function that would run forever (a
+ * loop, or `logcat`/`tail -f`/`top`) keeps looping so the console scrolls.
+ * Returns a handle whose stop() cancels the timer. An unknown function emits
+ * one error line and exits 127.
  */
 export function streamFunctionSim(
   script: string,
@@ -142,9 +164,18 @@ export function streamFunctionSim(
     handlers.onExit?.(127);
     return { stop: () => {} };
   }
-  // A trailing `exit [code]` means the function terminates rather than loops.
-  const exitMatch = /\bexit\b[ \t]*(\d*)/.exec(extractFunctionBody(script, fn) ?? '');
-  const finishCode = exitMatch ? (exitMatch[1] === '' ? 0 : Number(exitMatch[1])) : null;
+  const body = extractFunctionBody(script, fn) ?? '';
+  // Decide how the run ends: an explicit `exit [code]` wins; otherwise a
+  // never-returning function loops (finishCode null) and everything else
+  // finishes cleanly after one pass.
+  const exitMatch = /\bexit\b[ \t]*(\d*)/.exec(body);
+  const finishCode = exitMatch
+    ? exitMatch[1] === ''
+      ? 0
+      : Number(exitMatch[1])
+    : loopsForever(body)
+      ? null
+      : 0;
 
   let i = 0;
   let done = false;

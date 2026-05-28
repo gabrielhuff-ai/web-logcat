@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { interpretEscapes, runFunctionSim, streamFunctionSim, substEnv } from './sim';
+import { interpretEscapes, loopsForever, runFunctionSim, streamFunctionSim, substEnv } from './sim';
 
 describe('substEnv', () => {
   it('substitutes $NAME and ${NAME}', () => {
@@ -54,6 +54,11 @@ describe('runFunctionSim', () => {
     expect(r.stdout).toBe('\x1b[31mred\nplain');
   });
 
+  it('emits a screen-clear sequence for clear / reset', () => {
+    expect(runFunctionSim('f() { echo Foo; clear; }', 'f', {}).stdout).toBe('Foo\n\x1b[2J');
+    expect(runFunctionSim('f() { reset; }', 'f', {}).stdout).toBe('\x1b[2J');
+  });
+
   it('leaves backslash escapes literal without -e', () => {
     const r = runFunctionSim('f() { echo "\\e[31mraw"; }', 'f', {});
     expect(r.stdout).toBe('\\e[31mraw');
@@ -69,13 +74,27 @@ describe('interpretEscapes', () => {
   });
 });
 
+describe('loopsForever', () => {
+  it('flags shell loops and never-returning commands', () => {
+    expect(loopsForever('while :; do echo a; done')).toBe(true);
+    expect(loopsForever('for i in 1 2 3; do echo $i; done')).toBe(true);
+    expect(loopsForever('logcat | grep x')).toBe(true);
+    expect(loopsForever('tail -f /data/log')).toBe(true);
+  });
+  it('treats a returning function as finite', () => {
+    expect(loopsForever('echo "all done"')).toBe(false); // "done" inside a string isn't a loop
+    expect(loopsForever('echo Foo; clear')).toBe(false);
+    expect(loopsForever('logcat -d')).toBe(false); // one-shot dump returns
+  });
+});
+
 describe('streamFunctionSim', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('emits the first line immediately, then more on the interval, and loops', () => {
+  it('loops a never-returning function (shell loop) on the interval', () => {
     const lines: string[] = [];
-    const handle = streamFunctionSim('f() { echo a; echo b; }', 'f', {}, {
+    const handle = streamFunctionSim('f() { while :; do echo a; echo b; done; }', 'f', {}, {
       onLine: (t) => lines.push(t),
     });
     expect(lines).toEqual(['a']); // first line is prompt-immediate
@@ -85,6 +104,22 @@ describe('streamFunctionSim', () => {
     handle.stop();
     vi.advanceTimersByTime(2100);
     expect(lines).toEqual(['a', 'b', 'a']); // stop() halts emission
+  });
+
+  it('finishes a finite function after one pass (no loop, no exit)', () => {
+    const lines: string[] = [];
+    let exit = -1;
+    const h = streamFunctionSim('f() { echo a; echo b; }', 'f', {}, {
+      onLine: (t) => lines.push(t),
+      onExit: (c) => (exit = c),
+    });
+    expect(lines).toEqual(['a']);
+    vi.advanceTimersByTime(700); // emits b, then finishes
+    expect(lines).toEqual(['a', 'b']);
+    expect(exit).toBe(0);
+    vi.advanceTimersByTime(2100);
+    expect(lines).toEqual(['a', 'b']); // did not loop
+    h.stop();
   });
 
   it('finishes (no looping) with the code when the function calls exit', () => {
