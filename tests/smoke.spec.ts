@@ -924,7 +924,8 @@ test.describe('keyboard shortcuts', () => {
     // change.
     await expect(helpDialog.getByText(/Screen Mirror/i)).toBeVisible();
     await expect(helpDialog.getByText(/Paste the host clipboard/i)).toBeVisible();
-    await expect(helpDialog.getByText(/Copy the device clipboard/i)).toBeVisible();
+    await expect(helpDialog.getByText(/Forward Ctrl\+C to the device/i)).toBeVisible();
+    await expect(helpDialog.getByText(/Select all text in the device/i)).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(
