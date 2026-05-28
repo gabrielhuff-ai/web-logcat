@@ -915,7 +915,16 @@ test.describe('keyboard shortcuts', () => {
     await expect(page.locator('.row').first()).toBeVisible({ timeout: 5_000 });
 
     await page.keyboard.press('?');
-    await expect(page.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeVisible();
+    const helpDialog = page.getByRole('dialog', { name: /keyboard shortcuts/i });
+    await expect(helpDialog).toBeVisible();
+    // Screen Mirror's clipboard shortcuts are documented in the help
+    // dialog so the muscle-memory pairing is discoverable. Verifying
+    // the rows here pins the doc-sync contract for the feature: if the
+    // shortcut is removed, this assertion fails alongside the source
+    // change.
+    await expect(helpDialog.getByText(/Screen Mirror/i)).toBeVisible();
+    await expect(helpDialog.getByText(/Paste the host clipboard/i)).toBeVisible();
+    await expect(helpDialog.getByText(/Copy the device clipboard/i)).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(

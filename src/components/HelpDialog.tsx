@@ -35,6 +35,15 @@ const GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Screen Mirror',
+    shortcuts: [
+      { keys: ['Click'], desc: 'Tap / drag / swipe at the click position on the device' },
+      { keys: ['Type'], desc: 'Forward letters and editor keys (Backspace, Enter, Tab, arrows, Esc) to the device' },
+      { keys: ['⌘', 'V'], desc: 'Paste the host clipboard into the device' },
+      { keys: ['⌘', 'C'], desc: 'Copy the device clipboard to the host' },
+    ],
+  },
+  {
     title: 'Logcat',
     shortcuts: [
       { keys: ['Space'], desc: 'Pause / resume the live stream' },
