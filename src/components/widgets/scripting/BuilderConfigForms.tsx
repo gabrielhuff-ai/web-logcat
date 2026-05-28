@@ -510,6 +510,17 @@ function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch:
           }}
         />
       </FormRow>
+      <FormRow label="Line spacing" help="Extra space between lines, in em. 0 (default) makes box-drawing diagrams join without gaps.">
+        <input
+          style={{ maxWidth: 80 }}
+          value={control.lineSpacing != null ? String(control.lineSpacing) : ''}
+          placeholder="0"
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            onPatch({ lineSpacing: v === '' ? undefined : Math.max(0, num(v, 0)) });
+          }}
+        />
+      </FormRow>
     </div>
   );
 }

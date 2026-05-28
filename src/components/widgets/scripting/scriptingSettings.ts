@@ -99,6 +99,11 @@ export interface ConsoleControl extends BaseControl {
   hideChrome?: boolean;
   /** Output text size in px. Unset ⇒ the default console size. */
   fontSize?: number;
+  /**
+   * Extra space between lines, in em (line-height = 1 + this). Default 0 —
+   * lines touch, so box-drawing diagrams render without gaps.
+   */
+  lineSpacing?: number;
 }
 
 export interface BoundDisplayControl extends BaseControl {

@@ -475,6 +475,66 @@ test.describe('scripting widget', () => {
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
     // The configured 20px overrides the default console text size.
     await expect(tile.locator('.sc-console-body')).toHaveCSS('font-size', '20px');
+    // Default line spacing is 0 → line-height equals the font size (tight).
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '20px');
+  });
+
+  test('a console honours its line-spacing setting', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hi"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        // 0.5em of extra spacing on a 20px font → line-height 30px.
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, fontSize: 20, lineSpacing: 0.5 },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_linesp', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '30px');
+  });
+
+  test('the script editor indents and comments via Tab and Cmd/Ctrl+/', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+    const editor = dialog.getByLabel('Shell script');
+
+    await editor.fill('echo hi');
+    // Tab at the line start indents by two spaces.
+    await editor.evaluate((el) => (el as HTMLTextAreaElement).setSelectionRange(0, 0));
+    await editor.press('Tab');
+    await expect(editor).toHaveValue('  echo hi');
+    // Shift+Tab removes the indent again.
+    await editor.press('Shift+Tab');
+    await expect(editor).toHaveValue('echo hi');
+    // Ctrl+/ toggles a `#` comment on the line, and back.
+    await editor.evaluate((el) => (el as HTMLTextAreaElement).setSelectionRange(0, 0));
+    await editor.press('Control+/');
+    await expect(editor).toHaveValue('# echo hi');
+    await editor.press('Control+/');
+    await expect(editor).toHaveValue('echo hi');
   });
 
   test('a console can hide the leading "$ command" line', async ({ page }) => {

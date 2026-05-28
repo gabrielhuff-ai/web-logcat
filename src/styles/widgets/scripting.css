@@ -506,7 +506,9 @@
   padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: var(--t-xs);
-  line-height: 1.55;
+  /* Default line-height (tight, so box-drawing diagrams join). The component
+     also sets it inline from the per-console "Line spacing" setting. */
+  line-height: 1;
   color: var(--fg-1);
   overflow: auto;
   flex: 1;

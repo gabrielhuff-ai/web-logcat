@@ -652,6 +652,8 @@ export interface ScConsoleProps {
   autoScroll?: boolean;
   /** Output text size in px. Unset ⇒ the stylesheet default. */
   fontSize?: number;
+  /** Extra space between lines in em (line-height = 1 + this). Default 0. */
+  lineSpacing?: number;
   onCopy?: () => void;
 }
 
@@ -669,11 +671,15 @@ export function ScConsole({
   hideChrome = false,
   autoScroll = true,
   fontSize,
+  lineSpacing = 0,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
   const err = state === 'error' || exit !== 0;
   const shown = hideCommand ? lines.filter((l) => l.kind !== 'cmd') : lines;
+  // line-height 1 (lineSpacing 0) lets box-drawing diagrams join without gaps.
+  const bodyStyle: CSSProperties = { lineHeight: 1 + lineSpacing };
+  if (fontSize) bodyStyle.fontSize = `${fontSize}px`;
 
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -723,11 +729,7 @@ export function ScConsole({
         )}
       </div>
       )}
-      <div
-        className="sc-console-body"
-        ref={bodyRef}
-        style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
-      >
+      <div className="sc-console-body" ref={bodyRef} style={bodyStyle}>
         {/* Show the empty-state hint only before the first run. Once something
             has run, a momentarily empty body (just cleared, or a daemon
             between restarts) stays blank rather than flashing the hint. */}
