@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  applySnapshot,
   captureSnapshot,
   decodeSnapshot,
-  disarmScripting,
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
@@ -57,29 +57,58 @@ describe('hasScripts', () => {
   });
 });
 
-describe('disarmScripting', () => {
-  it('turns off auto-poll and daemon auto-start so nothing runs on import', () => {
-    const val = {
-      script: 'x',
+describe('applySnapshot', () => {
+  beforeAll(() => {
+    if (typeof globalThis.localStorage !== 'undefined') return;
+    const store = new Map<string, string>();
+    const shim: Storage = {
+      get length() {
+        return store.size;
+      },
+      clear: () => store.clear(),
+      getItem: (k: string) => (store.has(k) ? (store.get(k) as string) : null),
+      key: (i: number) => Array.from(store.keys())[i] ?? null,
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+    };
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: shim,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('preserves daemon auto-start and readout auto-poll — the trust gate is the UI ack, not silent stripping', () => {
+    const scripting = {
+      script: 'tail_logs() { logcat; }',
+      runAsRoot: false,
+      fontSize: 12,
       controls: [
         { id: 'd', kind: 'readout', boundTo: 'temp', autoPoll: { enabled: true, intervalSec: 3 }, refreshOnChange: false },
         { id: 'b', kind: 'daemon', label: 'Watch', autoStart: true, bindOutputTo: 'console' },
-        { id: 'i', kind: 'text', label: 'Pkg' },
       ],
     };
-    const out = disarmScripting(val) as typeof val;
-    expect((out.controls[0] as { autoPoll: { enabled: boolean; intervalSec: number } }).autoPoll).toEqual({
-      enabled: false,
-      intervalSec: 3,
-    });
-    expect((out.controls[1] as { autoStart: boolean }).autoStart).toBe(false);
-    // Untouched controls pass through unchanged.
-    expect(out.controls[2]).toEqual(val.controls[2]);
-  });
+    const s: DashboardSnapshot = {
+      v: 1,
+      layout: {
+        tiles: { a: { id: 'a', kind: 'scripting' } },
+        tree: { type: 'leaf', id: 'a' },
+        focusId: 'a',
+      },
+      settings: { a: { scripting } },
+    };
 
-  it('is a no-op for non-scripting values', () => {
-    expect(disarmScripting({ wrap: true })).toEqual({ wrap: true });
-    expect(disarmScripting(null)).toBeNull();
+    applySnapshot(s);
+    const stored = JSON.parse(localStorage.getItem(settingsKey('a', 'scripting')) ?? '{}');
+    expect(stored).toEqual(scripting);
   });
 });
 

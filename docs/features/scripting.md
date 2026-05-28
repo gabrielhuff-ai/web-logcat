@@ -148,8 +148,8 @@ bound console.
   daemon runs headless and only its bound console shows anything — pair it with
   a console set to *Hide chrome* for a clean log pane.
 - **Auto-start** (default on) — start the daemon when the dashboard loads.
-  Always disarmed on import, so an imported panel never starts a process on
-  its own; re-arm it from the builder.
+  Imported dashboards prompt for a trust acknowledgement before applying;
+  once you confirm, auto-start applies as configured by the original author.
 - **Restart** (default *Never*) — what to do when the process exits, mirroring
   systemd's `Restart=`: *Never* leaves it in a terminal state; *On failure*
   relaunches after a non-zero exit; *On success* after a clean exit; *Always*

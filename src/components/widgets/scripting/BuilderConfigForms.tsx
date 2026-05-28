@@ -436,7 +436,7 @@ function ConfigDaemon({
       <FormRow label="Show controls" help="Show a start/stop toggle and status LED on the panel. Off by default — the daemon runs headless and only its console shows output.">
         <MiniToggle on={control.showControls ?? false} onChange={(v) => onPatch({ showControls: v })} label="Show controls" />
       </FormRow>
-      <FormRow label="Auto-start" help="Start the daemon when the dashboard loads. On by default; disarmed on import so a shared panel never runs on its own.">
+      <FormRow label="Auto-start" help="Start the daemon when the dashboard loads. On by default. Imported dashboards prompt for a trust acknowledgement before any auto-starting panel can run.">
         <MiniToggle on={control.autoStart ?? true} onChange={(v) => onPatch({ autoStart: v })} label="Auto-start" />
       </FormRow>
       <FormRow

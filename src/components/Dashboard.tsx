@@ -14,7 +14,14 @@ import { WidgetPalette } from './WidgetPalette';
 import { QuickAddMenu } from './QuickAddMenu';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
 import { DashboardShareModal } from './DashboardShareModal';
-import { applySnapshot, onPendingImport, takePendingImport } from '../lib/dashboardShare';
+import { PendingImportModal } from './PendingImportModal';
+import {
+  applySnapshot,
+  hasScripts,
+  onPendingImport,
+  takePendingImport,
+} from '../lib/dashboardShare';
+import type { DashboardSnapshot } from '../lib/dashboardShare';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
@@ -41,20 +48,31 @@ export function Dashboard({
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // A pending import waits here when it carries scripting panels — the user
+  // confirms (or discards) via <PendingImportModal/>. Non-script imports
+  // bypass this and apply immediately.
+  const [pendingShared, setPendingShared] = useState<DashboardSnapshot | null>(null);
   // Bumped to remount <TileGrid/> so it re-reads the layout + per-tile settings
   // after an import — applying a shared dashboard live, without a reload (which
   // would drop the in-memory device connection and bounce to the connect screen).
   const [gridEpoch, setGridEpoch] = useState(0);
 
+  const finishImport = useCallback((snap: DashboardSnapshot) => {
+    applySnapshot(snap);
+    setGridEpoch((e) => e + 1);
+  }, []);
+
   // Apply a dashboard shared via `#share=…` link. The device is already
-  // connected by the time the dashboard is mounted, so we apply in place. Runs
-  // on mount (boot-stashed payload) and when a same-tab navigation stashes one.
+  // connected by the time the dashboard is mounted, so we apply in place.
+  // Script-bearing snapshots are gated behind the trust modal; the rest
+  // apply silently. Runs on mount (boot-stashed payload) and whenever a
+  // same-tab hash change stashes a new one.
   const applyPending = useCallback(() => {
     const pending = takePendingImport();
     if (!pending) return;
-    applySnapshot(pending);
-    setGridEpoch((e) => e + 1);
-  }, []);
+    if (hasScripts(pending)) setPendingShared(pending);
+    else finishImport(pending);
+  }, [finishImport]);
   useEffect(() => {
     applyPending();
   }, [applyPending]);
@@ -223,6 +241,17 @@ export function Dashboard({
             setGridEpoch((e) => e + 1);
             setShareOpen(false);
           }}
+        />
+      )}
+
+      {pendingShared && (
+        <PendingImportModal
+          snapshot={pendingShared}
+          onConfirm={() => {
+            finishImport(pendingShared);
+            setPendingShared(null);
+          }}
+          onCancel={() => setPendingShared(null)}
         />
       )}
     </div>

@@ -191,9 +191,16 @@ export function DashboardShareModal({ onClose, onImported }: DashboardShareModal
               <label className={'imex-ack' + (shake ? ' shake' : '')}>
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
                 <span>
-                  This dashboard includes <strong>scripting panels that run shell commands</strong> on
-                  your device. Only import dashboards you trust. Auto-polling displays start paused
-                  after import.
+                  This dashboard includes <strong>scripting panels that may run shell commands</strong>{' '}
+                  on your device, some of which may run in the background (see{' '}
+                  <a
+                    href={`${import.meta.env.BASE_URL}docs/features/scripting#daemon`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Daemons
+                  </a>
+                  ). Check this box to confirm that you trust the authors of this dashboard.
                 </span>
               </label>
             )}

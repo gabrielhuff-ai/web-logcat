@@ -5,27 +5,24 @@ import './styles/app.css';
 import './styles/dashboard.css';
 import './styles/components.css';
 import { App } from './components/App';
-import {
-  clearShareFromUrl,
-  decodeSnapshot,
-  readShareFromUrl,
-  stashPendingImport,
-} from './lib/dashboardShare';
+import { ingestShareFromUrl } from './lib/dashboardShare';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root element not found');
 
-// If the URL carries a `#share=…` payload (a copied dashboard link),
-// decode and stash it so the dashboard applies it once a device is
-// connected (the per-tile settings need the recipient's serial). Normal
-// loads have no fragment and skip straight to render.
+// Ingest any `#share=…` payload pasted into the URL of an already-running
+// tab. The Dashboard's pending-import listener picks the stashed snapshot
+// up and surfaces the trust modal (or applies directly when there are no
+// scripting panels). Fresh-tab boots are handled by the awaited call below.
+window.addEventListener('hashchange', () => {
+  void ingestShareFromUrl();
+});
+
+// If the URL carries a `#share=…` payload (a fresh tab opened from a
+// copied dashboard link), ingest before rendering so the Dashboard sees
+// the pending snapshot on its very first mount.
 async function boot() {
-  const share = readShareFromUrl();
-  if (share) {
-    const snapshot = await decodeSnapshot(share);
-    clearShareFromUrl();
-    if (snapshot) stashPendingImport(snapshot);
-  }
+  await ingestShareFromUrl();
   createRoot(rootEl!).render(
     <StrictMode>
       <App />
