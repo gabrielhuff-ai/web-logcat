@@ -18,6 +18,7 @@ import { createPortal } from 'react-dom';
 import * as Icons from '../../Icons';
 import { InfoDot, Tooltip } from './Tooltip';
 import { renderMarkdown } from './markdown';
+import { parseAnsi } from '../../../lib/scripting/ansi';
 
 /** Run lifecycle reflected by interactive controls. */
 export type CtrlState = 'idle' | 'active' | 'busy' | 'error';
@@ -157,6 +158,50 @@ export function ScButton({
           document.body,
         )}
     </>
+  );
+}
+
+/** Desired/observed state of a background daemon process. `finished` is a
+ *  terminal clean-exit state (like `error`, but exit 0) — it does not restart. */
+export type DaemonStatus = 'inactive' | 'running' | 'error' | 'finished';
+
+export interface ScDaemonProps {
+  label: string;
+  status?: DaemonStatus;
+  description?: string;
+  onToggle?: () => void;
+}
+
+/** A daemon's on-panel control: a single clickable surface showing a status
+ *  LED, the label/state, and a play/stop glyph. Clicking it toggles the
+ *  daemon. Only rendered when "Show controls" is on; otherwise the daemon
+ *  runs headless and only its bound console shows anything. */
+export function ScDaemon({ label, status = 'inactive', description, onToggle }: ScDaemonProps) {
+  const running = status === 'running';
+  const color =
+    status === 'running' ? 'green' : status === 'error' ? 'red' : status === 'finished' ? 'blue' : 'off';
+  const stateText =
+    status === 'running' ? 'running' : status === 'error' ? 'error' : status === 'finished' ? 'finished' : 'stopped';
+  return (
+    <button
+      type="button"
+      className={'sc-daemon ' + status}
+      onClick={onToggle}
+      aria-pressed={running}
+      aria-label={(running ? 'Stop ' : 'Start ') + label}
+    >
+      <span className={'sc-led-bulb led-' + color + (running ? ' pulsing' : '')} />
+      <span className="sc-daemon-meta">
+        <span className="sc-daemon-label">
+          {label}
+          {description && <InfoDot description={description} />}
+        </span>
+        <span className="sc-daemon-state">{stateText}</span>
+      </span>
+      <span className="sc-daemon-icon">
+        {running ? <Icons.Stop size={13} /> : <Icons.Play size={13} />}
+      </span>
+    </button>
   );
 }
 
@@ -566,6 +611,26 @@ export interface ConsoleLine {
   text: string;
 }
 
+/** Render one console line, colourising any ANSI escape sequences in it. */
+function ConsoleLineView({ line }: { line: ConsoleLine }) {
+  const segments = parseAnsi(line.text);
+  return (
+    <div className={'sc-console-line k-' + line.kind}>
+      {segments.length === 1 && segments[0].classes.length === 0
+        ? segments[0].text
+        : segments.map((s, i) =>
+            s.classes.length === 0 ? (
+              <span key={i}>{s.text}</span>
+            ) : (
+              <span key={i} className={s.classes.join(' ')}>
+                {s.text}
+              </span>
+            ),
+          )}
+    </div>
+  );
+}
+
 export interface ScConsoleProps {
   title?: string;
   state?: CtrlState;
@@ -574,6 +639,16 @@ export interface ScConsoleProps {
   empty?: boolean;
   copied?: boolean;
   showCopy?: boolean;
+  /** A stream is attached and appending output. */
+  streaming?: boolean;
+  /** A stream was stopped — show a neutral marker instead of an exit code. */
+  stopped?: boolean;
+  /** Hide the leading `$ command` line(s). */
+  hideCommand?: boolean;
+  /** Hide the header bar entirely, leaving only the output body. */
+  hideChrome?: boolean;
+  /** Keep the body pinned to the bottom as new lines arrive. */
+  autoScroll?: boolean;
   onCopy?: () => void;
 }
 
@@ -585,30 +660,53 @@ export function ScConsole({
   empty = false,
   copied = false,
   showCopy = true,
+  streaming = false,
+  stopped = false,
+  hideCommand = false,
+  hideChrome = false,
+  autoScroll = true,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
   const err = state === 'error' || exit !== 0;
+  const shown = hideCommand ? lines.filter((l) => l.kind !== 'cmd') : lines;
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!autoScroll) return;
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [autoScroll, shown.length, streaming]);
+
   return (
-    <div className="sc-console">
+    <div className={'sc-console' + (hideChrome ? ' bare' : '')}>
+      {!hideChrome && (
       <div className="sc-console-head">
         <span className="sc-console-glyph">
           <Icons.Terminal size={11} />
         </span>
         <span className="sc-console-title">{title}</span>
         <span style={{ flex: 1 }} />
-        {busy ? (
+        {streaming ? (
+          <span className="sc-exit live">
+            <span className="sc-exit-dot" /> streaming
+          </span>
+        ) : busy ? (
           <span className="sc-exit busy">
             <SpinnerDot size={8} /> running…
           </span>
         ) : empty ? (
           <span className="sc-exit idle">— no runs yet</span>
+        ) : stopped ? (
+          <span className="sc-exit idle">
+            <span className="sc-exit-dot" /> stopped
+          </span>
         ) : (
           <span className={'sc-exit ' + (err ? 'err' : 'ok')}>
             <span className="sc-exit-dot" /> exit {exit}
           </span>
         )}
-        {!empty && !busy && showCopy && (
+        {!empty && !busy && !streaming && showCopy && (
           <button
             type="button"
             className={'sc-console-copy' + (copied ? ' done' : '')}
@@ -620,15 +718,15 @@ export function ScConsole({
           </button>
         )}
       </div>
-      <div className="sc-console-body">
-        {empty || lines.length === 0 ? (
+      )}
+      <div className="sc-console-body" ref={bodyRef}>
+        {/* Show the empty-state hint only before the first run. Once something
+            has run, a momentarily empty body (just cleared, or a daemon
+            between restarts) stays blank rather than flashing the hint. */}
+        {empty ? (
           <div className="sc-console-empty">Output from the most recent run appears here.</div>
         ) : (
-          lines.map((l, i) => (
-            <div key={i} className={'sc-console-line k-' + l.kind}>
-              {l.text}
-            </div>
-          ))
+          shown.map((l, i) => <ConsoleLineView key={i} line={l} />)
         )}
       </div>
     </div>

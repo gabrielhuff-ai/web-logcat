@@ -364,6 +364,327 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-console-body')).toContainText('clear_data');
   });
 
+  test('a console renders ANSI colours and emoji from echo -e output', async ({ page }) => {
+    const panel = {
+      script: 'colors() {\n  echo -e "\\e[31mERR\\e[0m \\e[32mOK\\e[0m 🎉"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Colors', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_col', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Colors' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body.locator('.sc-ansi-fg-red')).toContainText('ERR');
+    await expect(body.locator('.sc-ansi-fg-green')).toContainText('OK');
+    // Emoji survives the ANSI parser and reaches the DOM.
+    await expect(body).toContainText('🎉');
+  });
+
+  test('a console can hide the leading "$ command" line', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hello world"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, hideCommand: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_hide', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Greet' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    await expect(body).toContainText('hello world');
+    // The `$ greet` command line is suppressed.
+    await expect(body.locator('.k-cmd')).toHaveCount(0);
+    await expect(body).not.toContainText('$ greet');
+  });
+
+  test('a daemon with controls toggles a background stream on and off', async ({ page }) => {
+    const panel = {
+      // A never-returning function (loop) so the simulator keeps it running
+      // until the user stops it.
+      script: 'watch() {\n  while :; do\n    echo -e "\\e[32mline up\\e[0m"\n    echo "beat 🐢"\n  done\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        {
+          id: 'd',
+          kind: 'daemon',
+          label: 'Watch',
+          bindOutputTo: 'console',
+          showControls: true,
+          autoStart: false,
+        },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_daemon', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // autoStart is off, so it begins stopped — the whole surface is the toggle.
+    const daemon = tile.locator('.sc-daemon');
+    await expect(daemon).toContainText('stopped');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
+
+    // Click the control: LED goes green, the console shows the live pill + lines.
+    await daemon.click();
+    await expect(daemon).toContainText('running');
+    await expect(daemon).toHaveAttribute('aria-label', /^Stop /);
+    await expect(tile.locator('.sc-exit.live')).toContainText('streaming');
+    await expect(tile.locator('.sc-console-body')).toContainText('line up');
+    await expect(tile.locator('.sc-console-body')).toContainText('🐢');
+
+    // Click again: back to stopped, the live pill gives way to a neutral marker.
+    await daemon.click();
+    await expect(daemon).toContainText('stopped');
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
+    await expect(tile.locator('.sc-exit.live')).toHaveCount(0);
+  });
+
+  test('a headless daemon auto-starts on load and feeds a chrome-less console', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo "auto tick"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // showControls off → no on-panel UI; autoStart defaults on.
+        { id: 'd', kind: 'daemon', label: 'Watch', bindOutputTo: 'console' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true, hideChrome: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_headless', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // No daemon UI is rendered (headless), and the console header is hidden.
+    await expect(tile.locator('.sc-daemon')).toHaveCount(0);
+    await expect(tile.locator('.sc-console-head')).toHaveCount(0);
+    // It auto-started, so output appears with no interaction.
+    await expect(tile.locator('.sc-console-body')).toContainText('auto tick');
+  });
+
+  test('a daemon that exits cleanly transitions to a finished state', async ({ page }) => {
+    const panel = {
+      script: 'watch() {\n  echo "all done"\n  exit 0\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'd', kind: 'daemon', label: 'Watch', bindOutputTo: 'console', showControls: true, autoStart: true },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_finish', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const daemon = tile.locator('.sc-daemon');
+    // Auto-started, runs once, then exits 0 → finished (not stopped, not error).
+    await expect(daemon).toContainText('finished');
+    await expect(tile.locator('.sc-console-body')).toContainText('all done');
+    // Terminal but re-runnable: the surface offers Start again.
+    await expect(daemon).toHaveAttribute('aria-label', /^Start /);
+  });
+
+  test('a daemon with restart "on success" re-runs instead of finishing', async ({ page }) => {
+    const panel = {
+      script: 'report() {\n  echo "tick"\n  exit 0\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'd', kind: 'daemon', label: 'Report', bindOutputTo: 'console', showControls: true, autoStart: true, restart: 'on-success' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_restart', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const daemon = tile.locator('.sc-daemon');
+    // It exits 0 each run, but the policy relaunches it — so it stays running
+    // and never settles into the terminal "finished" state (which the same
+    // function reaches under the default "Never" policy).
+    await expect(tile.locator('.sc-console-body')).toContainText('tick');
+    await expect(daemon).toContainText('running');
+    await expect(daemon).not.toContainText('finished');
+  });
+
+  test('a finite daemon that prints then clears finishes once (no looping, no flicker)', async ({ page }) => {
+    // Regression: in the simulator a finite function used to loop forever and
+    // `clear` did nothing. It should run once, clear, and finish — like a real
+    // device — and the empty-state hint must not flash after the clear.
+    const panel = {
+      script: 'show() {\n  echo -e "Foo"\n  clear\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // restart defaults to "no".
+        { id: 'd', kind: 'daemon', label: 'Show', bindOutputTo: 'console', showControls: true, autoStart: true },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_printclear', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const daemon = tile.locator('.sc-daemon');
+    const body = tile.locator('.sc-console-body');
+    // Runs once → finished (did not loop), and "Foo" was cleared away.
+    await expect(daemon).toContainText('finished');
+    await expect(body).not.toContainText('Foo');
+    await expect(body.locator('.sc-console-line')).toHaveCount(0);
+    // The cleared console stays blank — the "no runs yet" hint must not appear.
+    await expect(body.locator('.sc-console-empty')).toHaveCount(0);
+  });
+
+  test('a daemon clears the console with a standard clear sequence', async ({ page }) => {
+    // Each emission clears the screen then prints one line, so the console
+    // never accumulates — it shows only the latest "frame".
+    const panel = {
+      script: 'watch() {\n  echo -e "\\033[2Jrepaint"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'd', kind: 'daemon', label: 'Watch', bindOutputTo: 'console', showControls: false, autoStart: true },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'scrollback', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_clear', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    const body = tile.locator('.sc-console-body');
+    await expect(body).toContainText('repaint');
+    // The clear wiped the synthetic `$ watch` header and prevents accumulation:
+    // exactly one line remains no matter how many times it repaints.
+    await expect(body.locator('.sc-console-line')).toHaveCount(1);
+    await expect(body).not.toContainText('$ watch');
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();

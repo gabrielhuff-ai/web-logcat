@@ -25,6 +25,12 @@ const readout = (id: string): ControlConfig => ({
   autoPoll: { enabled: false, intervalSec: 2 },
   refreshOnChange: false,
 });
+const daemon = (id: string): ControlConfig => ({
+  id,
+  kind: 'daemon',
+  label: id,
+  bindOutputTo: 'console',
+});
 const section = (id: string): ControlConfig => ({ id, kind: 'section', title: id });
 const consoleCtl = (id: string): ControlConfig => ({
   id,
@@ -39,9 +45,17 @@ describe('categoryOf', () => {
   it('maps each kind to its band', () => {
     expect(categoryOf(input('a'))).toBe('inputs');
     expect(categoryOf(button('a'))).toBe('buttons');
+    expect(categoryOf(daemon('a'))).toBe('buttons');
     expect(categoryOf(readout('a'))).toBe('displays');
     expect(categoryOf(section('a'))).toBe('section');
     expect(categoryOf(consoleCtl('a'))).toBe('console');
+  });
+
+  it('groups a daemon alongside buttons in the button rail', () => {
+    const groups = groupControls([button('a'), daemon('b')]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].category).toBe('buttons');
+    expect(groups[0].items.map((c) => c.id)).toEqual(['a', 'b']);
   });
 });
 

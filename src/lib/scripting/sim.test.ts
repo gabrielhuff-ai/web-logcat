@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { runFunctionSim, substEnv } from './sim';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { interpretEscapes, loopsForever, runFunctionSim, streamFunctionSim, substEnv } from './sim';
 
 describe('substEnv', () => {
   it('substitutes $NAME and ${NAME}', () => {
@@ -47,5 +47,113 @@ describe('runFunctionSim', () => {
     const r = runFunctionSim(SCRIPT, 'quiet', {});
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('[sim]');
+  });
+
+  it('interprets echo -e escapes (ANSI + newline) and splits lines', () => {
+    const r = runFunctionSim('f() { echo -e "\\e[31mred\\nplain"; }', 'f', {});
+    expect(r.stdout).toBe('\x1b[31mred\nplain');
+  });
+
+  it('emits a screen-clear sequence for clear / reset', () => {
+    expect(runFunctionSim('f() { echo Foo; clear; }', 'f', {}).stdout).toBe('Foo\n\x1b[2J');
+    expect(runFunctionSim('f() { reset; }', 'f', {}).stdout).toBe('\x1b[2J');
+  });
+
+  it('leaves backslash escapes literal without -e', () => {
+    const r = runFunctionSim('f() { echo "\\e[31mraw"; }', 'f', {});
+    expect(r.stdout).toBe('\\e[31mraw');
+  });
+});
+
+describe('interpretEscapes', () => {
+  it('expands \\e, \\033, \\x1b to ESC and \\n / \\t', () => {
+    expect(interpretEscapes('\\e[0m')).toBe('\x1b[0m');
+    expect(interpretEscapes('\\033[0m')).toBe('\x1b[0m');
+    expect(interpretEscapes('\\x1b[0m')).toBe('\x1b[0m');
+    expect(interpretEscapes('a\\nb\\tc')).toBe('a\nb\tc');
+  });
+});
+
+describe('loopsForever', () => {
+  it('flags shell loops and never-returning commands', () => {
+    expect(loopsForever('while :; do echo a; done')).toBe(true);
+    expect(loopsForever('for i in 1 2 3; do echo $i; done')).toBe(true);
+    expect(loopsForever('logcat | grep x')).toBe(true);
+    expect(loopsForever('tail -f /data/log')).toBe(true);
+  });
+  it('treats a returning function as finite', () => {
+    expect(loopsForever('echo "all done"')).toBe(false); // "done" inside a string isn't a loop
+    expect(loopsForever('echo Foo; clear')).toBe(false);
+    expect(loopsForever('logcat -d')).toBe(false); // one-shot dump returns
+  });
+});
+
+describe('streamFunctionSim', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('loops a never-returning function (shell loop) on the interval', () => {
+    const lines: string[] = [];
+    const handle = streamFunctionSim('f() { while :; do echo a; echo b; done; }', 'f', {}, {
+      onLine: (t) => lines.push(t),
+    });
+    expect(lines).toEqual(['a']); // first line is prompt-immediate
+    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(700);
+    expect(lines).toEqual(['a', 'b', 'a']); // looped back to the first line
+    handle.stop();
+    vi.advanceTimersByTime(2100);
+    expect(lines).toEqual(['a', 'b', 'a']); // stop() halts emission
+  });
+
+  it('finishes a finite function after one pass (no loop, no exit)', () => {
+    const lines: string[] = [];
+    let exit = -1;
+    const h = streamFunctionSim('f() { echo a; echo b; }', 'f', {}, {
+      onLine: (t) => lines.push(t),
+      onExit: (c) => (exit = c),
+    });
+    expect(lines).toEqual(['a']);
+    vi.advanceTimersByTime(700); // emits b, then finishes
+    expect(lines).toEqual(['a', 'b']);
+    expect(exit).toBe(0);
+    vi.advanceTimersByTime(2100);
+    expect(lines).toEqual(['a', 'b']); // did not loop
+    h.stop();
+  });
+
+  it('finishes (no looping) with the code when the function calls exit', () => {
+    const lines: string[] = [];
+    let exit = -1;
+    const h = streamFunctionSim('f() { echo done; exit 0; }', 'f', {}, {
+      onLine: (t) => lines.push(t),
+      onExit: (c) => (exit = c),
+    });
+    expect(lines).toEqual(['done']);
+    expect(exit).toBe(0);
+    vi.advanceTimersByTime(2100);
+    expect(lines).toEqual(['done']); // did not loop after exiting
+    h.stop();
+  });
+
+  it('reports the explicit non-zero exit code', () => {
+    let exit = -1;
+    streamFunctionSim('f() { echo oops; exit 3; }', 'f', {}, {
+      onLine: () => {},
+      onExit: (c) => (exit = c),
+    });
+    expect(exit).toBe(3);
+  });
+
+  it('reports an unknown function as an error line and exits 127', () => {
+    const lines: { t: string; k: string }[] = [];
+    let exit = -1;
+    streamFunctionSim('f() { :; }', 'missing', {}, {
+      onLine: (t, k) => lines.push({ t, k }),
+      onExit: (c) => (exit = c),
+    });
+    expect(exit).toBe(127);
+    expect(lines[0].k).toBe('err');
+    expect(lines[0].t).toContain('not found');
   });
 });

@@ -20,6 +20,10 @@ export interface ConsoleView {
   exit: number;
   empty: boolean;
   copied: boolean;
+  /** A stream is currently attached and appending output. */
+  streaming: boolean;
+  /** A stream was stopped (by the user or device) — show a neutral marker. */
+  stopped: boolean;
 }
 
 export const EMPTY_CONSOLE: ConsoleView = {
@@ -28,4 +32,6 @@ export const EMPTY_CONSOLE: ConsoleView = {
   exit: 0,
   empty: true,
   copied: false,
+  streaming: false,
+  stopped: false,
 };

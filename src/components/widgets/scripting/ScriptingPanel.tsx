@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import {
   ScButton,
   ScConsole,
+  ScDaemon,
   ScGauge,
   ScKnob,
   ScLED,
@@ -21,6 +22,7 @@ import {
   ScText,
   ScToggle,
   type CtrlState,
+  type DaemonStatus,
 } from './controls';
 import { groupControls, type Group } from './panelLayout';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
@@ -33,6 +35,9 @@ export interface ScriptingPanelProps {
   /** Per-button run lifecycle, keyed by control id. */
   buttonState: Record<string, CtrlState>;
   onRun: (id: string) => void;
+  /** Per-daemon run status, keyed by control id. */
+  daemonStatus: Record<string, DaemonStatus>;
+  onToggleDaemon: (id: string) => void;
   /** Per-display value, keyed by control id. */
   displayValues: Record<string, DisplayValue>;
   /** Per-console view, keyed by console control id. */
@@ -72,7 +77,11 @@ function GroupView({ group, props }: { group: Group; props: ScriptingPanelProps 
     case 'inputs':
       return <div className="sw-inputs">{group.items.map((c) => renderInput(c, props))}</div>;
     case 'buttons':
-      return <div className="sw-buttons">{group.items.map((c) => renderButton(c, props))}</div>;
+      return (
+        <div className="sw-buttons">
+          {group.items.map((c) => (c.kind === 'daemon' ? renderDaemon(c, props) : renderButton(c, props)))}
+        </div>
+      );
     case 'displays':
       return <div className="sw-readouts">{group.items.map((c) => renderDisplay(c, props))}</div>;
     case 'console':
@@ -188,6 +197,19 @@ function renderButton(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
   );
 }
 
+function renderDaemon(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
+  if (c.kind !== 'daemon' || !c.showControls) return null;
+  return (
+    <ScDaemon
+      key={c.id}
+      label={c.label}
+      description={c.description}
+      status={props.daemonStatus[c.id] ?? 'inactive'}
+      onToggle={() => props.onToggleDaemon(c.id)}
+    />
+  );
+}
+
 function renderDisplay(c: ControlConfig, props: ScriptingPanelProps): ReactNode {
   const dv = props.displayValues[c.id];
   switch (c.kind) {
@@ -250,7 +272,12 @@ function renderConsole(c: ControlConfig, props: ScriptingPanelProps): ReactNode 
       lines={view.lines}
       empty={view.empty}
       copied={view.copied}
+      streaming={view.streaming}
+      stopped={view.stopped}
       showCopy={c.copyButton}
+      hideCommand={c.hideCommand}
+      hideChrome={c.hideChrome}
+      autoScroll={c.autoScroll}
       onCopy={() => props.onCopyConsole(c.id)}
     />
   );

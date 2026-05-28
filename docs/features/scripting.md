@@ -43,9 +43,15 @@ arguments, never spliced into the command text — so a value like
 `; rm -rf /` is inert data, not code. Output (stdout, stderr, exit code)
 lands in the panel's **console**.
 
-Runs are one-shot — the script is re-sourced each time rather than kept
-in a long-lived shell, so a function is always defined by the current
-script and always sees the current input values.
+Action-button runs are one-shot — the script is re-sourced each time
+rather than kept in a long-lived shell, so a function is always defined by
+the current script and always sees the current input values. For something
+that keeps running — following `logcat | grep "$PACKAGE"`, for instance —
+use a **[Daemon](#daemon)**, which manages a long-lived background process
+and streams its output to the console.
+
+The console renders ANSI colours, so `echo -e "\e[31m…\e[0m"` (and emoji)
+show up the way they would in a terminal.
 
 ## Controls
 
@@ -58,14 +64,19 @@ the function derived from its label, fired the moment the value changes.
 That last option lets a toggle send a broadcast on flip without a
 separate button.
 
-**Action button** runs a function. Mark it *Confirm before running* for
-destructive operations and it opens a Cancel / Run popover first.
+**Action button** runs a function once. Mark it *Confirm before running*
+for destructive operations and it opens a Cancel / Run popover first.
+
+**Daemon** runs a function as a managed background process — declarative,
+not a click. It's a desired-state toggle: while active, the runtime keeps
+the process running and streams its output to the bound console; toggle it
+off and the process is stopped. See [Daemon](#daemon) below.
 
 **Displays** show a bound function's output:
 
 | Display | Shows |
 | --- | --- |
-| **Console** | The most recent run — stdout, stderr, and the exit code. On by default. |
+| **Console** | The most recent run — stdout, stderr, and the exit code (or a live, scrolling feed when fed by a daemon). ANSI colours and emoji are rendered. On by default. |
 | **Readout** | A big number + unit pulled from the output. |
 | **Status pill** | A label + the output's last line, coloured by exit status. |
 | **Gauge** | The output as a value on a min/max arc. |
@@ -114,10 +125,43 @@ Example — a `Package` text field ↦ `$PACKAGE`, and a `Brightness` slider
 
 ### Action button
 
-Runs the function derived from its label (`Force stop` ↦ `force_stop`), exports
-all input values first, and sends stdout/stderr/exit to the console it's bound
-to. **Variant** styles it (Default / Subtle / Destructive); **Confirm before
-running** opens a Cancel / Run dialog first — use it for destructive actions.
+Runs the function derived from its label (`Force stop` ↦ `force_stop`) once,
+exports all input values first, and sends stdout/stderr/exit to the console
+it's bound to. **Variant** styles it (Default / Subtle / Destructive);
+**Confirm before running** opens a Cancel / Run dialog first — use it for
+destructive actions.
+
+### Daemon
+
+Runs a function as a **managed background process**, for commands that keep
+running rather than finish — e.g. `watch() { logcat | grep "$PACKAGE"; }`. A
+daemon is declarative: it's a desired-state toggle, and the runtime starts or
+stops the process to match (akin to a service manager). The function derives
+from the label, exactly like an action button, and its output streams to the
+bound console.
+
+- **Show controls** (default off) — the whole control is a single clickable
+  surface: a status LED (running / finished / error / stopped), the label, and
+  a play/stop glyph. Clicking it starts or stops the daemon. With it off, the
+  daemon runs headless and only its bound console shows anything — pair it with
+  a console set to *Hide chrome* for a clean log pane.
+- **Auto-start** (default on) — start the daemon when the dashboard loads.
+  Always disarmed on import, so an imported panel never starts a process on
+  its own; re-arm it from the builder.
+- **Restart** (default *Never*) — what to do when the process exits, mirroring
+  systemd's `Restart=`: *Never* leaves it in a terminal state; *On failure*
+  relaunches after a non-zero exit; *On success* after a clean exit; *Always*
+  after either. Restarts happen after a short delay so a fast-exiting command
+  can't spin.
+
+When **Restart** is *Never* and the process exits on its own, the daemon enters
+a **terminal** state: a clean exit (0) shows **finished** (blue LED), a
+non-zero exit shows **error** (red LED). Click the control to run it again.
+
+A daemon can **clear its console** by emitting a standard terminal clear —
+`clear`, `reset`, or `printf '\033[2J\033[H'`. This also lets a repainting
+command (a `top`-style refresh that clears and redraws) show only its latest
+frame instead of accumulating.
 
 ### Displays
 
@@ -126,7 +170,7 @@ optionally when an input they read changes) and render its output:
 
 | Display | Renders the function's output as |
 | --- | --- |
-| **Console** | The most recent run: the command, stdout, stderr, and exit code. Bound to "last run" rather than one function. |
+| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output. |
 | **Readout** | The first number on the last non-empty line, plus a unit — e.g. `battery_temp` ↦ `31.2 °C`. |
 | **Status pill** | The last line as text, coloured green / red by exit status. |
 | **Gauge** | That number on a `min`/`max` arc (warns past ~85%). |
@@ -167,5 +211,9 @@ nothing runs until you choose to enable it.
 ## Trying it without a device
 
 On the [simulated stream](./simulator), the widget evaluates a small
-subset of shell — `echo` / `printf` with `$VAR` substitution — so a demo
-panel produces real-looking output with no phone attached.
+subset of shell — `echo` / `printf` with `$VAR` substitution, `echo -e`
+escapes for ANSI colours, and `clear` / `reset` — so a demo panel produces
+real-looking output with no phone attached. A simulated daemon finishes
+after emitting its output once, just like a function that returns; only one
+that would run forever (a shell loop, or `logcat` / `tail -f` / `top`) keeps
+scrolling.

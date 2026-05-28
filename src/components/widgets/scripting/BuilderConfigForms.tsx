@@ -14,9 +14,18 @@ import type {
   ButtonControl,
   ConsoleControl,
   ControlConfig,
+  DaemonControl,
   InputControl,
+  RestartPolicy,
   SectionControl,
 } from './scriptingSettings';
+
+const RESTART_LABELS: Record<RestartPolicy, string> = {
+  no: 'Never',
+  'on-failure': 'On failure',
+  'on-success': 'On success',
+  always: 'Always',
+};
 
 export interface BindTarget {
   value: string;
@@ -38,6 +47,15 @@ export function ConfigForm({ control, onPatch, functions, bindTargets, script }:
     case 'button':
       return (
         <ConfigButton
+          control={control}
+          onPatch={(p) => onPatch(control.id, p)}
+          bindTargets={bindTargets}
+          script={script}
+        />
+      );
+    case 'daemon':
+      return (
+        <ConfigDaemon
           control={control}
           onPatch={(p) => onPatch(control.id, p)}
           bindTargets={bindTargets}
@@ -375,6 +393,79 @@ function ConfigButton({
   );
 }
 
+// ── Daemon form ───────────────────────────────────────────────────────────────
+function ConfigDaemon({
+  control,
+  onPatch,
+  bindTargets,
+  script,
+}: {
+  control: DaemonControl;
+  onPatch: (p: Partial<DaemonControl>) => void;
+  bindTargets: BindTarget[];
+  script: string;
+}) {
+  const fn = fnFromLabel(control.label);
+  const body = extractFunctionBody(script, fn);
+  return (
+    <div className="bdr-form">
+      <FormRow label="Label" help={<>Drives the function name: <code>{fn}()</code></>}>
+        <input value={control.label} onChange={(e) => onPatch({ label: e.target.value })} />
+      </FormRow>
+      <FormRow label="Description" help="Shown as a tooltip on hover. Optional.">
+        <textarea
+          className="bdr-form-textarea"
+          rows={2}
+          value={control.description ?? ''}
+          onChange={(e) => onPatch({ description: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Bind output to" help="Where the daemon's output is streamed.">
+        <div className="bdr-form-select">
+          <span>{bindTargets.find((t) => t.value === control.bindOutputTo)?.label ?? 'console (default)'}</span>
+          <Icons.Chevron size={11} />
+          <select value={control.bindOutputTo} onChange={(e) => onPatch({ bindOutputTo: e.target.value })}>
+            {bindTargets.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FormRow>
+      <FormRow label="Show controls" help="Show a start/stop toggle and status LED on the panel. Off by default — the daemon runs headless and only its console shows output.">
+        <MiniToggle on={control.showControls ?? false} onChange={(v) => onPatch({ showControls: v })} label="Show controls" />
+      </FormRow>
+      <FormRow label="Auto-start" help="Start the daemon when the dashboard loads. On by default; disarmed on import so a shared panel never runs on its own.">
+        <MiniToggle on={control.autoStart ?? true} onChange={(v) => onPatch({ autoStart: v })} label="Auto-start" />
+      </FormRow>
+      <FormRow
+        label="Restart"
+        help="When the process exits, restart it (like systemd's Restart=). Never (default) leaves it finished/errored; on failure restarts after a non-zero exit, on success after a clean exit, always after either. Restarts after a short delay."
+      >
+        <div className="bdr-form-select">
+          <span>{RESTART_LABELS[control.restart ?? 'no']}</span>
+          <Icons.Chevron size={11} />
+          <select
+            value={control.restart ?? 'no'}
+            onChange={(e) => onPatch({ restart: e.target.value as RestartPolicy })}
+          >
+            <option value="no">Never</option>
+            <option value="on-failure">On failure</option>
+            <option value="on-success">On success</option>
+            <option value="always">Always</option>
+          </select>
+        </div>
+      </FormRow>
+      <FormRow label="Function preview" help={body ? 'Runs in the background until stopped — it should keep running (e.g. pipe from logcat), not exit.' : undefined}>
+        <pre className={'bdr-fnpreview' + (body ? '' : ' missing')}>
+          {body ?? `${fn}() is not defined yet — add it to the script.`}
+        </pre>
+      </FormRow>
+    </div>
+  );
+}
+
 // ── Console form ──────────────────────────────────────────────────────────────
 function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch: (p: Partial<ConsoleControl>) => void }) {
   return (
@@ -397,6 +488,16 @@ function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch:
       </FormRow>
       <FormRow label="Auto-scroll" help="Scroll to the bottom when new output arrives.">
         <MiniToggle on={control.autoScroll} onChange={(v) => onPatch({ autoScroll: v })} label="Auto-scroll" />
+      </FormRow>
+      <FormRow label="Hide command line" help="Hide the leading “$ command” line shown before each run's output.">
+        <MiniToggle
+          on={control.hideCommand ?? false}
+          onChange={(v) => onPatch({ hideCommand: v })}
+          label="Hide command line"
+        />
+      </FormRow>
+      <FormRow label="Hide chrome" help="Hide the console header (title, status, copy) and show only the output.">
+        <MiniToggle on={control.hideChrome ?? false} onChange={(v) => onPatch({ hideChrome: v })} label="Hide chrome" />
       </FormRow>
     </div>
   );
