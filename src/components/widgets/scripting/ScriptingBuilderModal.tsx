@@ -13,9 +13,11 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
@@ -25,6 +27,7 @@ import { useTileSettings } from '../../../lib/tileSettings';
 import { extractFunctions } from '../../../lib/scripting/parseScript';
 import { highlightShell } from '../../../lib/scripting/highlight';
 import { varFromLabel } from '../../../lib/scripting/derive';
+import { applyShiftTab, applyTab, toggleComment, type EditResult } from './editorKeys';
 import {
   SCRIPTING_DEFAULTS,
   type ControlConfig,
@@ -60,6 +63,10 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
   const [dragId, setDragId] = useState<string | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  // A selection to restore after a key-driven script edit re-renders the
+  // (controlled) textarea, which would otherwise jump the caret to the end.
+  const pendingSelRef = useRef<[number, number] | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -70,6 +77,31 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
   }, [onClose]);
 
   const { script, controls, runAsRoot } = settings;
+
+  useLayoutEffect(() => {
+    const sel = pendingSelRef.current;
+    if (sel && editorRef.current) {
+      editorRef.current.setSelectionRange(sel[0], sel[1]);
+      pendingSelRef.current = null;
+    }
+  });
+
+  // Tab / Shift+Tab indent and Cmd/Ctrl+/ comment-toggle in the script editor.
+  const onEditorKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      const ta = e.currentTarget;
+      const { selectionStart: s, selectionEnd: end, value } = ta;
+      let r: EditResult | null = null;
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') r = toggleComment(value, s, end);
+      else if (e.key === 'Tab' && !e.shiftKey) r = applyTab(value, s, end);
+      else if (e.key === 'Tab' && e.shiftKey) r = applyShiftTab(value, s, end);
+      if (!r) return;
+      e.preventDefault();
+      pendingSelRef.current = [r.selectionStart, r.selectionEnd];
+      setSettings({ script: r.value });
+    },
+    [setSettings],
+  );
 
   const highlighted = useMemo(() => highlightShell(script), [script]);
   const lineCount = useMemo(() => Math.max(1, script.split('\n').length), [script]);
@@ -222,9 +254,11 @@ export function ScriptingBuilderModal({ tileId, onClose, scriptError }: Scriptin
                       <code dangerouslySetInnerHTML={{ __html: highlighted + '\n' }} />
                     </pre>
                     <textarea
+                      ref={editorRef}
                       className="bdr-editor-text"
                       value={script}
                       onChange={(e) => setSettings({ script: e.target.value })}
+                      onKeyDown={onEditorKeyDown}
                       spellCheck={false}
                       autoComplete="off"
                       aria-label="Shell script"

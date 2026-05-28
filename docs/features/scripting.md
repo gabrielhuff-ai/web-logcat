@@ -50,8 +50,10 @@ that keeps running — following `logcat | grep "$PACKAGE"`, for instance —
 use a **[Daemon](#daemon)**, which manages a long-lived background process
 and streams its output to the console.
 
-The console renders ANSI colours, so `echo -e "\e[31m…\e[0m"` (and emoji)
-show up the way they would in a terminal.
+The console renders ANSI escapes, so `echo -e "\e[31m…\e[0m"` (and emoji)
+show up the way they would in a terminal — the 16 named colours plus
+256-colour and 24-bit truecolour, and the bold / dim / italic / underline /
+blink / reverse / strikethrough attributes.
 
 ## Controls
 
@@ -170,7 +172,7 @@ optionally when an input they read changes) and render its output:
 
 | Display | Renders the function's output as |
 | --- | --- |
-| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output. |
+| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output; **Font size** sets the output text size in px (blank ⇒ default); **Line spacing** sets the extra space between lines in em (0 ⇒ lines touch, so box-drawing diagrams render gap-free). |
 | **Readout** | The first number on the last non-empty line, plus a unit — e.g. `battery_temp` ↦ `31.2 °C`. |
 | **Status pill** | The last line as text, coloured green / red by exit status. |
 | **Gauge** | That number on a `min`/`max` arc (warns past ~85%). |
@@ -193,8 +195,9 @@ in scope), the controls list and per-control settings on the right. Drag
 to reorder controls; the split between panes is draggable and the
 controls pane can collapse to give the editor the full width. Edits apply
 live as you make them — the script editor has line numbers and syntax
-highlighting. **Clear** resets the script and controls to the starting
-state.
+highlighting, and the usual editor keys: **Tab** / **Shift+Tab** indent and
+dedent the selected lines, and **⌘/Ctrl + /** toggles `#` comments.
+**Clear** resets the script and controls to the starting state.
 
 If the script fails a syntax check on a real device, the tile shows a
 **script error** banner — click it to jump back into the builder — and

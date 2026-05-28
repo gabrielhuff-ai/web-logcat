@@ -506,7 +506,9 @@
   padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: var(--t-xs);
-  line-height: 1.55;
+  /* Default line-height (tight, so box-drawing diagrams join). The component
+     also sets it inline from the per-console "Line spacing" setting. */
+  line-height: 1;
   color: var(--fg-1);
   overflow: auto;
   flex: 1;
@@ -543,6 +545,15 @@
 .sc-ansi-dim { opacity: 0.65; }
 .sc-ansi-italic { font-style: italic; }
 .sc-ansi-underline { text-decoration: underline; }
+.sc-ansi-strike { text-decoration: line-through; }
+.sc-ansi-underline.sc-ansi-strike { text-decoration: underline line-through; }
+.sc-ansi-blink { animation: sc-ansi-blink 1s step-start infinite; }
+@keyframes sc-ansi-blink { 50% { opacity: 0; } }
+/* Reverse video: the unset side defaults to the console's own fg / bg. */
+.sc-ansi-fg-default-fg { color: var(--fg-1); }
+.sc-ansi-fg-default-bg { color: var(--bg-0); }
+.sc-ansi-bg-default-fg { background: var(--fg-1); }
+.sc-ansi-bg-default-bg { background: var(--bg-0); }
 
 .sc-ansi-fg-black   { color: var(--fg-3); }
 .sc-ansi-fg-red     { color: var(--lvl-e-fg); }
