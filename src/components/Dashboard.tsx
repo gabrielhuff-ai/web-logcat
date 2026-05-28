@@ -17,8 +17,10 @@ import { DashboardShareModal } from './DashboardShareModal';
 import { PendingImportModal } from './PendingImportModal';
 import {
   applySnapshot,
+  captureSnapshot,
   hasScripts,
   onPendingImport,
+  snapshotsEqual,
   takePendingImport,
 } from '../lib/dashboardShare';
 import type { DashboardSnapshot } from '../lib/dashboardShare';
@@ -70,6 +72,9 @@ export function Dashboard({
   const applyPending = useCallback(() => {
     const pending = takePendingImport();
     if (!pending) return;
+    // Opening your own share link is a no-op — skip the prompt + the
+    // re-apply entirely when the incoming snapshot matches the live one.
+    if (snapshotsEqual(pending, captureSnapshot())) return;
     if (hasScripts(pending)) setPendingShared(pending);
     else finishImport(pending);
   }, [finishImport]);

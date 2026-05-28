@@ -6,6 +6,7 @@ import {
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
+  snapshotsEqual,
   type DashboardSnapshot,
 } from './dashboardShare';
 import { STORAGE_KEY } from './layout';
@@ -167,6 +168,53 @@ describe('captureSnapshot', () => {
     const snap = captureSnapshot();
     expect(snap.layout).toEqual(empty);
     expect(snap.settings).toEqual({});
+  });
+});
+
+describe('snapshotsEqual', () => {
+  const base: DashboardSnapshot = {
+    v: 1,
+    layout: {
+      tiles: { a: { id: 'a', kind: 'scripting' }, b: { id: 'b', kind: 'shell' } },
+      tree: { type: 'split', dir: 'row', ratio: 0.5, a: { type: 'leaf', id: 'a' }, b: { type: 'leaf', id: 'b' } },
+      focusId: 'a',
+    },
+    settings: {
+      a: { scripting: { script: 'echo hi', controls: [] } },
+      b: { shell: { cwd: '/data' } },
+    },
+  };
+
+  it('is true for two snapshots with the same content', () => {
+    expect(snapshotsEqual(base, JSON.parse(JSON.stringify(base)) as DashboardSnapshot)).toBe(true);
+  });
+
+  it('is true when only object key ordering differs', () => {
+    const reordered: DashboardSnapshot = {
+      settings: {
+        b: { shell: { cwd: '/data' } },
+        a: { scripting: { controls: [], script: 'echo hi' } },
+      },
+      layout: base.layout,
+      v: 1,
+    };
+    expect(snapshotsEqual(base, reordered)).toBe(true);
+  });
+
+  it('is false when settings differ', () => {
+    const changed: DashboardSnapshot = {
+      ...base,
+      settings: { ...base.settings, a: { scripting: { script: 'echo hello', controls: [] } } },
+    };
+    expect(snapshotsEqual(base, changed)).toBe(false);
+  });
+
+  it('is false when the layout tree differs', () => {
+    const changed: DashboardSnapshot = {
+      ...base,
+      layout: { ...base.layout, focusId: 'b' },
+    };
+    expect(snapshotsEqual(base, changed)).toBe(false);
   });
 });
 
