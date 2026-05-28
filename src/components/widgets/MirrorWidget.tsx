@@ -48,6 +48,7 @@ import {
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
 import { contentFrac } from './mirror/letterbox';
+import { META_CTRL, resolveTextEditKey } from './mirror/keyMap';
 import { createSync, type SyncFs, type WriteProgress } from '../../lib/sync';
 import { WritableStream as ChanWritableStream } from '@yume-chan/stream-extra';
 import {
@@ -56,7 +57,7 @@ import {
 } from '../../lib/dragHandoff';
 import type { ScrcpySession } from '../../lib/scrcpy';
 import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
-import type { AndroidKeyCode } from '@yume-chan/scrcpy';
+import type { AndroidKeyCode, AndroidKeyEventMeta } from '@yume-chan/scrcpy';
 
 export interface MirrorWidgetProps {
   /** Stable id of the host tile — used to namespace per-instance state. */
@@ -81,6 +82,7 @@ const KEYCODE_DPAD_LEFT = 21 as AndroidKeyCode;
 const KEYCODE_DPAD_RIGHT = 22 as AndroidKeyCode;
 const KEYCODE_ESCAPE = 111 as AndroidKeyCode;
 const KEYCODE_FORWARD_DEL = 112 as AndroidKeyCode;
+const KEYCODE_C = 31 as AndroidKeyCode;
 
 /** Aspect ratio of the simulated home-screen frame (matches its SVG viewBox). */
 const SIM_FRAME_W = 360;
@@ -187,6 +189,11 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   // on the mirror can write to `navigator.clipboard` without rerendering
   // the toolbar on every device clipboard update.
   const deviceClipboardRef = useRef<string | null>(null);
+  // One-shot resolvers waiting for the *next* device-clipboard emit.
+  // `copyToHost` forwards Ctrl+C to the device and parks on this set
+  // so the resulting clipboard contents land in `navigator.clipboard`
+  // even when the device hadn't put anything on its clipboard yet.
+  const clipboardWaitersRef = useRef<Set<(text: string) => void>>(new Set());
   // Monotonic sequence for `setClipboard` ACKs — scrcpy uses it to
   // match the SET_CLIPBOARD reply back to the request. We don't await
   // the ack (the writer's `setClipboard` already does that), but the
@@ -314,6 +321,22 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
               new ChanWritableStream<string>({
                 write(text) {
                   deviceClipboardRef.current = text;
+                  // Drain any pending Ctrl+C waiters with the fresh
+                  // value. Each waiter is one-shot — `copyToHost`
+                  // adds itself before forwarding Ctrl+C, and the
+                  // listener cleans up after firing.
+                  const waiters = clipboardWaitersRef.current;
+                  if (waiters.size > 0) {
+                    const snap = [...waiters];
+                    waiters.clear();
+                    for (const fn of snap) {
+                      try {
+                        fn(text);
+                      } catch {
+                        /* one bad waiter shouldn't tear the stream */
+                      }
+                    }
+                  }
                 },
               }),
             )
@@ -493,9 +516,57 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       showToast('Simulated mode — copy disabled');
       return;
     }
-    const text = deviceClipboardRef.current;
+    const ctrl = sessionRef.current?.control;
+    if (!ctrl) return;
+
+    // Park on the next clipboard emit *before* sending Ctrl+C, so a
+    // device that responds quickly doesn't race past our listener.
+    // The race resolves either way:
+    //   - device produces a new clipboard value  → the writer above
+    //     hands it to the waiter, we write to the host.
+    //   - timeout fires first                   → fall back to the
+    //     most-recent ref value (covers apps that handled Ctrl+C as
+    //     a no-op but had something on the clipboard from earlier).
+    const pendingUpdate = new Promise<string | null>((resolve) => {
+      let settled = false;
+      const finish = (val: string | null) => {
+        if (settled) return;
+        settled = true;
+        clipboardWaitersRef.current.delete(waiter);
+        window.clearTimeout(timer);
+        resolve(val);
+      };
+      const waiter = (text: string) => finish(text);
+      clipboardWaitersRef.current.add(waiter);
+      const timer = window.setTimeout(() => finish(null), 400);
+    });
+
+    try {
+      // Cast: scrcpy's `AndroidKeyEventMeta` is a tight numeric union
+      // of *individual* bits, but the on-wire field accepts an OR'd
+      // metaState. Both `META_SHIFT` and `META_CTRL` already include
+      // their generic + side-specific bits per Android conventions
+      // (`META_*_ON | META_*_LEFT_ON`).
+      await ctrl.injectKeyCode({
+        action: ACTION_DOWN,
+        keyCode: KEYCODE_C,
+        repeat: 0,
+        metaState: META_CTRL as AndroidKeyEventMeta,
+      });
+      await ctrl.injectKeyCode({
+        action: ACTION_UP,
+        keyCode: KEYCODE_C,
+        repeat: 0,
+        metaState: META_CTRL as AndroidKeyEventMeta,
+      });
+    } catch {
+      /* control channel closed — fall through to the fallback */
+    }
+
+    const fresh = await pendingUpdate;
+    const text = fresh ?? deviceClipboardRef.current;
     if (!text) {
-      showToast('Device clipboard is empty — copy on the device first');
+      showToast('Nothing to copy — select text on the device first');
       return;
     }
     try {
@@ -546,6 +617,40 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       // bubble so the dashboard's tile-delete shortcut still fires
       // (there's no real keystroke to compete with).
       if (usingFake) return;
+
+      // Mac-style text-editing shortcuts (⌘+arrow / ⌥+arrow / ⇧+arrow,
+      // with optional ⇧ for selection). Resolved into Android editor
+      // keycodes via `keyMap.ts`; the resolver returns `null` when the
+      // event isn't one we want to forward as an editor shortcut so
+      // the existing specialMap below still owns plain Backspace /
+      // Enter / Tab / unmodified-arrow handling.
+      const edit = resolveTextEditKey(e);
+      if (edit) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopPropagation();
+        const ctrl = sessionRef.current?.control;
+        if (!ctrl) return;
+        void (async () => {
+          try {
+            await ctrl.injectKeyCode({
+              action: ACTION_DOWN,
+              keyCode: edit.keyCode as AndroidKeyCode,
+              repeat: 0,
+              metaState: edit.metaState as AndroidKeyEventMeta,
+            });
+            await ctrl.injectKeyCode({
+              action: ACTION_UP,
+              keyCode: edit.keyCode as AndroidKeyCode,
+              repeat: 0,
+              metaState: edit.metaState as AndroidKeyEventMeta,
+            });
+          } catch {
+            /* control channel closed — ignored */
+          }
+        })();
+        return;
+      }
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
