@@ -171,6 +171,32 @@ function scriptHasCode(script: string): boolean {
   });
 }
 
+/** Structural equality for two snapshots. Used to suppress the URL-import
+ *  trust prompt when the incoming snapshot matches the live dashboard
+ *  byte-for-byte — opening your own share link shouldn't pester you.
+ *
+ *  Canonicalises object key order before stringifying so two snapshots
+ *  built in different iteration orders (e.g. settings written in a
+ *  different sequence) still compare equal. */
+export function snapshotsEqual(a: DashboardSnapshot, b: DashboardSnapshot): boolean {
+  return canonicalJson(a) === canonicalJson(b);
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalise(value));
+}
+
+function canonicalise(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalise);
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(o).sort()) out[k] = canonicalise(o[k]);
+    return out;
+  }
+  return value;
+}
+
 // ---- URL + pending-import plumbing -----------------------------------------
 
 export function fitsInUrl(encoded: string): boolean {
