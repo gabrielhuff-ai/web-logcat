@@ -38,15 +38,26 @@ const KEYCODE_DPAD_LEFT: AndroidKeyCode = 21;
 const KEYCODE_DPAD_RIGHT: AndroidKeyCode = 22;
 const KEYCODE_MOVE_HOME: AndroidKeyCode = 122;
 const KEYCODE_MOVE_END: AndroidKeyCode = 123;
+const KEYCODE_SHIFT_LEFT: AndroidKeyCode = 59;
+const KEYCODE_ALT_LEFT: AndroidKeyCode = 57;
+const KEYCODE_CTRL_LEFT: AndroidKeyCode = 113;
+
+export const ACTION_DOWN = 0 as const;
+export const ACTION_UP = 1 as const;
+export type KeyAction = typeof ACTION_DOWN | typeof ACTION_UP;
 
 const META_SHIFT_ON = 0x0001;
 const META_SHIFT_LEFT_ON = 0x0040;
+const META_ALT_ON = 0x0002;
+const META_ALT_LEFT_ON = 0x0010;
 const META_CTRL_ON = 0x1000;
 const META_CTRL_LEFT_ON = 0x2000;
 
 /** `META_SHIFT_ON | META_SHIFT_LEFT_ON` — Android's `BaseKeyListener`
  *  inspects both the generic and the left-specific bits. */
 export const META_SHIFT = META_SHIFT_ON | META_SHIFT_LEFT_ON;
+/** `META_ALT_ON | META_ALT_LEFT_ON`. */
+export const META_ALT = META_ALT_ON | META_ALT_LEFT_ON;
 /** `META_CTRL_ON | META_CTRL_LEFT_ON` — same reasoning as `META_SHIFT`. */
 export const META_CTRL = META_CTRL_ON | META_CTRL_LEFT_ON;
 
@@ -112,6 +123,60 @@ export function resolveTextEditKey(e: KeyboardEventLike): ResolvedKey | null {
     default:
       return null;
   }
+}
+
+export interface KeyEventPlan {
+  action: KeyAction;
+  keyCode: AndroidKeyCode;
+  metaState: number;
+}
+
+/**
+ * Expand a "modifier + key" combo into the sequence of discrete
+ * `KeyEvent`s a real hardware keyboard would emit: one DOWN per
+ * pressed modifier, the main key DOWN+UP, then one UP per modifier
+ * (in reverse order). The Mirror widget hands each plan entry to
+ * scrcpy's `injectKeyCode` in order.
+ *
+ * Why this beats setting `metaState` alone on the main key:
+ *
+ *   - Selection extension (Shift+arrow / Shift+End). `TextView` reads
+ *     the actually-held `KEYCODE_SHIFT_*` to decide whether to extend
+ *     the selection; bare `metaState` bits move the cursor without
+ *     extending it.
+ *   - `onKeyShortcut` (Ctrl+C / Ctrl+A). Android's `KeyEvent.dispatch`
+ *     only routes to the shortcut path when an actual modifier
+ *     keycode is held alongside the main key.
+ *
+ * That's why our first cut of Ctrl+C and ⌘+⇧+arrow appeared to fire
+ * but produced no selection / no copy.
+ */
+export function planComboKey(keyCode: AndroidKeyCode, metaState: number): KeyEventPlan[] {
+  // Both the generic and side-specific bits are honoured so callers
+  // can pass `META_SHIFT_ON` alone, `META_SHIFT_LEFT_ON` alone, or
+  // the combined `META_SHIFT` constant — all imply "the user pressed
+  // Shift".
+  const needCtrl = (metaState & (META_CTRL_ON | META_CTRL_LEFT_ON)) !== 0;
+  const needShift = (metaState & (META_SHIFT_ON | META_SHIFT_LEFT_ON)) !== 0;
+  const needAlt = (metaState & (META_ALT_ON | META_ALT_LEFT_ON)) !== 0;
+  const modifiers: { keyCode: AndroidKeyCode; bits: number }[] = [];
+  if (needCtrl) modifiers.push({ keyCode: KEYCODE_CTRL_LEFT, bits: META_CTRL });
+  if (needShift) modifiers.push({ keyCode: KEYCODE_SHIFT_LEFT, bits: META_SHIFT });
+  if (needAlt) modifiers.push({ keyCode: KEYCODE_ALT_LEFT, bits: META_ALT });
+
+  const events: KeyEventPlan[] = [];
+  let accum = 0;
+  for (const mod of modifiers) {
+    accum |= mod.bits;
+    events.push({ action: ACTION_DOWN, keyCode: mod.keyCode, metaState: accum });
+  }
+  events.push({ action: ACTION_DOWN, keyCode, metaState: accum });
+  events.push({ action: ACTION_UP, keyCode, metaState: accum });
+  for (const mod of [...modifiers].reverse()) {
+    accum &= ~mod.bits;
+    events.push({ action: ACTION_UP, keyCode: mod.keyCode, metaState: accum });
+  }
+  return events;
 }
 
 function mapArrow(

@@ -48,7 +48,7 @@ import {
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
 import { contentFrac } from './mirror/letterbox';
-import { META_CTRL, resolveTextEditKey } from './mirror/keyMap';
+import { META_CTRL, planComboKey, resolveTextEditKey } from './mirror/keyMap';
 import { createSync, type SyncFs, type WriteProgress } from '../../lib/sync';
 import { WritableStream as ChanWritableStream } from '@yume-chan/stream-extra';
 import {
@@ -57,7 +57,11 @@ import {
 } from '../../lib/dragHandoff';
 import type { ScrcpySession } from '../../lib/scrcpy';
 import { AndroidMotionEventAction } from '@yume-chan/scrcpy';
-import type { AndroidKeyCode, AndroidKeyEventMeta } from '@yume-chan/scrcpy';
+import type {
+  AndroidKeyCode,
+  AndroidKeyEventMeta,
+  ScrcpyControlMessageWriter,
+} from '@yume-chan/scrcpy';
 
 export interface MirrorWidgetProps {
   /** Stable id of the host tile — used to namespace per-instance state. */
@@ -101,6 +105,27 @@ const MOTION_MOVE = AndroidMotionEventAction.Move;
 /** scrcpy `setScreenPowerMode` modes. */
 const POWER_MODE_OFF = 0;
 const POWER_MODE_NORMAL = 2;
+
+/**
+ * Drive a `planComboKey` plan through the scrcpy control writer.
+ * See `mirror/keyMap.ts` for why we don't just set `metaState` bits
+ * on the bare main key — Android's TextView wants the modifier
+ * keycodes actually held down for selection extension + onKeyShortcut.
+ */
+async function injectComboKey(
+  ctrl: ScrcpyControlMessageWriter,
+  keyCode: AndroidKeyCode,
+  metaState: number,
+): Promise<void> {
+  for (const evt of planComboKey(keyCode, metaState)) {
+    await ctrl.injectKeyCode({
+      action: evt.action,
+      keyCode: evt.keyCode as AndroidKeyCode,
+      repeat: 0,
+      metaState: evt.metaState as AndroidKeyEventMeta,
+    });
+  }
+}
 
 /** Phases of a host-file drop's progress strip (used by `MirrorXferStrip`). */
 interface MirrorXfer {
@@ -543,23 +568,10 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     });
 
     try {
-      // Cast: scrcpy's `AndroidKeyEventMeta` is a tight numeric union
-      // of *individual* bits, but the on-wire field accepts an OR'd
-      // metaState. Both `META_SHIFT` and `META_CTRL` already include
-      // their generic + side-specific bits per Android conventions
-      // (`META_*_ON | META_*_LEFT_ON`).
-      await ctrl.injectKeyCode({
-        action: ACTION_DOWN,
-        keyCode: KEYCODE_C,
-        repeat: 0,
-        metaState: META_CTRL as AndroidKeyEventMeta,
-      });
-      await ctrl.injectKeyCode({
-        action: ACTION_UP,
-        keyCode: KEYCODE_C,
-        repeat: 0,
-        metaState: META_CTRL as AndroidKeyEventMeta,
-      });
+      // Emit a real Ctrl+C combo (with KEYCODE_CTRL_LEFT held down)
+      // rather than KEYCODE_C with metaState bits set, so TextView's
+      // `onKeyShortcut(ACTION_COPY)` actually fires on the device.
+      await injectComboKey(ctrl, KEYCODE_C, META_CTRL);
     } catch {
       /* control channel closed — fall through to the fallback */
     }
@@ -627,18 +639,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
           if (!ctrl) return;
           void (async () => {
             try {
-              await ctrl.injectKeyCode({
-                action: ACTION_DOWN,
-                keyCode: KEYCODE_A,
-                repeat: 0,
-                metaState: META_CTRL as AndroidKeyEventMeta,
-              });
-              await ctrl.injectKeyCode({
-                action: ACTION_UP,
-                keyCode: KEYCODE_A,
-                repeat: 0,
-                metaState: META_CTRL as AndroidKeyEventMeta,
-              });
+              await injectComboKey(ctrl, KEYCODE_A, META_CTRL);
             } catch {
               /* control channel closed — ignored */
             }
@@ -667,18 +668,7 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         if (!ctrl) return;
         void (async () => {
           try {
-            await ctrl.injectKeyCode({
-              action: ACTION_DOWN,
-              keyCode: edit.keyCode as AndroidKeyCode,
-              repeat: 0,
-              metaState: edit.metaState as AndroidKeyEventMeta,
-            });
-            await ctrl.injectKeyCode({
-              action: ACTION_UP,
-              keyCode: edit.keyCode as AndroidKeyCode,
-              repeat: 0,
-              metaState: edit.metaState as AndroidKeyEventMeta,
-            });
+            await injectComboKey(ctrl, edit.keyCode as AndroidKeyCode, edit.metaState);
           } catch {
             /* control channel closed — ignored */
           }

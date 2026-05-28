@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { META_CTRL, META_SHIFT, resolveTextEditKey } from './keyMap';
+import {
+  ACTION_DOWN,
+  ACTION_UP,
+  META_ALT,
+  META_CTRL,
+  META_SHIFT,
+  planComboKey,
+  resolveTextEditKey,
+} from './keyMap';
 
 const ev = (
   key: string,
@@ -170,6 +178,119 @@ describe('resolveTextEditKey: Ctrl is a Cmd-equivalent on non-Mac hosts', () => 
       keyCode: MOVE_END,
       metaState: META_SHIFT,
     });
+  });
+});
+
+// Modifier keycodes — kept inline so a wire-value change here surfaces
+// in the test alongside the resolver change.
+const KC_SHIFT_LEFT = 59;
+const KC_ALT_LEFT = 57;
+const KC_CTRL_LEFT = 113;
+const KC_A = 29;
+const KC_C = 31;
+const KC_MOVE_END = 123;
+
+describe('planComboKey: no modifiers', () => {
+  it('emits a bare DOWN+UP when no modifier bits are set', () => {
+    expect(planComboKey(KC_A, 0)).toEqual([
+      { action: ACTION_DOWN, keyCode: KC_A, metaState: 0 },
+      { action: ACTION_UP, keyCode: KC_A, metaState: 0 },
+    ]);
+  });
+});
+
+describe('planComboKey: Ctrl combo', () => {
+  it('Ctrl+C presses Ctrl, taps C, releases Ctrl — with metaState rising and falling', () => {
+    // This is the exact wire sequence the device needs to fire
+    // TextView.onKeyShortcut(ACTION_COPY).
+    expect(planComboKey(KC_C, META_CTRL)).toEqual([
+      { action: ACTION_DOWN, keyCode: KC_CTRL_LEFT, metaState: META_CTRL },
+      { action: ACTION_DOWN, keyCode: KC_C, metaState: META_CTRL },
+      { action: ACTION_UP, keyCode: KC_C, metaState: META_CTRL },
+      { action: ACTION_UP, keyCode: KC_CTRL_LEFT, metaState: 0 },
+    ]);
+  });
+});
+
+describe('planComboKey: Shift combo', () => {
+  it('Shift+End emits Shift DOWN + End DOWN/UP + Shift UP', () => {
+    // Sequence the previous metaState-only path never produced —
+    // the device-side selection-extension only fires when the
+    // modifier keycode is actually held.
+    expect(planComboKey(KC_MOVE_END, META_SHIFT)).toEqual([
+      { action: ACTION_DOWN, keyCode: KC_SHIFT_LEFT, metaState: META_SHIFT },
+      { action: ACTION_DOWN, keyCode: KC_MOVE_END, metaState: META_SHIFT },
+      { action: ACTION_UP, keyCode: KC_MOVE_END, metaState: META_SHIFT },
+      { action: ACTION_UP, keyCode: KC_SHIFT_LEFT, metaState: 0 },
+    ]);
+  });
+});
+
+describe('planComboKey: multi-modifier combos', () => {
+  it('Ctrl+Shift+End presses Ctrl, then Shift, then End, then releases in reverse', () => {
+    // Reverse-order release is what real hardware emits and what
+    // Android's InputDispatcher expects so the state machine stays
+    // consistent through the combo.
+    const plan = planComboKey(KC_MOVE_END, META_CTRL | META_SHIFT);
+    expect(plan).toHaveLength(6);
+    expect(plan[0]).toEqual({ action: ACTION_DOWN, keyCode: KC_CTRL_LEFT, metaState: META_CTRL });
+    expect(plan[1]).toEqual({
+      action: ACTION_DOWN,
+      keyCode: KC_SHIFT_LEFT,
+      metaState: META_CTRL | META_SHIFT,
+    });
+    expect(plan[2]).toEqual({
+      action: ACTION_DOWN,
+      keyCode: KC_MOVE_END,
+      metaState: META_CTRL | META_SHIFT,
+    });
+    expect(plan[3]).toEqual({
+      action: ACTION_UP,
+      keyCode: KC_MOVE_END,
+      metaState: META_CTRL | META_SHIFT,
+    });
+    expect(plan[4]).toEqual({
+      action: ACTION_UP,
+      keyCode: KC_SHIFT_LEFT,
+      metaState: META_CTRL,
+    });
+    expect(plan[5]).toEqual({ action: ACTION_UP, keyCode: KC_CTRL_LEFT, metaState: 0 });
+  });
+
+  it('Alt+Shift+Right (select word forward) is in canonical order', () => {
+    const plan = planComboKey(22 /* DPAD_RIGHT */, META_CTRL | META_SHIFT);
+    // Order: Ctrl press, Shift press, main, main release, Shift release, Ctrl release.
+    expect(plan.map((p) => p.keyCode)).toEqual([
+      KC_CTRL_LEFT,
+      KC_SHIFT_LEFT,
+      22,
+      22,
+      KC_SHIFT_LEFT,
+      KC_CTRL_LEFT,
+    ]);
+  });
+});
+
+describe('planComboKey: accepts either generic or side-specific meta bits', () => {
+  it('META_CTRL_ON alone (0x1000) still produces the Ctrl press', () => {
+    const plan = planComboKey(KC_C, 0x1000);
+    expect(plan[0].keyCode).toBe(KC_CTRL_LEFT);
+  });
+
+  it('META_CTRL_LEFT_ON alone (0x2000) still produces the Ctrl press', () => {
+    const plan = planComboKey(KC_C, 0x2000);
+    expect(plan[0].keyCode).toBe(KC_CTRL_LEFT);
+  });
+});
+
+describe('planComboKey: Alt-only combo', () => {
+  it('Alt+Left presses Alt, taps DPAD_LEFT, releases Alt', () => {
+    expect(planComboKey(21 /* DPAD_LEFT */, META_ALT)).toEqual([
+      { action: ACTION_DOWN, keyCode: KC_ALT_LEFT, metaState: META_ALT },
+      { action: ACTION_DOWN, keyCode: 21, metaState: META_ALT },
+      { action: ACTION_UP, keyCode: 21, metaState: META_ALT },
+      { action: ACTION_UP, keyCode: KC_ALT_LEFT, metaState: 0 },
+    ]);
   });
 });
 
