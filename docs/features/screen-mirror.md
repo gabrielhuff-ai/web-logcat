@@ -26,7 +26,16 @@ native `scrcpy`, but indistinguishable for non-game use.
   Back, Home, Recents — plus power, volume up/down, rotate, screenshot,
   and record.
 - **Type into the device.** Click the canvas first to focus, then type.
-  Modifier keys forward through.
+  Backspace, Enter, Tab, arrows and Escape are forwarded as the matching
+  Android keycodes — they no longer leak into the dashboard-level
+  "delete the focused tile" shortcut while the mirror is focused.
+- **Clipboard sync.** With the mirror focused, **Ctrl/Cmd+V** pastes the
+  host's clipboard into the device's foreground text field. **Ctrl/Cmd+C**
+  copies the device's current clipboard to the host (use the device's
+  own *Copy* affordance first to populate it — scrcpy mirrors the device
+  clipboard on every change). Both operations need the browser's
+  Clipboard permission, granted automatically on user activation in a
+  focused tab; a toast surfaces a denial if the browser blocks it.
 
 ## Open files on device
 

@@ -47,7 +47,9 @@ import {
   type SimTap,
 } from '../../lib/scrcpySim';
 import { MirrorAppFrame } from './mirror/MirrorAppFrame';
+import { contentFrac } from './mirror/letterbox';
 import { createSync, type SyncFs, type WriteProgress } from '../../lib/sync';
+import { WritableStream as ChanWritableStream } from '@yume-chan/stream-extra';
 import {
   markInternalDropConsumed,
   markOpenOnDeviceRequested,
@@ -79,6 +81,10 @@ const KEYCODE_DPAD_LEFT = 21 as AndroidKeyCode;
 const KEYCODE_DPAD_RIGHT = 22 as AndroidKeyCode;
 const KEYCODE_ESCAPE = 111 as AndroidKeyCode;
 const KEYCODE_FORWARD_DEL = 112 as AndroidKeyCode;
+
+/** Aspect ratio of the simulated home-screen frame (matches its SVG viewBox). */
+const SIM_FRAME_W = 360;
+const SIM_FRAME_H = 760;
 
 /** Android `KeyEvent` action codes. */
 const ACTION_DOWN = 0;
@@ -177,6 +183,15 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sessionRef = useRef<ScrcpySession | null>(null);
   const decoderDisposeRef = useRef<(() => void) | null>(null);
+  // Latest device-side clipboard contents, kept in a ref so Ctrl/Cmd+C
+  // on the mirror can write to `navigator.clipboard` without rerendering
+  // the toolbar on every device clipboard update.
+  const deviceClipboardRef = useRef<string | null>(null);
+  // Monotonic sequence for `setClipboard` ACKs — scrcpy uses it to
+  // match the SET_CLIPBOARD reply back to the request. We don't await
+  // the ack (the writer's `setClipboard` already does that), but the
+  // sequence must be unique per session.
+  const clipboardSeqRef = useRef(1n);
   // Recorded chunks — populated while `recording === true`. We use the
   // mp4 muxer rather than encoding-from-scratch so the on-disk file is
   // browser-playable.
@@ -287,6 +302,26 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
           /* stream closed / aborted — ignored */
         });
 
+        // Drain the device-clipboard stream into a ref so a subsequent
+        // Ctrl/Cmd+C on the mirror writes the most recent value to
+        // `navigator.clipboard`. scrcpy emits on every device clipboard
+        // change while `clipboardAutosync` is on (the default), so we
+        // get a "live" mirror of whatever the user has copied on the
+        // device without polling.
+        if (session.clipboard) {
+          void session.clipboard
+            .pipeTo(
+              new ChanWritableStream<string>({
+                write(text) {
+                  deviceClipboardRef.current = text;
+                },
+              }),
+            )
+            .catch(() => {
+              /* stream closed — ignored */
+            });
+        }
+
         setConnState('live');
 
         cleanup = async () => {
@@ -324,13 +359,24 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
   // a real fling on the device.
   const dragRef = useRef<{ pointerId: bigint; lastX: number; lastY: number } | null>(null);
 
-  const screenFrac = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return {
-      fracX: (e.clientX - rect.left) / rect.width,
-      fracY: (e.clientY - rect.top) / rect.height,
-    };
-  }, []);
+  // Map a pointer's client coords into [0..1] inside the *rendered video*
+  // rectangle — not the `.mr-screen` container. The canvas / SVG inside
+  // is letterboxed (`object-fit: contain` / `preserveAspectRatio="meet"`)
+  // when its aspect ratio differs from the tile's, so using the
+  // container rect directly stretches the tap mapping across the black
+  // gutters and the cursor / actual gesture diverge. We resolve the
+  // source aspect from `srcSizeRef` in real mode and the SVG viewBox
+  // (360×760) in sim mode.
+  const screenFrac = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const src = usingFake
+        ? { width: SIM_FRAME_W, height: SIM_FRAME_H }
+        : srcSizeRef.current;
+      return contentFrac(rect, e.clientX, e.clientY, src.width, src.height);
+    },
+    [usingFake],
+  );
 
   const injectMotion = useCallback(
     async (action: AndroidMotionEventAction, fracX: number, fracY: number) => {
@@ -371,7 +417,10 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       dragRef.current = { pointerId: -2n, lastX: fracX, lastY: fracY };
       if (usingFake) {
         const id = ++tapIdRef.current;
-        setTaps((prev) => [...prev, { id, x: fracX * 360, y: fracY * 760, r: 8, op: 0.9 }]);
+        setTaps((prev) => [
+          ...prev,
+          { id, x: fracX * SIM_FRAME_W, y: fracY * SIM_FRAME_H, r: 8, op: 0.9 },
+        ]);
         return;
       }
       void injectMotion(MOTION_DOWN, fracX, fracY);
@@ -407,18 +456,97 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
     [usingFake, injectMotion],
   );
 
+  // ---- Clipboard helpers ------------------------------------------------
+  // Ctrl/Cmd+V on the focused mirror pushes the host clipboard into the
+  // device with `paste: true` so scrcpy immediately fires the paste in
+  // the foreground app. Ctrl/Cmd+C writes the latest device-side
+  // clipboard value (kept in sync via the scrcpy clipboard stream) back
+  // to `navigator.clipboard`, so the user can pull a string they just
+  // copied on the device into the host. Both require Clipboard API
+  // permission, which the browser grants on user activation in a
+  // focused page.
+  const pasteFromHost = useCallback(async () => {
+    if (usingFake) {
+      showToast('Simulated mode — paste disabled');
+      return;
+    }
+    const ctrl = sessionRef.current?.control;
+    if (!ctrl) return;
+    let text: string;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      showToast('Clipboard read blocked — grant clipboard permission');
+      return;
+    }
+    if (!text) return;
+    try {
+      const sequence = clipboardSeqRef.current++;
+      await ctrl.setClipboard({ sequence, paste: true, content: text });
+    } catch {
+      /* control channel closed — ignored */
+    }
+  }, [usingFake, showToast]);
+
+  const copyToHost = useCallback(async () => {
+    if (usingFake) {
+      showToast('Simulated mode — copy disabled');
+      return;
+    }
+    const text = deviceClipboardRef.current;
+    if (!text) {
+      showToast('Device clipboard is empty — copy on the device first');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      showToast('Clipboard write blocked — grant clipboard permission');
+    }
+  }, [usingFake, showToast]);
+
   // ---- Keyboard → scrcpy injectText / injectKeyCode --------------------
   // Forwards keys typed while `.mr-screen` has focus to the device.
   // Printable characters go through `injectText` (which routes via the
   // device's clipboard machinery); a small set of editor / nav keys map
   // to Android keycodes so backspace, arrows, enter etc. still feel
-  // native inside text fields. Modifier-laden shortcuts (Ctrl/Cmd) are
-  // intentionally left to the host browser.
+  // native inside text fields. Ctrl/Cmd+C / Ctrl/Cmd+V are intercepted
+  // and routed to the host↔device clipboard bridge so the standard
+  // copy / paste muscle memory works against the mirror. Other
+  // modifier-laden shortcuts (Ctrl+Z, Cmd+E, …) are intentionally left
+  // to the host browser and the dashboard.
+  //
+  // Stops native event propagation for every key we handle. Without
+  // this, Backspace bubbles to the Dashboard's window-level keydown
+  // listener, which removes the focused tile out from under the
+  // user the moment they try to delete a character.
   const onScreenKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      // Clipboard shortcuts — handled even in sim mode (the helpers
+      // show an appropriate toast and bail) so the user gets feedback.
+      if (isMod && !e.shiftKey && !e.altKey) {
+        if (e.key === 'v' || e.key === 'V') {
+          e.preventDefault();
+          e.stopPropagation();
+          e.nativeEvent.stopPropagation();
+          void pasteFromHost();
+          return;
+        }
+        if (e.key === 'c' || e.key === 'C') {
+          e.preventDefault();
+          e.stopPropagation();
+          e.nativeEvent.stopPropagation();
+          void copyToHost();
+          return;
+        }
+      }
+
+      // Sim mode forwards nothing to the device; let Backspace etc.
+      // bubble so the dashboard's tile-delete shortcut still fires
+      // (there's no real keystroke to compete with).
       if (usingFake) return;
-      const ctrl = sessionRef.current?.control;
-      if (!ctrl) return;
+
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const specialMap: Record<string, AndroidKeyCode> = {
@@ -433,8 +561,23 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
         Escape: KEYCODE_ESCAPE,
       };
       const kc = specialMap[e.key];
+      const isPrintable = e.key.length === 1;
+      if (kc === undefined && !isPrintable) return;
+
+      // Stop the native event from bubbling to the window-level
+      // listener in `Dashboard.tsx`, which would otherwise treat
+      // Backspace / Delete as "remove the focused tile" while the
+      // user is just trying to delete a character on the device.
+      // This runs whether the session is connected or not — we don't
+      // want a connecting-state Backspace to nuke the tile either.
+      e.preventDefault();
+      e.stopPropagation();
+      e.nativeEvent.stopPropagation();
+
+      const ctrl = sessionRef.current?.control;
+      if (!ctrl) return;
+
       if (kc !== undefined) {
-        e.preventDefault();
         void (async () => {
           try {
             await ctrl.injectKeyCode({ action: ACTION_DOWN, keyCode: kc, repeat: 0, metaState: 0 });
@@ -448,14 +591,11 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       // Single printable character (including Space). `e.key` for
       // composed input is the resulting text, which is exactly what
       // `injectText` expects.
-      if (e.key.length === 1) {
-        e.preventDefault();
-        void ctrl.injectText(e.key).catch(() => {
-          /* control channel closed — ignored */
-        });
-      }
+      void ctrl.injectText(e.key).catch(() => {
+        /* control channel closed — ignored */
+      });
     },
-    [usingFake],
+    [usingFake, pasteFromHost, copyToHost],
   );
 
   // ---- Wheel / two-finger scroll → scrcpy injectScroll ------------------
@@ -475,8 +615,14 @@ export function MirrorWidget({ tileId }: MirrorWidgetProps) {
       const src = srcSizeRef.current;
       if (!ctrl || src.width === 0 || src.height === 0) return;
       const rect = e.currentTarget.getBoundingClientRect();
-      const fracX = (e.clientX - rect.left) / rect.width;
-      const fracY = (e.clientY - rect.top) / rect.height;
+      // Letterbox-aware mapping — see `screenFrac` above for the why.
+      const { fracX, fracY } = contentFrac(
+        rect,
+        e.clientX,
+        e.clientY,
+        src.width,
+        src.height,
+      );
       const x = Math.round(fracX * src.width);
       const y = Math.round(fracY * src.height);
       // Negate Y because Android scroll convention is "scroll UP →
