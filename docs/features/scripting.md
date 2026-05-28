@@ -50,8 +50,10 @@ that keeps running — following `logcat | grep "$PACKAGE"`, for instance —
 use a **[Daemon](#daemon)**, which manages a long-lived background process
 and streams its output to the console.
 
-The console renders ANSI colours, so `echo -e "\e[31m…\e[0m"` (and emoji)
-show up the way they would in a terminal.
+The console renders ANSI escapes, so `echo -e "\e[31m…\e[0m"` (and emoji)
+show up the way they would in a terminal — the 16 named colours plus
+256-colour and 24-bit truecolour, and the bold / dim / italic / underline /
+blink / reverse / strikethrough attributes.
 
 ## Controls
 

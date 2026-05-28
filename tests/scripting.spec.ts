@@ -401,6 +401,50 @@ test.describe('scripting widget', () => {
     await expect(body).toContainText('🎉');
   });
 
+  test('a console renders combined SGR codes, attributes, and 256/truecolour', async ({ page }) => {
+    const panel = {
+      script: [
+        'styles() {',
+        '  echo -e "\\033[1;31mBold red\\033[0m"', // combined codes (semicolon)
+        '  echo -e "\\033[9mStruck\\033[0m"', // strikethrough
+        '  echo -e "\\033[38;2;255;105;180mHot pink\\033[0m"', // truecolour
+        '}',
+      ].join('\n'),
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Styles', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_sgr', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Styles' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    // `\033[1;31m` is NOT truncated at the semicolon — bold + red on one span.
+    await expect(body.locator('.sc-ansi-fg-red.sc-ansi-bold')).toContainText('Bold red');
+    await expect(body.locator('.sc-ansi-strike')).toContainText('Struck');
+    // Truecolour renders as an inline rgb() colour.
+    await expect(body.getByText('Hot pink')).toHaveCSS('color', 'rgb(255, 105, 180)');
+  });
+
   test('a console renders its output at the configured font size', async ({ page }) => {
     const panel = {
       script: 'greet() {\n  echo "hi"\n}\n',

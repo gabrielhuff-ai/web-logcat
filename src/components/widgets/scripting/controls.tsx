@@ -614,15 +614,16 @@ export interface ConsoleLine {
 /** Render one console line, colourising any ANSI escape sequences in it. */
 function ConsoleLineView({ line }: { line: ConsoleLine }) {
   const segments = parseAnsi(line.text);
+  const plain = segments.length === 1 && segments[0].classes.length === 0 && !segments[0].style;
   return (
     <div className={'sc-console-line k-' + line.kind}>
-      {segments.length === 1 && segments[0].classes.length === 0
+      {plain
         ? segments[0].text
         : segments.map((s, i) =>
-            s.classes.length === 0 ? (
+            s.classes.length === 0 && !s.style ? (
               <span key={i}>{s.text}</span>
             ) : (
-              <span key={i} className={s.classes.join(' ')}>
+              <span key={i} className={s.classes.join(' ') || undefined} style={s.style}>
                 {s.text}
               </span>
             ),
