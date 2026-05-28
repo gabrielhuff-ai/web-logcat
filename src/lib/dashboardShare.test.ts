@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  captureSnapshot,
   decodeSnapshot,
   disarmScripting,
   encodeSnapshot,
@@ -7,6 +8,8 @@ import {
   hasScripts,
   type DashboardSnapshot,
 } from './dashboardShare';
+import { STORAGE_KEY } from './layout';
+import { settingsKey } from './tileSettings';
 import type { LayoutState } from '../types';
 
 const layout: LayoutState = {
@@ -77,6 +80,64 @@ describe('disarmScripting', () => {
   it('is a no-op for non-scripting values', () => {
     expect(disarmScripting({ wrap: true })).toEqual({ wrap: true });
     expect(disarmScripting(null)).toBeNull();
+  });
+});
+
+describe('captureSnapshot', () => {
+  // Vitest under node has no DOM globals — install a minimal localStorage
+  // shim so `captureSnapshot` can read its keys. Mirrors `tileSettings.test.ts`.
+  beforeAll(() => {
+    if (typeof globalThis.localStorage !== 'undefined') return;
+    const store = new Map<string, string>();
+    const shim: Storage = {
+      get length() {
+        return store.size;
+      },
+      clear: () => store.clear(),
+      getItem: (k: string) => (store.has(k) ? (store.get(k) as string) : null),
+      key: (i: number) => Array.from(store.keys())[i] ?? null,
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+    };
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: shim,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('only includes settings for tiles that exist in the current layout', () => {
+    const live: LayoutState = {
+      tiles: { live: { id: 'live', kind: 'shell' } },
+      tree: { type: 'leaf', id: 'live' },
+      focusId: 'live',
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(live));
+    localStorage.setItem(settingsKey('live', 'shell'), JSON.stringify({ cwd: '/data' }));
+    localStorage.setItem(settingsKey('orphan', 'scripting'), JSON.stringify({ script: 'rm -rf /' }));
+
+    const snap = captureSnapshot();
+    expect(Object.keys(snap.settings)).toEqual(['live']);
+    expect(snap.settings.live).toEqual({ shell: { cwd: '/data' } });
+  });
+
+  it('produces an empty settings map for a cleared dashboard, even with orphaned keys', () => {
+    const empty: LayoutState = { tiles: {}, tree: null, focusId: null };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(empty));
+    localStorage.setItem(settingsKey('w1', 'scripting'), JSON.stringify({ script: 'echo hi' }));
+    localStorage.setItem(settingsKey('w2', 'logcat'), JSON.stringify({ filters: ['ActivityManager'] }));
+
+    const snap = captureSnapshot();
+    expect(snap.layout).toEqual(empty);
+    expect(snap.settings).toEqual({});
   });
 });
 
