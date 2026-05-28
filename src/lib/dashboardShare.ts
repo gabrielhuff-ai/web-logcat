@@ -34,9 +34,19 @@ export interface DashboardSnapshot {
 
 const SHARE_PARAM = 'share';
 const PENDING_KEY = 'weblogcat:pendingImport';
-/** Encoded-length ceiling for offering a shareable link (fragment, not query,
- *  so server/CDN caps don't apply — this guards the browser + readability). */
-export const URL_SIZE_LIMIT = 6000;
+/** Encoded-length thresholds for the share-link path. The URL goes into the
+ *  fragment, so server / CDN caps don't apply — only the browser address bar
+ *  and the user's downstream surface (chat clients, email, GitHub comments)
+ *  do.
+ *    - `URL_HARD_LIMIT` (30 KB): above this we don't offer Copy link at all.
+ *      Sits well below every modern browser's address-bar threshold but the
+ *      payload would be too unwieldy to share by hand.
+ *    - `URL_SOFT_LIMIT` (6 KB): below this the link is comfortably small for
+ *      any surface. Between soft and hard the link still works, but we
+ *      surface a truncation note after the user clicks Copy link — some
+ *      downstream apps (Slack, mail clients) cap line length and may chop. */
+export const URL_HARD_LIMIT = 30_000;
+export const URL_SOFT_LIMIT = 6_000;
 
 // ---- base64url helpers -----------------------------------------------------
 
@@ -200,7 +210,13 @@ function canonicalise(value: unknown): unknown {
 // ---- URL + pending-import plumbing -----------------------------------------
 
 export function fitsInUrl(encoded: string): boolean {
-  return encoded.length <= URL_SIZE_LIMIT;
+  return encoded.length <= URL_HARD_LIMIT;
+}
+
+/** Link is offered but the payload is large enough that some downstream
+ *  systems may truncate it — the modal warns the user after they click. */
+export function linkMayBeTruncated(encoded: string): boolean {
+  return encoded.length > URL_SOFT_LIMIT && encoded.length <= URL_HARD_LIMIT;
 }
 
 export function buildShareUrl(encoded: string): string {
