@@ -6,13 +6,43 @@ import {
   encodeSnapshot,
   fitsInUrl,
   hasScripts,
+  isSnapshotTrusted,
   linkMayBeTruncated,
+  markSnapshotTrusted,
+  snapshotHash,
   snapshotsEqual,
   type DashboardSnapshot,
 } from './dashboardShare';
 import { STORAGE_KEY } from './layout';
 import { settingsKey } from './tileSettings';
 import type { LayoutState } from '../types';
+
+// Vitest under node has no DOM globals — install a minimal localStorage
+// shim once for every test in this file. Idempotent: each inner describe's
+// own `beforeAll` bails when localStorage is already present.
+beforeAll(() => {
+  if (typeof globalThis.localStorage !== 'undefined') return;
+  const store = new Map<string, string>();
+  const shim: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (k: string) => (store.has(k) ? (store.get(k) as string) : null),
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    setItem: (k: string, v: string) => {
+      store.set(k, v);
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: shim,
+    configurable: true,
+    writable: true,
+  });
+});
 
 const layout: LayoutState = {
   tiles: { a: { id: 'a', kind: 'scripting' } },
@@ -226,6 +256,69 @@ describe('fitsInUrl', () => {
     expect(fitsInUrl('x'.repeat(7_000))).toBe(true);
     expect(fitsInUrl('x'.repeat(29_999))).toBe(true);
     expect(fitsInUrl('x'.repeat(30_001))).toBe(false);
+  });
+});
+
+describe('snapshotHash + trust list', () => {
+  const base: DashboardSnapshot = {
+    v: 1,
+    layout: {
+      tiles: { a: { id: 'a', kind: 'scripting' } },
+      tree: { type: 'leaf', id: 'a' },
+      focusId: 'a',
+    },
+    settings: { a: { scripting: { script: 'echo hi', controls: [] } } },
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('hashes deterministically — same content, same hash', async () => {
+    const h1 = await snapshotHash(base);
+    const h2 = await snapshotHash(JSON.parse(JSON.stringify(base)) as DashboardSnapshot);
+    expect(h1).toEqual(h2);
+    expect(h1).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('is insensitive to key ordering — matches the equality contract', async () => {
+    const reordered: DashboardSnapshot = {
+      settings: { a: { scripting: { controls: [], script: 'echo hi' } } },
+      layout: base.layout,
+      v: 1,
+    };
+    expect(await snapshotHash(reordered)).toEqual(await snapshotHash(base));
+  });
+
+  it('differs when content differs', async () => {
+    const changed: DashboardSnapshot = {
+      ...base,
+      settings: { a: { scripting: { script: 'echo bye', controls: [] } } },
+    };
+    expect(await snapshotHash(changed)).not.toEqual(await snapshotHash(base));
+  });
+
+  it('round-trips through the trust list', async () => {
+    const h = await snapshotHash(base);
+    expect(isSnapshotTrusted(h)).toBe(false);
+    markSnapshotTrusted(h);
+    expect(isSnapshotTrusted(h)).toBe(true);
+  });
+
+  it('FIFO-evicts the oldest entry past the cap, and re-marking refreshes recency', () => {
+    // Cap is 50 — fill past it and confirm the early entries are evicted.
+    for (let i = 0; i < 55; i++) markSnapshotTrusted(`hash-${i.toString().padStart(2, '0')}`);
+    expect(isSnapshotTrusted('hash-00')).toBe(false);
+    expect(isSnapshotTrusted('hash-04')).toBe(false);
+    expect(isSnapshotTrusted('hash-05')).toBe(true);
+    expect(isSnapshotTrusted('hash-54')).toBe(true);
+
+    // Re-marking an existing hash moves it to the most-recent slot,
+    // so it survives subsequent eviction.
+    markSnapshotTrusted('hash-05');
+    for (let i = 100; i < 110; i++) markSnapshotTrusted(`hash-${i}`);
+    expect(isSnapshotTrusted('hash-05')).toBe(true);
+    expect(isSnapshotTrusted('hash-06')).toBe(false);
   });
 });
 
