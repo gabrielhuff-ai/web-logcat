@@ -475,8 +475,30 @@ test.describe('scripting widget', () => {
     const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
     // The configured 20px overrides the default console text size.
     await expect(tile.locator('.sc-console-body')).toHaveCSS('font-size', '20px');
-    // Default line spacing is 0 → line-height equals the font size (tight).
-    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '20px');
+    // Default line spacing is 0.55 → line-height = 1.55 × font-size.
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '31px');
+  });
+
+  test('the console "Line spacing" field accepts a decimal value', async ({ page }) => {
+    // Regression: the field used to round-trip the value through Number(),
+    // which turned a partial "0." into 0 and stripped the dot before the next
+    // keystroke. A local text buffer now preserves intermediate input.
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /^example$/i }).click();
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+    await dialog.locator('.bdr-ctrl-row').filter({ hasText: 'Console' }).click();
+    const input = dialog
+      .locator('.bdr-form-row')
+      .filter({ hasText: 'Line spacing' })
+      .locator('input');
+    await input.fill('');
+    await input.pressSequentially('0.5');
+    await expect(input).toHaveValue('0.5');
   });
 
   test('a console honours its line-spacing setting', async ({ page }) => {

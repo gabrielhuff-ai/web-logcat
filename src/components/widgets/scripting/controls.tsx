@@ -671,13 +671,13 @@ export function ScConsole({
   hideChrome = false,
   autoScroll = true,
   fontSize,
-  lineSpacing = 0,
+  lineSpacing = 0.55,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
   const err = state === 'error' || exit !== 0;
   const shown = hideCommand ? lines.filter((l) => l.kind !== 'cmd') : lines;
-  // line-height 1 (lineSpacing 0) lets box-drawing diagrams join without gaps.
+  // line-height = 1 + lineSpacing; set to 0 to let box-drawing diagrams join.
   const bodyStyle: CSSProperties = { lineHeight: 1 + lineSpacing };
   if (fontSize) bodyStyle.fontSize = `${fontSize}px`;
 
