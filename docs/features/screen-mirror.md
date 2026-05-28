@@ -31,11 +31,23 @@ native `scrcpy`, but indistinguishable for non-game use.
   "delete the focused tile" shortcut while the mirror is focused.
 - **Clipboard sync.** With the mirror focused, **Ctrl/Cmd+V** pastes the
   host's clipboard into the device's foreground text field. **Ctrl/Cmd+C**
-  copies the device's current clipboard to the host (use the device's
-  own *Copy* affordance first to populate it — scrcpy mirrors the device
-  clipboard on every change). Both operations need the browser's
-  Clipboard permission, granted automatically on user activation in a
-  focused tab; a toast surfaces a denial if the browser blocks it.
+  forwards Ctrl+C to the device (which copies the current selection in
+  the foreground app), waits for scrcpy's clipboard auto-sync to report
+  the new value, then writes it to the host clipboard. If nothing is
+  selected on the device, falls back to whatever was last on the device
+  clipboard. Both operations need the browser's Clipboard permission,
+  granted automatically on user activation in a focused tab; a toast
+  surfaces a denial if the browser blocks it.
+- **Text-editing shortcuts.** Mac-standard cursor and selection keys
+  are forwarded to the device's foreground text field:
+  - **⌘+A** — select all (forwarded as Ctrl+A; the browser's own
+    *select all* is suppressed while the mirror has focus).
+  - **⇧+arrow** — extend selection by character / line.
+  - **⌘+←/→** — move to start / end of line.
+  - **⌘+↑/↓** — move to start / end of document.
+  - **⌘+⇧+arrow** — same as the ⌘ shortcuts but extending the
+    selection instead of moving the cursor.
+  - **⌥+←/→** — move by word (add ⇧ to extend selection).
 
 ## Open files on device
 
