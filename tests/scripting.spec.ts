@@ -522,15 +522,15 @@ test.describe('scripting widget', () => {
     const editor = dialog.getByLabel('Shell script');
 
     await editor.fill('echo hi');
-    // Tab at the line start indents by two spaces.
-    await editor.evaluate((el) => (el as HTMLTextAreaElement).setSelectionRange(0, 0));
+    // Tab at the line start indents by two spaces (Home moves the caret there).
+    await editor.press('Home');
     await editor.press('Tab');
     await expect(editor).toHaveValue('  echo hi');
     // Shift+Tab removes the indent again.
     await editor.press('Shift+Tab');
     await expect(editor).toHaveValue('echo hi');
     // Ctrl+/ toggles a `#` comment on the line, and back.
-    await editor.evaluate((el) => (el as HTMLTextAreaElement).setSelectionRange(0, 0));
+    await editor.press('Home');
     await editor.press('Control+/');
     await expect(editor).toHaveValue('# echo hi');
     await editor.press('Control+/');
