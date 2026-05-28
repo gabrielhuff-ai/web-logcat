@@ -52,6 +52,12 @@ export const SCRCPY_VERSION = '2.7';
  *                  the dispatch loop runs whether or not anyone is
  *                  listening, so the tee never stalls.
  *   - `control`  — typed sender for tap / key / power / etc.
+ *   - `clipboard` — `ReadableStream<string>` of device-side clipboard
+ *                  updates. scrcpy emits one message whenever the
+ *                  device's clipboard changes (`clipboardAutosync` is
+ *                  on by default), letting the host mirror Ctrl+C from
+ *                  the device. `undefined` if the server was started
+ *                  without control / the option was disabled.
  *   - `dispose`  — kill the server process + close the transport.
  */
 export type RawChunkListener = (chunk: Uint8Array) => void;
@@ -60,6 +66,7 @@ export interface ScrcpySession {
   packets: ReadableStream<ScrcpyMediaStreamPacket>;
   subscribeRaw(listener: RawChunkListener): () => void;
   control: ScrcpyControlMessageWriter | undefined;
+  clipboard: ReadableStream<string> | undefined;
   dispose: () => Promise<void>;
 }
 
@@ -210,6 +217,7 @@ export async function startScrcpy(
       };
     },
     control: client.controller,
+    clipboard: client.clipboard,
     dispose: async () => {
       try {
         await rawReader.cancel();

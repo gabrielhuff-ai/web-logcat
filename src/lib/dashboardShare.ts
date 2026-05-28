@@ -99,9 +99,17 @@ function isSnapshot(v: unknown): v is DashboardSnapshot {
 
 // ---- capture / apply -------------------------------------------------------
 
-/** Snapshot the live dashboard (layout + every tile's global settings). */
+/** Snapshot the live dashboard (layout + every tile's global settings).
+ *
+ *  Settings for tile ids no longer in `layout.tiles` are skipped — clearing
+ *  the dashboard (or closing a single tile) only resets the layout tree, so
+ *  per-tile settings stay in localStorage as orphans the undo stack can
+ *  still restore. We filter on the way out so a cleared dashboard shares
+ *  as the small empty payload the user sees, not a bundle of every script
+ *  and filter they ever configured. */
 export function captureSnapshot(): DashboardSnapshot {
   const layout = loadLayout();
+  const liveTileIds = new Set(Object.keys(layout.tiles));
   const settings: Record<string, Record<string, unknown>> = {};
   if (typeof localStorage !== 'undefined') {
     const prefix = 'weblogcat:settings:';
@@ -113,6 +121,7 @@ export function captureSnapshot(): DashboardSnapshot {
       const parts = key.slice(prefix.length).split(':');
       if (parts.length !== 2) continue;
       const [tileId, kind] = parts;
+      if (!liveTileIds.has(tileId)) continue;
       try {
         const val: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
         if (val == null) continue;

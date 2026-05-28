@@ -35,6 +35,21 @@ const GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Screen Mirror',
+    shortcuts: [
+      { keys: ['Click'], desc: 'Tap / drag / swipe at the click position on the device' },
+      { keys: ['Type'], desc: 'Forward letters and editor keys (Backspace, Enter, Tab, arrows, Esc) to the device' },
+      { keys: ['⌘', 'V'], desc: 'Paste the host clipboard into the device' },
+      { keys: ['⌘', 'C'], desc: 'Forward Ctrl+C to the device and pull the resulting clipboard to the host' },
+      { keys: ['⌘', 'A'], desc: 'Select all text in the device-side focused field' },
+      { keys: ['⇧', '←/→/↑/↓'], desc: 'Extend the device-side selection by character / line' },
+      { keys: ['⌘', '←/→'], desc: 'Move cursor to start / end of line on the device' },
+      { keys: ['⌘', '↑/↓'], desc: 'Move cursor to start / end of document on the device' },
+      { keys: ['⌘', '⇧', '←/→/↑/↓'], desc: 'Same as above but extend the selection' },
+      { keys: ['⌥', '←/→'], desc: 'Move cursor by word (add ⇧ to extend selection)' },
+    ],
+  },
+  {
     title: 'Logcat',
     shortcuts: [
       { keys: ['Space'], desc: 'Pause / resume the live stream' },
