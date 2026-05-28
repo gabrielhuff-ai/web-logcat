@@ -278,6 +278,7 @@ function renderConsole(c: ControlConfig, props: ScriptingPanelProps): ReactNode 
       hideCommand={c.hideCommand}
       hideChrome={c.hideChrome}
       autoScroll={c.autoScroll}
+      fontSize={c.fontSize}
       onCopy={() => props.onCopyConsole(c.id)}
     />
   );

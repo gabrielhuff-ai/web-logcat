@@ -170,7 +170,7 @@ optionally when an input they read changes) and render its output:
 
 | Display | Renders the function's output as |
 | --- | --- |
-| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output. |
+| **Console** | The most recent run: the command, stdout, stderr, and exit code — or a live feed when a daemon targets it. Renders ANSI colours and emoji, and clears on a terminal clear sequence (`clear` / `\033[2J`). Bound to "last run" rather than one function. **Hide command line** drops the leading `$ command` line; **Hide chrome** drops the whole header for an output-only pane; **Auto-scroll** pins it to the newest output; **Font size** sets the output text size in px (blank ⇒ default). |
 | **Readout** | The first number on the last non-empty line, plus a unit — e.g. `battery_temp` ↦ `31.2 °C`. |
 | **Status pill** | The last line as text, coloured green / red by exit status. |
 | **Gauge** | That number on a `min`/`max` arc (warns past ~85%). |

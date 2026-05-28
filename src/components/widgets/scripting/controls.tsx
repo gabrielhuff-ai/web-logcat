@@ -649,6 +649,8 @@ export interface ScConsoleProps {
   hideChrome?: boolean;
   /** Keep the body pinned to the bottom as new lines arrive. */
   autoScroll?: boolean;
+  /** Output text size in px. Unset ⇒ the stylesheet default. */
+  fontSize?: number;
   onCopy?: () => void;
 }
 
@@ -665,6 +667,7 @@ export function ScConsole({
   hideCommand = false,
   hideChrome = false,
   autoScroll = true,
+  fontSize,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
@@ -719,7 +722,11 @@ export function ScConsole({
         )}
       </div>
       )}
-      <div className="sc-console-body" ref={bodyRef}>
+      <div
+        className="sc-console-body"
+        ref={bodyRef}
+        style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+      >
         {/* Show the empty-state hint only before the first run. Once something
             has run, a momentarily empty body (just cleared, or a daemon
             between restarts) stays blank rather than flashing the hint. */}
