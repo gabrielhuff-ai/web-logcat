@@ -15,9 +15,11 @@
 //     runs on an explicit button, not on the bootstrap path. Falls back to
 //     plain base64url where CompressionStream is unavailable; a one-char codec
 //     marker says which.
-//   - Safe import: scripting panels run shell, so import disarms auto-poll
-//     and daemon auto-start (nothing executes on load) and the UI gates
-//     script-bearing imports behind an explicit acknowledgement.
+//   - Safe import: scripting panels run shell, so any script-bearing import —
+//     paste, file, OR URL — is gated behind an explicit trust acknowledgement
+//     in the UI. Once acknowledged, settings (including daemon auto-start and
+//     readout auto-poll) are applied verbatim; the trust gate is the safety
+//     boundary, not silent stripping of those flags.
 
 import { loadLayout, saveLayout } from './layout';
 import { settingsKey } from './tileSettings';
@@ -134,16 +136,17 @@ export function captureSnapshot(): DashboardSnapshot {
   return { v: 1, layout, settings };
 }
 
-/** Write a snapshot into localStorage, then the caller re-renders.
- *  Scripting auto-poll is disarmed so nothing executes on load post-import. */
+/** Write a snapshot into localStorage, then the caller re-renders. The caller
+ *  is responsible for gating script-bearing snapshots behind the trust
+ *  acknowledgement before invoking this — once we're here, settings are
+ *  applied verbatim, including daemon auto-start and readout auto-poll. */
 export function applySnapshot(s: DashboardSnapshot): void {
   if (typeof localStorage === 'undefined') return;
   saveLayout(s.layout);
   for (const [tileId, byKind] of Object.entries(s.settings)) {
     for (const [kind, val] of Object.entries(byKind)) {
-      const safe = kind === 'scripting' ? disarmScripting(val) : val;
       try {
-        localStorage.setItem(settingsKey(tileId, kind as WidgetKind), JSON.stringify(safe));
+        localStorage.setItem(settingsKey(tileId, kind as WidgetKind), JSON.stringify(val));
       } catch {
         /* quota / privacy mode */
       }
@@ -151,29 +154,8 @@ export function applySnapshot(s: DashboardSnapshot): void {
   }
 }
 
-/** Disable anything that would run shell on load — auto-poll on bound displays
- *  and auto-start on daemons — so an imported panel never executes on its own.
- *  The user re-arms these intentionally via the builder. */
-export function disarmScripting(val: unknown): unknown {
-  if (!val || typeof val !== 'object') return val;
-  const o = val as { controls?: unknown };
-  if (!Array.isArray(o.controls)) return val;
-  const controls = o.controls.map((c) => {
-    if (!c || typeof c !== 'object') return c;
-    let ctl = c as Record<string, unknown>;
-    if ('autoPoll' in ctl && ctl.autoPoll && typeof ctl.autoPoll === 'object') {
-      ctl = { ...ctl, autoPoll: { ...(ctl.autoPoll as object), enabled: false } };
-    }
-    if ('autoStart' in ctl && ctl.autoStart) {
-      ctl = { ...ctl, autoStart: false };
-    }
-    return ctl;
-  });
-  return { ...o, controls };
-}
-
 /** True when the snapshot carries a scripting panel with real (non-comment)
- *  script code — the signal to warn before importing. */
+ *  script code — the signal to gate the import behind a trust acknowledgement. */
 export function hasScripts(s: DashboardSnapshot): boolean {
   for (const byKind of Object.values(s.settings)) {
     const sc = byKind.scripting as { script?: unknown } | undefined;
@@ -187,6 +169,32 @@ function scriptHasCode(script: string): boolean {
     const t = l.trim();
     return t !== '' && !t.startsWith('#');
   });
+}
+
+/** Structural equality for two snapshots. Used to suppress the URL-import
+ *  trust prompt when the incoming snapshot matches the live dashboard
+ *  byte-for-byte — opening your own share link shouldn't pester you.
+ *
+ *  Canonicalises object key order before stringifying so two snapshots
+ *  built in different iteration orders (e.g. settings written in a
+ *  different sequence) still compare equal. */
+export function snapshotsEqual(a: DashboardSnapshot, b: DashboardSnapshot): boolean {
+  return canonicalJson(a) === canonicalJson(b);
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalise(value));
+}
+
+function canonicalise(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalise);
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(o).sort()) out[k] = canonicalise(o[k]);
+    return out;
+  }
+  return value;
 }
 
 // ---- URL + pending-import plumbing -----------------------------------------
@@ -224,6 +232,25 @@ export function stashPendingImport(s: DashboardSnapshot): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Read any `#share=…` from the current URL, decode it, stash it for the
+ *  Dashboard to pick up, and clear the fragment so a reload doesn't re-fire
+ *  the prompt. Notifies live listeners. Returns true when a snapshot was
+ *  successfully ingested.
+ *
+ *  Used by both the boot path (initial load with the hash already present)
+ *  and the `hashchange` path (URL pasted into the address bar of an
+ *  already-running tab). */
+export async function ingestShareFromUrl(): Promise<boolean> {
+  const share = readShareFromUrl();
+  if (!share) return false;
+  const snapshot = await decodeSnapshot(share);
+  clearShareFromUrl();
+  if (!snapshot) return false;
+  stashPendingImport(snapshot);
+  notifyPendingImport();
+  return true;
 }
 
 // A pending import can arrive after the dashboard is already mounted (e.g. the

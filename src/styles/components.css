@@ -1281,6 +1281,8 @@
   line-height: 1.5;
 }
 .imex-ack input { margin-top: 2px; accent-color: var(--accent); }
+.imex-ack a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.imex-ack a:hover { text-decoration-thickness: 2px; }
 .imex-ack.shake { animation: imex-shake 420ms var(--ease-out); }
 @keyframes imex-shake {
   0%, 100% { transform: translateX(0); }
