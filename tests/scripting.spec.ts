@@ -401,6 +401,164 @@ test.describe('scripting widget', () => {
     await expect(body).toContainText('🎉');
   });
 
+  test('a console renders combined SGR codes, attributes, and 256/truecolour', async ({ page }) => {
+    const panel = {
+      script: [
+        'styles() {',
+        '  echo -e "\\033[1;31mBold red\\033[0m"', // combined codes (semicolon)
+        '  echo -e "\\033[9mStruck\\033[0m"', // strikethrough
+        '  echo -e "\\033[38;2;255;105;180mHot pink\\033[0m"', // truecolour
+        '}',
+      ].join('\n'),
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Styles', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_sgr', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.locator('.sc-btn').filter({ hasText: 'Styles' }).click();
+
+    const body = tile.locator('.sc-console-body');
+    // `\033[1;31m` is NOT truncated at the semicolon — bold + red on one span.
+    await expect(body.locator('.sc-ansi-fg-red.sc-ansi-bold')).toContainText('Bold red');
+    await expect(body.locator('.sc-ansi-strike')).toContainText('Struck');
+    // Truecolour renders as an inline rgb() colour.
+    await expect(body.getByText('Hot pink')).toHaveCSS('color', 'rgb(255, 105, 180)');
+  });
+
+  test('a console renders its output at the configured font size', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hi"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, fontSize: 20 },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_fontsize', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    // The configured 20px overrides the default console text size.
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('font-size', '20px');
+    // Default line spacing is 0.55 → line-height = 1.55 × font-size.
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '31px');
+  });
+
+  test('the console "Line spacing" field accepts a decimal value', async ({ page }) => {
+    // Regression: the field used to round-trip the value through Number(),
+    // which turned a partial "0." into 0 and stripped the dot before the next
+    // keystroke. A local text buffer now preserves intermediate input.
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /^example$/i }).click();
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+    await dialog.locator('.bdr-ctrl-row').filter({ hasText: 'Console' }).click();
+    const input = dialog
+      .locator('.bdr-form-row')
+      .filter({ hasText: 'Line spacing' })
+      .locator('input');
+    await input.fill('');
+    await input.pressSequentially('0.5');
+    await expect(input).toHaveValue('0.5');
+  });
+
+  test('a console honours its line-spacing setting', async ({ page }) => {
+    const panel = {
+      script: 'greet() {\n  echo "hi"\n}\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 'b', kind: 'button', label: 'Greet', variant: 'default', confirm: false, bindOutputTo: 'console', mode: 'once' },
+        // 0.5em of extra spacing on a 20px font → line-height 30px.
+        { id: 'con', kind: 'console', label: 'Console', scope: 'recent', copyButton: true, autoScroll: true, fontSize: 20, lineSpacing: 0.5 },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_linesp', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await expect(tile.locator('.sc-console-body')).toHaveCSS('line-height', '30px');
+  });
+
+  test('the script editor indents and comments via Tab and Cmd/Ctrl+/', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await page.getByRole('button', { name: /add widget/i }).click();
+    await page.locator('.palette-card').filter({ hasText: 'Scripting' }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+    await tile.getByRole('button', { name: /widget settings/i }).click();
+    const dialog = page.getByRole('dialog', { name: /scripting settings/i });
+    const editor = dialog.getByLabel('Shell script');
+
+    await editor.fill('echo hi');
+    // Tab at the line start indents by two spaces (Home moves the caret there).
+    await editor.press('Home');
+    await editor.press('Tab');
+    await expect(editor).toHaveValue('  echo hi');
+    // Shift+Tab removes the indent again.
+    await editor.press('Shift+Tab');
+    await expect(editor).toHaveValue('echo hi');
+    // Ctrl+/ toggles a `#` comment on the line, and back.
+    await editor.press('Home');
+    await editor.press('Control+/');
+    await expect(editor).toHaveValue('# echo hi');
+    await editor.press('Control+/');
+    await expect(editor).toHaveValue('echo hi');
+  });
+
   test('a console can hide the leading "$ command" line', async ({ page }) => {
     const panel = {
       script: 'greet() {\n  echo "hello world"\n}\n',

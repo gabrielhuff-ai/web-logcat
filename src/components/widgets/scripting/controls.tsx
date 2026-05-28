@@ -614,15 +614,16 @@ export interface ConsoleLine {
 /** Render one console line, colourising any ANSI escape sequences in it. */
 function ConsoleLineView({ line }: { line: ConsoleLine }) {
   const segments = parseAnsi(line.text);
+  const plain = segments.length === 1 && segments[0].classes.length === 0 && !segments[0].style;
   return (
     <div className={'sc-console-line k-' + line.kind}>
-      {segments.length === 1 && segments[0].classes.length === 0
+      {plain
         ? segments[0].text
         : segments.map((s, i) =>
-            s.classes.length === 0 ? (
+            s.classes.length === 0 && !s.style ? (
               <span key={i}>{s.text}</span>
             ) : (
-              <span key={i} className={s.classes.join(' ')}>
+              <span key={i} className={s.classes.join(' ') || undefined} style={s.style}>
                 {s.text}
               </span>
             ),
@@ -649,6 +650,10 @@ export interface ScConsoleProps {
   hideChrome?: boolean;
   /** Keep the body pinned to the bottom as new lines arrive. */
   autoScroll?: boolean;
+  /** Output text size in px. Unset ⇒ the stylesheet default. */
+  fontSize?: number;
+  /** Extra space between lines in em (line-height = 1 + this). Default 0. */
+  lineSpacing?: number;
   onCopy?: () => void;
 }
 
@@ -665,11 +670,16 @@ export function ScConsole({
   hideCommand = false,
   hideChrome = false,
   autoScroll = true,
+  fontSize,
+  lineSpacing = 0.55,
   onCopy,
 }: ScConsoleProps) {
   const busy = state === 'busy';
   const err = state === 'error' || exit !== 0;
   const shown = hideCommand ? lines.filter((l) => l.kind !== 'cmd') : lines;
+  // line-height = 1 + lineSpacing; set to 0 to let box-drawing diagrams join.
+  const bodyStyle: CSSProperties = { lineHeight: 1 + lineSpacing };
+  if (fontSize) bodyStyle.fontSize = `${fontSize}px`;
 
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -719,7 +729,7 @@ export function ScConsole({
         )}
       </div>
       )}
-      <div className="sc-console-body" ref={bodyRef}>
+      <div className="sc-console-body" ref={bodyRef} style={bodyStyle}>
         {/* Show the empty-state hint only before the first run. Once something
             has run, a momentarily empty body (just cleared, or a daemon
             between restarts) stays blank rather than flashing the hint. */}

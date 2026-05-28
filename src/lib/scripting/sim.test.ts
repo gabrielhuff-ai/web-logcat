@@ -54,6 +54,11 @@ describe('runFunctionSim', () => {
     expect(r.stdout).toBe('\x1b[31mred\nplain');
   });
 
+  it('keeps semicolons inside a quoted echo argument (combined SGR codes)', () => {
+    const r = runFunctionSim('f() { echo -e "\\033[1;31mBold red\\033[0m"; }', 'f', {});
+    expect(r.stdout).toBe('\x1b[1;31mBold red\x1b[0m');
+  });
+
   it('emits a screen-clear sequence for clear / reset', () => {
     expect(runFunctionSim('f() { echo Foo; clear; }', 'f', {}).stdout).toBe('Foo\n\x1b[2J');
     expect(runFunctionSim('f() { reset; }', 'f', {}).stdout).toBe('\x1b[2J');

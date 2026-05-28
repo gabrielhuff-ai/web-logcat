@@ -39,10 +39,33 @@ describe('parseAnsi', () => {
     expect(parseAnsi(`${ESC}[41mx`)[0].classes).toEqual(['sc-ansi-bg-red']);
   });
 
-  it('maps a 16-colour 256-palette code and ignores truecolour', () => {
+  it('handles blink, reverse, and strikethrough attributes', () => {
+    expect(parseAnsi(`${ESC}[5mblink`)[0].classes).toEqual(['sc-ansi-blink']);
+    expect(parseAnsi(`${ESC}[9mstrike`)[0].classes).toEqual(['sc-ansi-strike']);
+    // Reverse with no explicit colours swaps the console's default fg/bg.
+    expect(parseAnsi(`${ESC}[7mrev`)[0].classes).toEqual(['sc-ansi-fg-default-bg', 'sc-ansi-bg-default-fg']);
+    // Reverse with a foreground turns it into the background.
+    expect(parseAnsi(`${ESC}[31;7mrev`)[0].classes).toEqual(['sc-ansi-fg-default-bg', 'sc-ansi-bg-red']);
+  });
+
+  it('combines codes carried in one sequence (e.g. \\e[1;4;35m)', () => {
+    expect(parseAnsi(`${ESC}[1;4;35mx`)[0].classes).toEqual([
+      'sc-ansi-fg-magenta',
+      'sc-ansi-bold',
+      'sc-ansi-underline',
+    ]);
+  });
+
+  it('maps a 16-colour 256-palette code to a class', () => {
     expect(parseAnsi(`${ESC}[38;5;2mgreen`)[0].classes).toEqual(['sc-ansi-fg-green']);
-    // Truecolour operands are consumed, not mis-read as further codes.
-    expect(parseAnsi(`${ESC}[38;2;10;20;30mtc`)[0].classes).toEqual([]);
+  });
+
+  it('renders 256-cube and truecolour as inline rgb()', () => {
+    expect(parseAnsi(`${ESC}[38;5;208morange`)[0].style).toEqual({ color: 'rgb(255, 135, 0)' });
+    expect(parseAnsi(`${ESC}[38;2;255;105;180mpink`)[0].style).toEqual({ color: 'rgb(255, 105, 180)' });
+    // A 256 background + truecolour foreground in one run.
+    const segs = parseAnsi(`${ESC}[48;5;236m${ESC}[38;5;220mgold`);
+    expect(segs[0].style).toEqual({ background: 'rgb(48, 48, 48)', color: 'rgb(255, 215, 0)' });
   });
 
   it('strips non-SGR escape sequences (cursor moves, OSC)', () => {

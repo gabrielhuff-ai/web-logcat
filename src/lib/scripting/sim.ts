@@ -74,9 +74,11 @@ export function simLines(
   if (body == null) return null;
   // Find `echo`/`printf`/`clear`/`reset` statements anywhere — at line start,
   // after `{`, or after `;` — so inline one-liners like `f() { echo hi; }`
-  // simulate too. The argument runs up to the next `;`, newline, or `}`.
+  // simulate too. The argument runs up to the next `;`, newline, or `}` — but
+  // a `;` inside a quoted string (e.g. `echo -e "\033[1;31m…"`) is part of the
+  // argument, so quoted spans are matched whole.
   const out: SimLine[] = [];
-  const re = /(?:^|[\s;{])(echo|printf|clear|reset)\b([^;\n}]*)/g;
+  const re = /(?:^|[\s;{])(echo|printf|clear|reset)\b((?:"[^"]*"|'[^']*'|[^;\n}])*)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     if (m[1] === 'clear' || m[1] === 'reset') {

@@ -63,7 +63,7 @@ export function ConfigForm({ control, onPatch, functions, bindTargets, script }:
         />
       );
     case 'console':
-      return <ConfigConsole control={control} onPatch={(p) => onPatch(control.id, p)} />;
+      return <ConfigConsole key={control.id} control={control} onPatch={(p) => onPatch(control.id, p)} />;
     case 'readout':
     case 'status':
     case 'gauge':
@@ -468,6 +468,13 @@ function ConfigDaemon({
 
 // ── Console form ──────────────────────────────────────────────────────────────
 function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch: (p: Partial<ConsoleControl>) => void }) {
+  // Raw text for the Line spacing field, so a partial decimal entry like "0."
+  // survives until the user finishes typing (Number("0.") === 0 would otherwise
+  // round-trip the value and eat the dot). Keyed by the parent at control id,
+  // so this resets per selection.
+  const [lineSpacingText, setLineSpacingText] = useState(() =>
+    control.lineSpacing != null ? String(control.lineSpacing) : '',
+  );
   return (
     <div className="bdr-form">
       <FormRow label="Label" help="Shown in the console header.">
@@ -498,6 +505,37 @@ function ConfigConsole({ control, onPatch }: { control: ConsoleControl; onPatch:
       </FormRow>
       <FormRow label="Hide chrome" help="Hide the console header (title, status, copy) and show only the output.">
         <MiniToggle on={control.hideChrome ?? false} onChange={(v) => onPatch({ hideChrome: v })} label="Hide chrome" />
+      </FormRow>
+      <FormRow label="Font size" help="Output text size in px. Leave blank for the default.">
+        <input
+          style={{ maxWidth: 80 }}
+          value={control.fontSize != null ? String(control.fontSize) : ''}
+          placeholder="default"
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            onPatch({ fontSize: v === '' ? undefined : num(v, 12) });
+          }}
+        />
+      </FormRow>
+      <FormRow label="Line spacing" help="Extra space between lines, in em. Set to 0 to make box-drawing diagrams join without gaps.">
+        <input
+          style={{ maxWidth: 80 }}
+          value={lineSpacingText}
+          placeholder="0.55"
+          onChange={(e) => {
+            const v = e.target.value;
+            setLineSpacingText(v);
+            const trimmed = v.trim();
+            if (trimmed === '') {
+              onPatch({ lineSpacing: undefined });
+              return;
+            }
+            const n = Number(trimmed);
+            // Patch on every valid intermediate value (0, 0.5, …); a partial
+            // like "0." parses to 0 and is fine — the buffer keeps the dot.
+            if (Number.isFinite(n) && n >= 0) onPatch({ lineSpacing: n });
+          }}
+        />
       </FormRow>
     </div>
   );
