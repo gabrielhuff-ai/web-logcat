@@ -902,6 +902,47 @@ test.describe('scripting widget', () => {
     await expect(tile.locator('.sc-text')).toContainText('Package');
   });
 
+  test('a non-collapsible section has no toggle and always shows its controls', async ({ page }) => {
+    const panel = {
+      script: 'noop() { :; }\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // collapsible:false + a stale collapsed:true — the flag must be inert.
+        { id: 's1', kind: 'section', title: 'Pinned', collapsible: false, collapsed: true },
+        { id: 'i1', kind: 'text', label: 'Package', defaultValue: 'x', onChange: 'none' },
+        // A normal collapsible section alongside it still gets its toggle.
+        { id: 's2', kind: 'section', title: 'Target' },
+        { id: 'i2', kind: 'text', label: 'User', defaultValue: '0', onChange: 'none' },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_pinned', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // The pinned section is not a button (no collapse/expand toggle), and its
+    // control shows despite the stale collapsed flag.
+    await expect(tile.getByRole('button', { name: /collapse pinned|expand pinned/i })).toHaveCount(0);
+    await expect(tile.locator('.sc-text').filter({ hasText: 'Package' })).toBeVisible();
+    // The neighbouring collapsible section does expose its toggle.
+    await expect(tile.getByRole('button', { name: /collapse target/i })).toBeVisible();
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();

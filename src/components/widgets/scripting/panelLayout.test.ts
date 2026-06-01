@@ -31,11 +31,12 @@ const daemon = (id: string): ControlConfig => ({
   label: id,
   bindOutputTo: 'console',
 });
-const section = (id: string, collapsed?: boolean): ControlConfig => ({
+const section = (id: string, collapsed?: boolean, collapsible?: boolean): ControlConfig => ({
   id,
   kind: 'section',
   title: id,
   ...(collapsed != null ? { collapsed } : {}),
+  ...(collapsible != null ? { collapsible } : {}),
 });
 const consoleCtl = (id: string): ControlConfig => ({
   id,
@@ -135,5 +136,16 @@ describe('hiddenByCollapse', () => {
     ]);
     expect(hidden.has('a')).toBe(true);
     expect(hidden.has('b')).toBe(false);
+  });
+
+  it('a non-collapsible section hides nothing even if marked collapsed', () => {
+    // collapsed: true but collapsible: false → the flag is inert.
+    const hidden = hiddenByCollapse([section('s1', true, false), input('a'), button('b')]);
+    expect(hidden.size).toBe(0);
+  });
+
+  it('a collapsible section (explicit) still hides its run', () => {
+    const hidden = hiddenByCollapse([section('s1', true, true), input('a')]);
+    expect(hidden.has('a')).toBe(true);
   });
 });

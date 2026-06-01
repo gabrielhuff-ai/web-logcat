@@ -48,7 +48,9 @@ export function hiddenByCollapse(controls: ControlConfig[]): Set<string> {
   let collapsed = false;
   for (const c of controls) {
     if (c.kind === 'section') {
-      collapsed = c.collapsed === true;
+      // A non-collapsible section can't hide anything, even if a stale
+      // `collapsed: true` is set on it.
+      collapsed = c.collapsed === true && c.collapsible !== false;
       continue;
     }
     if (collapsed) hidden.add(c.id);
