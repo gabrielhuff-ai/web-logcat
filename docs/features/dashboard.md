@@ -51,11 +51,28 @@ or Shell prompt is never affected.
 | Key                 | Action                                                                 |
 | ------------------- | ---------------------------------------------------------------------- |
 | `⌘E` / `Ctrl+E`     | Open the quick-add menu (see below).                                   |
+| `⌘C` / `Ctrl+C`     | Copy the focused tile — its kind **and** its settings. Skipped when you have text selected, so copying a Logcat row or a Scripting console line still works. |
+| `⌘V` / `Ctrl+V`     | Paste the copied tile as a new widget. It splits the focused tile, just like *+ Add*, and arrives pre-configured with the copied tile's settings. |
 | `← ↑ ↓ →`           | Move the focused-tile ring to the spatially-adjacent tile.             |
 | `Backspace` / `Del` | Remove the focused tile. Inside the Files widget, deletes the selected entry instead (same as right-click → Delete). |
 | `⌘Z` / `Ctrl+Z`     | Undo the last layout-changing action.                                  |
 | `⌘⇧Z` / `Ctrl+⇧+Z`  | Redo.                                                                  |
 | `?`                 | Open the keyboard-shortcut help dialog.                                |
+
+### Copy and paste a tile
+
+`⌘C` / `Ctrl+C` copies the focused tile and `⌘V` / `Ctrl+V` pastes it
+back as a brand-new widget of the same kind, pre-loaded with the copied
+tile's settings — duplicate a tuned Logcat filter set or a whole
+Scripting panel in two keystrokes. The clone splits the focused tile
+exactly like *+ Add*.
+
+Copy/paste only fires on the "bare" focused tile: if you have text
+selected (a Logcat row, a Scripting console line) the browser's own copy
+runs instead, pasting into a text field pastes the text, and inside the
+[Screen Mirror](./screen-mirror) the same keys still drive the device's
+clipboard. The tile clipboard lives in the tab, so it's a within-session
+duplicate rather than a cross-tab transfer.
 
 ### Quick-add menu
 

@@ -27,6 +27,7 @@ import {
   takePendingImport,
 } from '../lib/dashboardShare';
 import type { DashboardSnapshot } from '../lib/dashboardShare';
+import { copyTileToClipboard, getWidgetClip } from '../lib/widgetClipboard';
 import { APP_VERSION } from '../version';
 import type { Accent, DeviceInfo, LayoutState, Tweaks, WidgetKind } from '../types';
 
@@ -107,7 +108,12 @@ export function Dashboard({
     dir: 'left' | 'right' | 'up' | 'down';
     n: number;
   } | null>(null);
-  const [addSignal, setAddSignal] = useState<{ kind: WidgetKind; n: number } | null>(null);
+  const [addSignal, setAddSignal] = useState<{
+    kind: WidgetKind;
+    n: number;
+    /** Seed settings for the new tile (a pasted clone); absent for a plain add. */
+    settings?: Record<string, unknown>;
+  } | null>(null);
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutState>({
     tiles: {},
     tree: null,
@@ -123,6 +129,11 @@ export function Dashboard({
   // Global keyboard shortcuts on the dashboard:
   //   - Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z — undo / redo layout edits.
   //   - Cmd/Ctrl+N                    — open the quick-add menu.
+  //   - Cmd/Ctrl+C / Cmd/Ctrl+V       — copy the focused tile / paste it
+  //                                     back as a new widget. Copy is
+  //                                     suppressed when there's an active
+  //                                     text selection so copying selected
+  //                                     log / console text still works.
   //   - Arrow keys                    — move focus to the spatially
   //                                     adjacent tile (only when the
   //                                     active element isn't a text
@@ -164,6 +175,37 @@ export function Dashboard({
         return;
       }
 
+      // Copy the focused tile. Skipped when the user has a live text
+      // selection (they mean to copy that text — e.g. a Logcat row or a
+      // Scripting console line) so we never hijack a real copy. The
+      // top-of-handler `inEditable` guard already lets copy out of inputs.
+      if ((e.metaKey || e.ctrlKey) && lk === 'c' && !e.shiftKey && !e.altKey) {
+        if (!layoutSnapshot.focusId) return;
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
+        const tile = layoutSnapshot.tiles[layoutSnapshot.focusId];
+        if (!tile) return;
+        e.preventDefault();
+        copyTileToClipboard(tile.id, tile.kind);
+        return;
+      }
+
+      // Paste the copied tile as a new widget (seeded with its settings).
+      // The `inEditable` guard above means an in-field paste reaches the
+      // field untouched; the Mirror screen stops propagation for its own
+      // device paste before this listener ever sees the event.
+      if ((e.metaKey || e.ctrlKey) && lk === 'v' && !e.shiftKey && !e.altKey) {
+        const clip = getWidgetClip();
+        if (!clip) return;
+        e.preventDefault();
+        setAddSignal((p) => ({
+          kind: clip.kind,
+          n: (p?.n ?? 0) + 1,
+          settings: clip.settings ?? undefined,
+        }));
+        return;
+      }
+
       // Beyond this point we want unmodified keys only — Cmd+Arrow on
       // macOS jumps the cursor; Cmd+Delete trashes a file in Finder.
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -193,7 +235,7 @@ export function Dashboard({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [layoutSnapshot.focusId]);
+  }, [layoutSnapshot.focusId, layoutSnapshot.tiles]);
 
   return (
     <div className="dash">

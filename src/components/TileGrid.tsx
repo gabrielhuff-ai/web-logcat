@@ -48,10 +48,12 @@ import {
   swapTiles,
   addTile as addTileToLayout,
   countByKind,
+  nextTileId,
   MIN_RATIO,
   MAX_RATIO,
   type SplitEdge,
 } from '../lib/layout';
+import { seedTileSettings } from '../lib/widgetClipboard';
 import { useDashboardChrome } from '../lib/dashboardChrome';
 import type { LayoutState, WidgetKind } from '../types';
 
@@ -118,8 +120,10 @@ export interface TileGridProps {
   undoSignal: number;
   /** Imperative request from Cmd+Shift+Z (redo previously-undone edit). */
   redoSignal: number;
-  /** Imperative request from the topbar to add a widget. */
-  addSignal: { kind: WidgetKind; n: number } | null;
+  /** Imperative request from the topbar to add a widget. `settings`, when
+   *  present (a Cmd+V paste), seeds the new tile so the clone arrives
+   *  configured. */
+  addSignal: { kind: WidgetKind; n: number; settings?: Record<string, unknown> } | null;
   /** Imperative request from Backspace / Delete to remove the focused tile. */
   removeFocusedSignal: number;
   /** Imperative request from the arrow keys to move focus spatially. */
@@ -292,7 +296,7 @@ export function TileGrid({
   // children roughly square instead of always shoving new tiles to the
   // right regardless of the focused tile's aspect.
   const addTile = useCallback(
-    (kind: WidgetKind) => {
+    (kind: WidgetKind, seedSettings: Record<string, unknown> | null = null) => {
       applyLayout((l) => {
         const def = WIDGETS[kind];
         if (def.maxInstances != null && countByKind(l, kind) >= def.maxInstances) {
@@ -310,7 +314,11 @@ export function TileGrid({
             splitDir = target.rect.w >= target.rect.h ? 'row' : 'col';
           }
         }
-        return addTileToLayout(l, kind, { splitDir });
+        // Generate the id up front so a pasted clone's settings can be
+        // seeded under the new tile's key *before* it mounts and hydrates.
+        const id = nextTileId();
+        if (seedSettings) seedTileSettings(id, kind, seedSettings);
+        return addTileToLayout(l, kind, { id, splitDir });
       });
     },
     [gap, outerRect, applyLayout],
@@ -321,7 +329,7 @@ export function TileGrid({
     if (!addSignal) return;
     if (addSignal.n === lastAddNRef.current) return;
     lastAddNRef.current = addSignal.n;
-    addTile(addSignal.kind);
+    addTile(addSignal.kind, addSignal.settings ?? null);
   }, [addSignal, addTile]);
 
   // ---- Tile actions ------------------------------------------------------

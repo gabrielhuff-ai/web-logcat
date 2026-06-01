@@ -1222,6 +1222,32 @@ test.describe('dashboard', () => {
     await expect(page.locator('.sh-widget')).toHaveCount(1);
   });
 
+  test('Cmd+C copies the focused tile and Cmd+V pastes a configured clone', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(1);
+
+    // Give the source Logcat tile a distinguishing filter chip.
+    const source = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    await source.locator('.fb-input').focus();
+    await source.locator('.fb-input').fill('tag:Clone');
+    await source.locator('.fb-input').press('Enter');
+    await expect(source.locator('.chip')).toHaveCount(1);
+
+    // Click the header to move focus out of the input (the copy/paste
+    // shortcuts deliberately don't fire while typing), then copy + paste.
+    await source.locator('.tile-title').click();
+    await page.keyboard.press('Meta+c');
+    await page.keyboard.press('Meta+v');
+
+    // Two Logcat tiles now, and the clone arrived carrying the same chip.
+    const logcats = page.locator('.tile').filter({ has: page.locator('.lc-widget') });
+    await expect(logcats).toHaveCount(2);
+    await expect(logcats.filter({ has: page.locator('.chip') })).toHaveCount(2);
+  });
+
   // === Per-widget settings modal =========================================
 
   test('cog opens a per-widget settings modal on the Logcat tile', async ({ page }) => {
