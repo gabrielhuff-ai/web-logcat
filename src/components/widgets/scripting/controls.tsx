@@ -886,16 +886,35 @@ export function ScLED({ label, state = 'on', color = 'green' }: ScLEDProps) {
 export interface ScSectionProps {
   title: string;
   description?: string;
+  /** When set, the heading becomes a collapse/expand toggle. */
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
-export function ScSection({ title, description }: ScSectionProps) {
+export function ScSection({ title, description, collapsed = false, onToggle }: ScSectionProps) {
+  const head = onToggle ? (
+    <button
+      type="button"
+      className="sc-section-head sc-section-toggle"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
+    >
+      <Icons.Chevron size={13} className="sc-section-chevron" />
+      <span className="sc-section-title">{title}</span>
+    </button>
+  ) : (
+    <div className="sc-section-head">
+      <span className="sc-section-title">{title}</span>
+    </div>
+  );
   return (
-    <div className="sc-section">
+    <div className={`sc-section${collapsed ? ' collapsed' : ''}`}>
       <div className="sc-section-meta">
-        <div className="sc-section-head">
-          <span className="sc-section-title">{title}</span>
-        </div>
-        {description && <div className="sc-section-desc">{renderMarkdown(description)}</div>}
+        {head}
+        {description && !collapsed && (
+          <div className="sc-section-desc">{renderMarkdown(description)}</div>
+        )}
       </div>
     </div>
   );

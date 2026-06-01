@@ -124,6 +124,12 @@ export interface SectionControl {
   kind: 'section';
   title: string;
   description?: string;
+  /**
+   * Collapsed sections hide every control beneath them (up to the next
+   * section), leaving just the heading. Persisted with the panel, so the
+   * state survives reloads and travels with a shared dashboard.
+   */
+  collapsed?: boolean;
 }
 
 export type ControlConfig =
