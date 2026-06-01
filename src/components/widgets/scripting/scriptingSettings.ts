@@ -125,9 +125,17 @@ export interface SectionControl {
   title: string;
   description?: string;
   /**
+   * Whether the viewer can collapse this section. Default true (absent ⇒
+   * collapsible). Set false for a section that should always stay open — its
+   * heading renders as a plain, non-interactive label and `collapsed` is
+   * ignored.
+   */
+  collapsible?: boolean;
+  /**
    * Collapsed sections hide every control beneath them (up to the next
    * section), leaving just the heading. Persisted with the panel, so the
-   * state survives reloads and travels with a shared dashboard.
+   * state survives reloads and travels with a shared dashboard. Only has an
+   * effect when the section is collapsible.
    */
   collapsed?: boolean;
 }

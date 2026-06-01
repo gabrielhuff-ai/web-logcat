@@ -79,12 +79,17 @@ function GroupView({ group, props }: { group: Group; props: ScriptingPanelProps 
     case 'section': {
       const s = group.items[0];
       if (s.kind !== 'section') return null;
+      // A non-collapsible section renders as a plain heading: no toggle, and
+      // its `collapsed` flag is ignored (always shown).
+      const collapsible = s.collapsible !== false;
       return (
         <ScSection
           title={s.title}
           description={s.description}
-          collapsed={s.collapsed ?? false}
-          onToggle={props.onToggleSection ? () => props.onToggleSection!(s.id) : undefined}
+          collapsed={collapsible && (s.collapsed ?? false)}
+          onToggle={
+            collapsible && props.onToggleSection ? () => props.onToggleSection!(s.id) : undefined
+          }
         />
       );
     }
