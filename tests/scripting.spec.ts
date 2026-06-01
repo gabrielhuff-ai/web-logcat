@@ -892,7 +892,8 @@ test.describe('scripting widget', () => {
     const collapsed = await page.evaluate(() => {
       const raw = localStorage.getItem('weblogcat:settings:t_collapse:scripting');
       const cfg = JSON.parse(raw ?? '{}');
-      return cfg.controls?.find((c: { id: string }) => c.id === 's1')?.collapsed;
+      const target = (cfg.controls ?? []).find((c) => c.id === 's1');
+      return target ? target.collapsed : undefined;
     });
     expect(collapsed).toBe(true);
 

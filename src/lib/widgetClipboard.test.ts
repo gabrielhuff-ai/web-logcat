@@ -92,4 +92,34 @@ describe('widgetClipboard', () => {
     copyTileToClipboard('w_bad', 'dumpsys');
     expect(getWidgetClip()).toEqual({ kind: 'dumpsys', settings: null });
   });
+
+  it('persists the clip in shared storage so another tab can read it', () => {
+    localStorage.setItem(settingsKey('w_lc_1', 'logcat'), JSON.stringify({ wrap: true }));
+    copyTileToClipboard('w_lc_1', 'logcat');
+    // The clip lives in localStorage (shared across same-origin tabs), not an
+    // in-memory variable — so it's actually present under the slot key.
+    expect(localStorage.getItem('weblogcat:widgetClip')).toBeTruthy();
+  });
+
+  it('reads a clip another tab wrote to the shared slot', () => {
+    // Simulate a copy that happened in a different tab by writing the slot
+    // directly; getWidgetClip in "this tab" still resolves it.
+    localStorage.setItem(
+      'weblogcat:widgetClip',
+      JSON.stringify({ kind: 'shell', settings: { cwd: '/data/local/tmp' } }),
+    );
+    expect(getWidgetClip()).toEqual({ kind: 'shell', settings: { cwd: '/data/local/tmp' } });
+  });
+
+  it('ignores a malformed clip in the shared slot', () => {
+    localStorage.setItem('weblogcat:widgetClip', '{broken');
+    expect(getWidgetClip()).toBeNull();
+  });
+
+  it('clearWidgetClip empties the shared slot', () => {
+    copyTileToClipboard('w_x', 'files');
+    expect(getWidgetClip()).not.toBeNull();
+    clearWidgetClip();
+    expect(getWidgetClip()).toBeNull();
+  });
 });

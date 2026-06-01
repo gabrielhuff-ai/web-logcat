@@ -1248,6 +1248,33 @@ test.describe('dashboard', () => {
     await expect(logcats.filter({ has: page.locator('.chip') })).toHaveCount(2);
   });
 
+  test('a tile copied in one tab pastes into another tab of the same browser', async ({
+    context,
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    await expect(page.locator('.tile')).toHaveCount(1);
+
+    // Copy the focused tile in tab A.
+    await page.locator('.tile-title').first().click();
+    await page.keyboard.press('Meta+c');
+
+    // Tab B shares the same origin storage, so the clip is visible there.
+    // (newPage() doesn't carry tab A's localStorage.clear init script, so
+    // the clip survives the navigation.)
+    const tabB = await context.newPage();
+    await tabB.goto('/');
+    await tabB.getByRole('button', { name: /fake data/i }).click();
+    await expect(tabB.locator('.tile')).toHaveCount(1);
+
+    // Paste in tab B — the cross-tab clipboard adds a second tile.
+    await tabB.locator('.tile-title').first().click();
+    await tabB.keyboard.press('Meta+v');
+    await expect(tabB.locator('.tile')).toHaveCount(2);
+    await tabB.close();
+  });
+
   // === Per-widget settings modal =========================================
 
   test('cog opens a per-widget settings modal on the Logcat tile', async ({ page }) => {

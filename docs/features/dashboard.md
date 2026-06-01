@@ -71,8 +71,10 @@ Copy/paste only fires on the "bare" focused tile: if you have text
 selected (a Logcat row, a Scripting console line) the browser's own copy
 runs instead, pasting into a text field pastes the text, and inside the
 [Screen Mirror](./screen-mirror) the same keys still drive the device's
-clipboard. The tile clipboard lives in the tab, so it's a within-session
-duplicate rather than a cross-tab transfer.
+clipboard. The tile clipboard is shared across all tabs of the same
+browser, so you can copy a tile in one tab and paste it into another — it
+stays within your browser, though, not across different browsers or
+machines.
 
 ### Quick-add menu
 
