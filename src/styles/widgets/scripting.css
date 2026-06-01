@@ -675,12 +675,38 @@
 .sc-section {
   display: flex; flex-direction: column;
   gap: 8px;
-  padding: 14px 0 6px;
-  margin-top: 16px;
+  /* No state-dependent vertical padding on the heading box. The space ABOVE
+     a heading must not depend on whether THAT section is expanded — otherwise
+     an expanded section sits much lower than a collapsed one in the same slot,
+     leaving uneven gaps in a mixed stack. So spacing comes from the panel's
+     uniform flex gap plus a small constant top margin; any breathing room a
+     section needs lives in its contents (the description here, the control
+     bands rendered as the next flex siblings), not on the heading itself. */
+  margin-top: 6px;
 }
-.sc-section:first-child { margin-top: 4px; }
+.sc-section:first-child { margin-top: 0; }
 .sc-section-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .sc-section-head { display: inline-flex; align-items: baseline; gap: 8px; }
+/* Collapsible heading: the whole row is a button. The chevron rotates to
+   point right when collapsed; the title is nudged to baseline-align. */
+.sc-section-toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  align-items: center;
+  color: inherit;
+}
+.sc-section-chevron {
+  flex: none;
+  color: var(--fg-3);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.sc-section-toggle:hover .sc-section-chevron { color: var(--fg-1); }
+.sc-section.collapsed .sc-section-chevron { transform: rotate(-90deg); }
 .sc-section-title {
   font-size: var(--t-md);
   color: var(--fg-0);

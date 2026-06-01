@@ -638,6 +638,16 @@ function ConfigSection({ control, onPatch }: { control: SectionControl; onPatch:
           onChange={(e) => onPatch({ description: e.target.value })}
         />
       </FormRow>
+      <FormRow
+        label="Collapsible"
+        help="Let viewers click the heading to collapse the controls below it. On by default."
+      >
+        <MiniToggle
+          on={control.collapsible !== false}
+          onChange={(v) => onPatch({ collapsible: v })}
+          label="Collapsible"
+        />
+      </FormRow>
       <FormRow label="" help="A section is non-interactive.">
         <div className="bdr-form-note">
           <Icons.Folder size={11} /> Sections only affect display — they don&apos;t change scoping or the script env.

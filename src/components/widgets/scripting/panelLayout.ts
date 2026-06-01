@@ -37,6 +37,27 @@ export function categoryOf(c: ControlConfig): Category {
  * displays merge into shared grids/rails; sections and consoles stay
  * singletons so each gets its own heading / fill region.
  */
+/**
+ * Ids of controls hidden because they sit under a collapsed section. A
+ * section "owns" every control after it up to the next section; collapsing
+ * it hides that run. Section headings themselves are never hidden — they keep
+ * their expand affordance. Controls before the first section always show.
+ */
+export function hiddenByCollapse(controls: ControlConfig[]): Set<string> {
+  const hidden = new Set<string>();
+  let collapsed = false;
+  for (const c of controls) {
+    if (c.kind === 'section') {
+      // A non-collapsible section can't hide anything, even if a stale
+      // `collapsed: true` is set on it.
+      collapsed = c.collapsed === true && c.collapsible !== false;
+      continue;
+    }
+    if (collapsed) hidden.add(c.id);
+  }
+  return hidden;
+}
+
 export function groupControls(controls: ControlConfig[]): Group[] {
   const groups: Group[] = [];
   for (const c of controls) {

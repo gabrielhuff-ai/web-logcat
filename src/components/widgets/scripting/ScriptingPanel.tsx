@@ -24,7 +24,7 @@ import {
   type CtrlState,
   type DaemonStatus,
 } from './controls';
-import { groupControls, type Group } from './panelLayout';
+import { groupControls, hiddenByCollapse, type Group } from './panelLayout';
 import { EMPTY_CONSOLE, type ConsoleView, type DisplayValue } from './panelTypes';
 import type { ControlConfig, ControlValue } from './scriptingSettings';
 
@@ -43,6 +43,8 @@ export interface ScriptingPanelProps {
   /** Per-console view, keyed by console control id. */
   consoleViews: Record<string, ConsoleView>;
   onCopyConsole: (id: string) => void;
+  /** Toggle a section's collapsed state (by section control id). */
+  onToggleSection?: (id: string) => void;
   /** When the script fails `sh -n`, action buttons are disabled. */
   actionsDisabled?: boolean;
 }
@@ -57,7 +59,12 @@ const toBool = (v: ControlValue | undefined): boolean => v === true || v === 'tr
 
 export function ScriptingPanel(props: ScriptingPanelProps) {
   const { controls } = props;
-  const groups = groupControls(controls);
+  // Drop the controls a collapsed section hides before grouping, so the
+  // remaining bands group as if those controls weren't there. Sections
+  // themselves are never hidden — they keep their expand toggle.
+  const hidden = hiddenByCollapse(controls);
+  const visible = hidden.size ? controls.filter((c) => !hidden.has(c.id)) : controls;
+  const groups = groupControls(visible);
   return (
     <>
       {groups.map((g, i) => (
@@ -72,7 +79,19 @@ function GroupView({ group, props }: { group: Group; props: ScriptingPanelProps 
     case 'section': {
       const s = group.items[0];
       if (s.kind !== 'section') return null;
-      return <ScSection title={s.title} description={s.description} />;
+      // A non-collapsible section renders as a plain heading: no toggle, and
+      // its `collapsed` flag is ignored (always shown).
+      const collapsible = s.collapsible !== false;
+      return (
+        <ScSection
+          title={s.title}
+          description={s.description}
+          collapsed={collapsible && (s.collapsed ?? false)}
+          onToggle={
+            collapsible && props.onToggleSection ? () => props.onToggleSection!(s.id) : undefined
+          }
+        />
+      );
     }
     case 'inputs':
       return <div className="sw-inputs">{group.items.map((c) => renderInput(c, props))}</div>;

@@ -88,7 +88,13 @@ Displays refresh on a configurable **auto-poll** interval (off by
 default) and, optionally, whenever an input they read changes.
 
 **Sections** group controls under a heading. They're visual only — they
-don't change the shared environment.
+don't change the shared environment. When a section is **collapsible** (the
+default), click its heading to collapse it (the chevron points right) and
+hide every control beneath it down to the next section; click again to
+expand. The collapsed state is saved with the panel, so it survives reloads
+and travels with a [shared dashboard](./dashboard#sharing). Turn
+**Collapsible** off in the builder for a section that should always stay
+open — its heading then renders as a plain, non-interactive label.
 
 ## Control reference
 
@@ -184,8 +190,12 @@ reads changes).
 
 ### Section
 
-A non-interactive heading (with optional description) that groups the controls
-below it. Display only — it doesn't scope the shell environment.
+A heading (with optional description) that groups the controls below it.
+Display only — it doesn't scope the shell environment. When **Collapsible**
+(the default) is on, click the heading to collapse the section, hiding its
+controls down to the next section; the collapsed/expanded state persists
+with the panel and is included when you share the dashboard. Turn
+**Collapsible** off to pin the section open as a plain heading.
 
 ## The builder
 

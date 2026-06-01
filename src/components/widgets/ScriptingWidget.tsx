@@ -106,6 +106,15 @@ export function ScriptingWidget({ tileId }: ScriptingWidgetProps) {
           displayValues={runtime.displayValues}
           consoleViews={runtime.consoleViews}
           onCopyConsole={runtime.onCopyConsole}
+          onToggleSection={(id) =>
+            setSettings({
+              controls: controls.map((c) =>
+                c.id === id && c.kind === 'section'
+                  ? { ...c, collapsed: !(c.collapsed ?? false) }
+                  : c,
+              ),
+            })
+          }
           actionsDisabled={runtime.scriptError != null}
         />
       ) : (

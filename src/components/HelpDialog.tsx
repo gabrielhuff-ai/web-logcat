@@ -25,6 +25,8 @@ const GROUPS: ShortcutGroup[] = [
     title: 'Dashboard',
     shortcuts: [
       { keys: ['⌘', 'E'], desc: 'Open the quick-add widget menu' },
+      { keys: ['⌘', 'C'], desc: 'Copy the focused tile (skipped while text is selected)' },
+      { keys: ['⌘', 'V'], desc: 'Paste the copied tile as a new widget' },
       { keys: ['↑', '↓', '←', '→'], desc: 'Move the focused-tile ring' },
       { keys: ['Backspace'], desc: 'Remove the focused tile (or in Files, delete the selected entry)' },
       { keys: ['Delete'], desc: 'Same as Backspace' },

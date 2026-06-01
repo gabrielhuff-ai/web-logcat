@@ -843,6 +843,106 @@ test.describe('scripting widget', () => {
     await expect(body).not.toContainText('$ watch');
   });
 
+  test('a section collapses to hide its controls and the state persists', async ({ page }) => {
+    const panel = {
+      script: 'noop() { :; }\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        { id: 's1', kind: 'section', title: 'Target' },
+        { id: 'in1', kind: 'text', label: 'Package', defaultValue: 'x', onChange: 'none' },
+        { id: 's2', kind: 'section', title: 'Actions' },
+        { id: 'btn', kind: 'button', label: 'Go', variant: 'default', confirm: false, bindOutputTo: 'console' },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_collapse', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // Both the Package input and the Go button render under their sections.
+    await expect(tile.locator('.sc-text')).toContainText('Package');
+    await expect(tile.locator('.sc-btn').filter({ hasText: 'Go' })).toBeVisible();
+
+    // Collapse "Target": its Package input disappears, the Actions button stays.
+    await tile.getByRole('button', { name: /collapse target/i }).click();
+    await expect(tile.locator('.sc-text')).toHaveCount(0);
+    await expect(tile.locator('.sc-btn').filter({ hasText: 'Go' })).toBeVisible();
+    // The heading flips to an Expand affordance.
+    await expect(tile.getByRole('button', { name: /expand target/i })).toBeVisible();
+
+    // The collapsed flag is written into the persisted panel config — so it
+    // survives reloads and travels with a shared dashboard. (We assert the
+    // storage write directly rather than reloading, since this test re-seeds
+    // localStorage on every navigation.)
+    const collapsed = await page.evaluate(() => {
+      const raw = localStorage.getItem('weblogcat:settings:t_collapse:scripting');
+      const cfg = JSON.parse(raw ?? '{}');
+      const target = (cfg.controls ?? []).find((c) => c.id === 's1');
+      return target ? target.collapsed : undefined;
+    });
+    expect(collapsed).toBe(true);
+
+    // Expand again — the Package input comes back.
+    await tile.getByRole('button', { name: /expand target/i }).click();
+    await expect(tile.locator('.sc-text')).toContainText('Package');
+  });
+
+  test('a non-collapsible section has no toggle and always shows its controls', async ({ page }) => {
+    const panel = {
+      script: 'noop() { :; }\n',
+      runAsRoot: false,
+      fontSize: 12,
+      controls: [
+        // collapsible:false + a stale collapsed:true — the flag must be inert.
+        { id: 's1', kind: 'section', title: 'Pinned', collapsible: false, collapsed: true },
+        { id: 'i1', kind: 'text', label: 'Package', defaultValue: 'x', onChange: 'none' },
+        // A normal collapsible section alongside it still gets its toggle.
+        { id: 's2', kind: 'section', title: 'Target' },
+        { id: 'i2', kind: 'text', label: 'User', defaultValue: '0', onChange: 'none' },
+      ],
+    };
+    await page.addInitScript(
+      ([tileId, p]) => {
+        localStorage.setItem(
+          'weblogcat-dashboard-v2',
+          JSON.stringify({
+            tiles: { [tileId]: { id: tileId, kind: 'scripting' } },
+            tree: { type: 'leaf', id: tileId },
+            focusId: tileId,
+          }),
+        );
+        localStorage.setItem(`weblogcat:settings:${tileId}:scripting`, JSON.stringify(p));
+      },
+      ['t_pinned', panel],
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /fake data/i }).click();
+    const tile = page.locator('.tile').filter({ has: page.locator('.sw-body') });
+
+    // The pinned section is not a button (no collapse/expand toggle), and its
+    // control shows despite the stale collapsed flag.
+    await expect(tile.getByRole('button', { name: /collapse pinned|expand pinned/i })).toHaveCount(0);
+    await expect(tile.locator('.sc-text').filter({ hasText: 'Package' })).toBeVisible();
+    // The neighbouring collapsible section does expose its toggle.
+    await expect(tile.getByRole('button', { name: /collapse target/i })).toBeVisible();
+  });
+
   test('the builder controls pane collapses and re-expands', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /fake data/i }).click();
