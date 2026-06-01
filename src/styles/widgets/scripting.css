@@ -679,6 +679,11 @@
   margin-top: 16px;
 }
 .sc-section:first-child { margin-top: 4px; }
+/* A collapsed section has no body, so shed the generous grouping spacing
+   (top padding + margin) it carries when expanded — otherwise a stack of
+   collapsed headers leaves big vertical gaps. Consecutive collapsed headers
+   then sit a tight, even distance apart (just the panel's flex gap). */
+.sc-section.collapsed { padding: 2px 0; margin-top: 0; }
 .sc-section-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .sc-section-head { display: inline-flex; align-items: baseline; gap: 8px; }
 /* Collapsible heading: the whole row is a button. The chevron rotates to
